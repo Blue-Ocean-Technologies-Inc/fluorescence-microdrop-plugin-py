@@ -1,0 +1,21 @@
+from traits.api import Instance, Str
+
+from peripheral_device_controller_base.peripheral_device_controller_base import PeripheralDeviceControllerBase
+
+from .fluorescence_serial_proxy import FluorescenceSerialProxy
+from .consts import DEVICE_NAME
+
+from logger.logger_service import get_logger
+logger = get_logger(__name__, level="INFO")
+
+
+class FluorescenceControllerBase(PeripheralDeviceControllerBase):
+    """Backend controller for the fluorescence peripheral.
+
+    All listener/routing/connection machinery is inherited from
+    ``PeripheralDeviceControllerBase``; this subclass only pins the device
+    identity and narrows the proxy trait type.
+    """
+    _device_name = Str(DEVICE_NAME)
+    listener_name = Str("fluorescence_controller_listener")
+    proxy = Instance(FluorescenceSerialProxy)
