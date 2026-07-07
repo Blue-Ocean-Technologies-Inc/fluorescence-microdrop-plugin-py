@@ -1,0 +1,16 @@
+schema_version = 1
+name = "fluorescence"
+label = "Fluorescence"
+packages = ["fluorescence_controller", "fluorescence_controls_ui"]
+
+[[groups]]
+name = "fluorescence_ui"
+label = "Fluorescence UI (status/controls dock-pane + statusbar icon)"
+plugins = ["fluorescence_controls_ui.plugin:FluorescenceControlsUiPlugin"]
+enabled_key = "plugin_group_enabled.fluorescence_ui"
+
+[[groups]]
+name = "fluorescence_backend"
+label = "Fluorescence backend (board driver)"
+plugins = ["fluorescence_controller.plugin:FluorescenceControllerPlugin"]
+enabled_key = "plugin_group_enabled.fluorescence_backend"

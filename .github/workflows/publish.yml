@@ -1,0 +1,100 @@
+name: Publish to prefix.dev
+
+# Builds the conda package (pixi-build, noarch python) and publishes it to
+# https://prefix.dev/microdrop-plugins on every push to main that contains
+# release-worthy conventional commits. commitizen derives the bump from the
+# commit messages since the last v* tag (fix/refactor/perf -> patch,
+# feat -> minor, BREAKING CHANGE / ! -> major), stamps pyproject.toml
+# (see [tool.commitizen] version_files), and maintains
+# CHANGELOG.md. Pushes with nothing release-worthy (docs/ci/chore or
+# non-conventional messages) skip publishing cleanly.
+#
+# The release commit + tag are pushed only after a successful publish, so
+# the repo always reflects the channel. For a forced or explicit release,
+# run the workflow manually with a version input.
+#
+# Auth: set the PREFIX_API_KEY repository secret (prefix.dev API key).
+# Alternative (no stored secret): configure trusted publishing for this repo
+# on the prefix.dev channel settings — id-token: write is already granted.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "CHANGELOG.md"
+      - "demos/**"
+      - ".github/**"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Explicit version (X.Y.Z); empty = derive from conventional commits"
+        required: false
+        default: ""
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the release commit + tag
+      id-token: write   # for prefix.dev trusted publishing, if enabled later
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # commitizen reads the commit history + v* tags
+
+      - uses: prefix-dev/setup-pixi@v0.8.0
+        with:
+          pixi-version: v0.71.2
+          run-install: false
+
+      - name: Install commitizen
+        run: pipx install "commitizen>=4,<5"
+
+      - name: Bump version + changelog (commitizen)
+        id: bump
+        # Exit codes verified against cz 4.16: 3 = no commits since the
+        # last tag, 21 = commits exist but none are release-worthy — both
+        # mean "nothing to publish", not failure.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          set +e
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            cz bump --yes "${{ github.event.inputs.version }}"
+          else
+            cz bump --yes
+          fi
+          rc=$?
+          set -e
+          if [ "$rc" -eq 3 ] || [ "$rc" -eq 21 ]; then
+            echo "No release-worthy commits since the last tag; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [ "$rc" -eq 0 ] || exit "$rc"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          grep -n '^version' pyproject.toml
+
+      - name: Authenticate with prefix.dev
+        if: steps.bump.outputs.skip != 'true'
+        # pixi publish reads credentials from the auth store (not the
+        # PREFIX_API_KEY env var, which only `pixi upload prefix` honors).
+        env:
+          PREFIX_API_KEY: ${{ secrets.PREFIX_API_KEY }}
+        run: pixi auth login --token "$PREFIX_API_KEY" https://prefix.dev
+
+      - name: Build + publish
+        if: steps.bump.outputs.skip != 'true'
+        run: pixi publish --target-channel https://prefix.dev/microdrop-plugins
+
+      - name: Push release commit + tag
+        if: steps.bump.outputs.skip != 'true'
+        # Only after a successful publish, so the repo never claims a
+        # version the channel doesn't have. The [skip ci] in bump_message
+        # prevents a publish loop.
+        run: git push origin "HEAD:${GITHUB_REF_NAME:-main}" --tags

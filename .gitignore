@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pixi/
+dist/
+build/
+*.conda
+.idea/
+# pixi environments
+.pixi/*
+!.pixi/config.toml

@@ -1,0 +1,46 @@
+[project]
+name = "fluorescence-microdrop-plugin"
+version = "0.1.0"
+description = "MicroDrop fluorescence plugin: board driver and status/controls UI"
+requires-python = ">=3.11"
+dependencies = []
+
+# Discovered by MicroDrop's plugin manager: the entry point anchors the
+# distribution; the microdrop_plugin.toml manifest (shipped as package data of
+# the anchor via force-include) declares the toggleable plugin groups.
+[project.entry-points."microdrop.plugins"]
+fluorescence = "fluorescence_controller"
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fluorescence_controller", "fluorescence_controls_ui"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"microdrop_plugin.toml" = "fluorescence_controller/microdrop_plugin.toml"
+
+[tool.pixi.workspace]
+channels = ["conda-forge", "alexsk", "vignesh229"]
+preview = ["pixi-build"]
+
+[tool.pixi.package]
+name = "fluorescence-microdrop-plugin"
+version = "0.1.0"
+
+[tool.pixi.package.build.backend]
+name = "pixi-build-python"
+version = "0.*"
+channels = ["https://prefix.dev/conda-forge"]
+
+[tool.pixi.package.host-dependencies]
+hatchling = "*"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "pep621"
+tag_format = "v$version"
+bump_message = "chore: release v$new_version [skip ci]"
+update_changelog_on_bump = true
+version_files = ["pyproject.toml:^version"]
