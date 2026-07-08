@@ -19,10 +19,25 @@ SEARCHING = searching_topic(DEVICE_NAME)
 # Raw measurement/telemetry lines from the board (shape TBD by the firmware).
 TELEMETRY = f"{DEVICE_NAME}/signals/telemetry"
 
+# LED channels: combo/index order matches the firmware's PWM channel table
+# (blue..deep_red on consecutive pins), so a UI combo index IS the led index.
+LED_WAVELENGTHS = (
+    "Blue (460 nm)", "Cyan (490 nm)", "Green (540 nm)",
+    "Orange (600 nm)", "Red (630 nm)", "Deep Red (660 nm)",
+)
+LED_DUTY_MIN, LED_DUTY_MAX = 0, 100
+LED_FREQUENCY_MIN, LED_FREQUENCY_MAX = 1, 100000
+
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
 RETRY_CONNECTION = f"{DEVICE_NAME}/requests/retry_connection"
 SEND_COMMAND = f"{DEVICE_NAME}/requests/send_command"
+# Typed LED commands (formatted onto the board's plain-text protocol by the
+# command setter): led_<index>_<duty>, ledf_<index>_<freq>, led_off, led_on.
+SET_LED = f"{DEVICE_NAME}/requests/set_led"
+SET_LED_FREQUENCY = f"{DEVICE_NAME}/requests/set_led_frequency"
+ALL_LEDS_OFF = f"{DEVICE_NAME}/requests/all_leds_off"
+ALL_LEDS_ON = f"{DEVICE_NAME}/requests/all_leds_on"
 
 # Topics actor declared by plugin subscribes to. The listener-name key MUST
 # match FluorescenceControllerBase.listener_name.
