@@ -3,7 +3,7 @@ from traits.api import Bool, Enum, Int, Str
 from template_status_and_controls.base_model import BaseStatusModel
 
 from .consts import (
-    disconnected_color, connected_color,
+    disconnected_color, connected_color, halted_color,
     LED_WAVELENGTHS,
     BR_INTENSITY_DEFAULT, BR_FREQUENCY_DEFAULT,
     FL_INTENSITY_DEFAULT, FL_FREQUENCY_DEFAULT,
@@ -24,7 +24,12 @@ class FluorescenceStatusModel(BaseStatusModel):
     """
 
     DISCONNECTED_COLOR = disconnected_color
+    # No "connected but no chip" sub-state on the LED board — the base model
+    # parks connected devices on CONNECTED_NO_DEVICE_COLOR until a DropBot
+    # chip_inserted signal that never comes, so connected maps straight to green.
+    CONNECTED_NO_DEVICE_COLOR = connected_color
     CONNECTED_COLOR = connected_color
+    HALTED_COLOR = halted_color
 
     # Imaging mode: brightfield / fluorescence / dual.
     mode = Enum("br", "fl", "dual")
