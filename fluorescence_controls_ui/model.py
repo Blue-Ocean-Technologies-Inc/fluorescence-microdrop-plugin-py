@@ -1,10 +1,12 @@
 from traits.api import Bool, Enum, Int, Str
 
+from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
+
 from template_status_and_controls.base_model import BaseStatusModel
 
 from .consts import (
     disconnected_color, connected_color, halted_color,
-    LED_WAVELENGTHS,
+    LED_WAVELENGTHS, LED_DUTY_MIN, LED_DUTY_MAX,
     BR_INTENSITY_DEFAULT, BR_FREQUENCY_DEFAULT,
     FL_INTENSITY_DEFAULT, FL_FREQUENCY_DEFAULT,
 )
@@ -39,12 +41,18 @@ class FluorescenceStatusModel(BaseStatusModel):
 
     # Brightfield LED set.
     br_wavelength = Enum(*LED_WAVELENGTHS)
-    br_intensity = Int(BR_INTENSITY_DEFAULT)
+    br_intensity = RangeWithSteppedSpinViewHint(
+        LED_DUTY_MIN, LED_DUTY_MAX, value=BR_INTENSITY_DEFAULT, suffix=" %",
+        desc="brightfield LED duty to apply (%)",
+    )
     br_frequency = Int(BR_FREQUENCY_DEFAULT)
 
     # Fluorescence LED set.
     fl_wavelength = Enum(*LED_WAVELENGTHS)
-    fl_intensity = Int(FL_INTENSITY_DEFAULT)
+    fl_intensity = RangeWithSteppedSpinViewHint(
+        LED_DUTY_MIN, LED_DUTY_MAX, value=FL_INTENSITY_DEFAULT, suffix=" %",
+        desc="fluorescence LED duty to apply (%)",
+    )
     fl_frequency = Int(FL_FREQUENCY_DEFAULT)
 
     # Latest ack/telemetry line from the board.

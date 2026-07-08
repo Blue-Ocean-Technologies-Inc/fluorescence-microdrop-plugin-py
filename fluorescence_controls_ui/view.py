@@ -1,8 +1,8 @@
 from traitsui.api import View, VGroup, HGroup, Item, Readonly, EnumEditor, RangeEditor
 
-from microdrop_utils.traitsui_qt_helpers import SlidingToggleEditor
+from microdrop_utils.traitsui_qt_helpers import SlidingToggleEditor, InPlaceToggleEditor
 
-from .consts import LED_DUTY_MIN, LED_DUTY_MAX, LED_FREQUENCY_MIN, LED_FREQUENCY_MAX
+from .consts import LED_FREQUENCY_MIN, LED_FREQUENCY_MAX
 
 # Connection / board identity + last board ack line.
 status_group = VGroup(
@@ -17,7 +17,7 @@ mode_group = HGroup(
          editor=EnumEditor(values={"br": "Brightfield",
                                    "fl": "Fluorescence",
                                    "dual": "Dual"}, cols=3)),
-    Item("light_on", label="Light", editor=SlidingToggleEditor()),
+    Item("light_on", label="Light", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off")),
     show_border=True,
 )
 
@@ -25,8 +25,7 @@ mode_group = HGroup(
 # controls active in br+dual, fluorescence controls in fl+dual.
 brightfield_group = VGroup(
     Item("br_wavelength", label="Wavelength"),
-    Item("br_intensity", label="Intensity (%)",
-         editor=RangeEditor(low=LED_DUTY_MIN, high=LED_DUTY_MAX)),
+    Item("br_intensity", label="Intensity"),
     Item("br_frequency", label="Frequency (Hz)",
          editor=RangeEditor(low=LED_FREQUENCY_MIN, high=LED_FREQUENCY_MAX)),
     label="Brightfield",
@@ -36,8 +35,7 @@ brightfield_group = VGroup(
 
 fluorescence_group = VGroup(
     Item("fl_wavelength", label="Wavelength"),
-    Item("fl_intensity", label="Intensity (%)",
-         editor=RangeEditor(low=LED_DUTY_MIN, high=LED_DUTY_MAX)),
+    Item("fl_intensity", label="Intensity"),
     Item("fl_frequency", label="Frequency (Hz)",
          editor=RangeEditor(low=LED_FREQUENCY_MIN, high=LED_FREQUENCY_MAX)),
     label="Fluorescence",
