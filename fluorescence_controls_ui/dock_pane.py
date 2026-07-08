@@ -1,8 +1,14 @@
-from template_status_and_controls.base_dock_pane import BaseStatusDockPane
+from traits.api import observe
+from pyface.qt.QtCore import Qt
+
+from template_status_and_controls.base_dock_pane import (
+    BaseStatusDockPane, build_status_icon_tooltip, status_bar_icon_font)
 from microdrop_style.icons.icons import ICON_EMOJI_OBJECTS
+from microdrop_utils.pyside_helpers import ClickableLabel
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
-from .consts import PKG, PKG_name, listener_name
+from .consts import PKG, PKG_name, listener_name, START_DEVICE_MONITORING
 from .model import FluorescenceStatusModel
 from .controller import FluorescenceControlsController
 from .view import UnifiedView
@@ -12,10 +18,11 @@ logger = get_logger(__name__)
 
 
 class FluorescenceStatusDockPane(BaseStatusDockPane):
-    """Dock pane for fluorescence status display and controls.
+    """Dock pane for fluorescence LED status display and controls.
 
     The status bar shows the lightbulb icon (clickable, triggers a
-    connection scan)."""
+    connection scan — same as Tools ▸ Peripherals ▸ Fluorescence ▸
+    Search Connection)."""
 
     id = PKG + ".dock_pane"
     name = f"{PKG_name} Dock Pane"
@@ -34,3 +41,48 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
 
     def _create_message_handler(self) -> FluorescenceMessageHandler:
         return FluorescenceMessageHandler(model=self.model, name=listener_name)
+
+    def _create_status_bar_icon(self):
+        # Clickable: triggers a board connection scan, so the user can
+        # reconnect straight from the icon. The click is ignored while a
+        # scan is already active (see model.searching).
+        icon = ClickableLabel(self.status_bar_icon_glyph)
+        icon.setFont(status_bar_icon_font())
+        icon.setStyleSheet(f"color: {self.model.DISCONNECTED_COLOR}")
+        icon.clicked.connect(self._search_fluorescence_connection)
+        return icon
+
+    def _build_status_bar_tooltip(self) -> str:
+        # The base tooltip describes DropBot chip states, which the LED
+        # board doesn't have — just disconnected/connected.
+        return build_status_icon_tooltip(
+            "Fluorescence Status:",
+            [
+                (self.model.DISCONNECTED_COLOR, "Disconnected"),
+                (self.model.CONNECTED_COLOR, "Connected"),
+            ],
+            hint="Searching for device…" if self.model.searching
+                 else "Click to search for a connection.",
+        )
+
+    # ------------------------------------------------------------------ #
+    # Status-icon "search connection" click (gated on an active scan)      #
+    # ------------------------------------------------------------------ #
+    def _search_fluorescence_connection(self):
+        """Ask the backend to start a connection scan, unless one is already
+        running. The backend acknowledges by publishing its searching state,
+        which disables the icon (see _sync_search_affordance)."""
+        if self.model.searching:
+            logger.debug("Fluorescence search already active; ignoring status-icon click")
+            return
+        publish_message(topic=START_DEVICE_MONITORING, message="")
+
+    @observe("model:searching", dispatch="ui")
+    def _sync_search_affordance(self, event=None):
+        """Pointing-hand cursor only when a click would do something — i.e.
+        when no scan is currently active — and flip the tooltip to match."""
+        if self.status_bar_icon is not None:
+            self.status_bar_icon.setCursor(
+                Qt.CursorShape.ArrowCursor if self.model.searching
+                else Qt.CursorShape.PointingHandCursor)
+        self._refresh_status_bar_tooltip()
