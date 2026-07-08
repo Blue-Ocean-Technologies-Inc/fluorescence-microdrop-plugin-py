@@ -27,3 +27,8 @@ halted_color = ERROR_COLOR
 # Per-mode LED defaults (the standalone app's config.yml `controller` values).
 BR_INTENSITY_DEFAULT, BR_FREQUENCY_DEFAULT = 38, 315
 FL_INTENSITY_DEFAULT, FL_FREQUENCY_DEFAULT = 15, 40000
+
+# ZWO ASI camera driver for Windows (from the standalone app's README): the
+# camera needs this driver installed before it shows up on Windows.
+ASI_DRIVER_URL = ("https://dl.zwoastro.com/software"
+                  "?app=AsiCameraDriver&platform=windows86&region=Overseas")
