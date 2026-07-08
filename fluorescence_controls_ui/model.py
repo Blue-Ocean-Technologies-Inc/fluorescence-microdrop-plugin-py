@@ -37,6 +37,12 @@ class FluorescenceStatusModel(BaseStatusModel):
     # Imaging mode: brightfield / fluorescence / dual.
     mode = Enum("br", "fl", "dual")
 
+    # Board identity (from the led_help probe on connect).
+    board_id_text = Str("-")
+
+    # Latest ack/telemetry line from the board.
+    last_reading = Str("-")
+
     # Master light toggle (the standalone light button).
     light_on = Bool(False)
 
@@ -61,12 +67,6 @@ class FluorescenceStatusModel(BaseStatusModel):
         LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=FL_FREQUENCY_DEFAULT, suffix=" Hz",
         desc="fluorescence LED PWM frequency (Hz)",
     )
-
-    # Board identity (from the led_help probe on connect).
-    board_id_text = Str("-")
-
-    # Latest ack/telemetry line from the board.
-    last_reading = Str("-")
 
     # ------------------------------------------------------------------ #
     # Collapsible-section switches (view headers toggle these)             #

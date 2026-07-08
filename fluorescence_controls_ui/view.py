@@ -1,6 +1,6 @@
 from traitsui.api import View, VGroup, HGroup, Item, UItem, Readonly, EnumEditor, Label
 
-from microdrop_utils.traitsui_qt_helpers import SlidingToggleEditor, IconToggleEditor
+from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor, IconToggleEditor
 
 # Every section is collapsible: an arrow glyph acts as the section header and
 # the bordered group below it is shown only while its `show_*` trait is ticked
@@ -23,7 +23,7 @@ control_group = VGroup(
              editor=EnumEditor(values={"br": "Brightfield",
                                        "fl": "Fluorescence",
                                        "dual": "Dual"}, cols=3)),
-        Item("light_on", label="Light", editor=SlidingToggleEditor(),
+        Item("light_on", label="Light", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
              enabled_when="connected"),
     ),
     visible_when="show_control",
