@@ -4,6 +4,7 @@ from traits.api import observe
 
 from template_status_and_controls.base_controller import BaseStatusController
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.traitsui_qt_helpers import stretch_group_layouts_horizontally
 from logger.logger_service import get_logger
 
 from .consts import SET_LED, SET_LED_FREQUENCY, ALL_LEDS_OFF
@@ -25,6 +26,15 @@ class FluorescenceControlsController(BaseStatusController):
     The standalone 0.5 s duplicate-command debounce is unnecessary here:
     trait observers only fire on actual value changes.
     """
+
+    # ------------------------------------------------------------------ #
+    # UI build hook                                                        #
+    # ------------------------------------------------------------------ #
+    def init(self, info):
+        """Stretch the collapsible sections to the full pane width once the UI
+        is built (TraitsUI otherwise left-hugs each group to its content)."""
+        stretch_group_layouts_horizontally(info.ui.control)
+        return super().init(info)
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #

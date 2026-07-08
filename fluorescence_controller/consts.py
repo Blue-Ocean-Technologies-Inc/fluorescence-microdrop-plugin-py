@@ -18,6 +18,8 @@ DISCONNECTED = disconnected_topic(DEVICE_NAME)
 SEARCHING = searching_topic(DEVICE_NAME)
 # Raw measurement/telemetry lines from the board (shape TBD by the firmware).
 TELEMETRY = f"{DEVICE_NAME}/signals/telemetry"
+# Board identity parsed from the led_help response: JSON {"name", "leds"}.
+BOARD_ID = f"{DEVICE_NAME}/signals/board_id"
 
 # LED channels: combo/index order matches the firmware's PWM channel table
 # (blue..deep_red on consecutive pins), so a UI combo index IS the led index.
