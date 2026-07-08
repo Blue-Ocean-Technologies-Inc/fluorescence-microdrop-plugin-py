@@ -1,5 +1,4 @@
 import json
-import re
 import threading
 
 import serial
@@ -11,46 +10,43 @@ from .consts import CONNECTED, DISCONNECTED, TELEMETRY, BOARD_ID, BOARD_BAUDRATE
 
 logger = get_logger(__name__)
 
-# The led_help response block: header/footer dash lines bracket the command
-# list plus an "LED Index Mapping:" section of "  <index>: <name>" rows.
-HELP_HEADER = "-" * 20 + " Help " + "-" * 20
-HELP_FOOTER = "-" * 40
-HELP_LED_ROW_RE = re.compile(r"^\s*(\d+):\s*(\S+)\s*$")
-BOARD_NAME = "LED Controller"
+# Boards in the heater firmware family reply to ``whoami`` with a single
+# WHOAMI_MARKER-prefixed line carrying {"uid", "device_id", ...}.
+WHOAMI_MARKER = "\u00a7WHOAMI"
 
 
-def parse_led_help_block(lines) -> dict:
-    """Board identity from a captured led_help block: the firmware has no
-    whoami over serial, but its help response lists the LED index mapping —
-    enough to name the board and enumerate its channels."""
-    leds = []
-    for line in lines:
-        match = HELP_LED_ROW_RE.match(line)
-        if match:
-            leds.append(match.group(2))
-    return {"name": BOARD_NAME, "leds": leds}
+def parse_whoami_line(line) -> dict | None:
+    """The identity payload from a WHOAMI frame line, or None."""
+    if not line.startswith(WHOAMI_MARKER):
+        return None
+    brace = line.find("{")
+    if brace < 0:
+        return None
+    try:
+        return json.loads(line[brace:])
+    except Exception:
+        logger.error(f"Unparseable WHOAMI frame: {line!r}")
+        return None
 
 
 class FluorescenceSerialProxy:
     """Minimal headless serial proxy for the fluorescence LED board.
 
     Newline-terminated plain-text protocol: commands go out as text lines and
-    every response line is published on TELEMETRY — except the led_help block
-    requested on connect, which is captured whole and published as the
-    BOARD_ID identity instead of spamming the log.
+    every response line is published on TELEMETRY — except the WHOAMI frame
+    (requested on connect), which is published as the BOARD_ID identity.
     """
 
     def __init__(self, port):
         self.port = port
         self._serial = serial.Serial(port, BOARD_BAUDRATE, timeout=1)
         self._stop = threading.Event()
-        self._help_lines = None
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
         publish_message(message=port, topic=CONNECTED)
         logger.info(f"Fluorescence board connected on {port}")
-        # Identity probe: the help response carries the LED index mapping.
-        self.send_command("led_help")
+        # Identity probe: the board answers with a WHOAMI frame.
+        self.send_command("whoami")
 
     # ------------------------------------------------------------------ #
     # Serial I/O                                                          #
@@ -71,18 +67,9 @@ class FluorescenceSerialProxy:
                 self._handle_line(line)
 
     def _handle_line(self, line: str):
-        # Capture a led_help block whole -> BOARD_ID; everything else is a
-        # plain telemetry/ack line.
-        if line == HELP_HEADER:
-            self._help_lines = []
-            return
-        if self._help_lines is not None:
-            if line == HELP_FOOTER:
-                publish_message(message=json.dumps(parse_led_help_block(self._help_lines)),
-                                topic=BOARD_ID)
-                self._help_lines = None
-            else:
-                self._help_lines.append(line)
+        identity = parse_whoami_line(line)
+        if identity is not None:
+            publish_message(message=json.dumps(identity), topic=BOARD_ID)
             return
         publish_message(message=line, topic=TELEMETRY)
 

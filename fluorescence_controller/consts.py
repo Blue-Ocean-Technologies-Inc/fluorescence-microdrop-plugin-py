@@ -7,8 +7,10 @@ PKG_name = PKG.title().replace("_", " ")
 DEVICE_NAME = "Fluorescence"
 
 # Fluorescence board hardware id (RP2040 / MicroPython, VID 2E8A, PID 0005).
-# TODO: adjust once the real board's VID:PID is known.
+# The heater board shares this VID:PID, so the monitor also matches the
+# whoami device_id before claiming a port.
 FLUORESCENCE_HWID = "VID:PID=2E8A:0005"
+DEVICE_ID_FRAGMENT = "fluo"
 BOARD_BAUDRATE = 115200
 
 # Topics published by this plugin (signals)
