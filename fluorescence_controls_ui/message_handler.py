@@ -24,12 +24,12 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         self.model.last_reading = body
 
     def _on_board_id_triggered(self, body):
-        """Identity from the connect-time led_help probe -> the Board readout."""
+        """Identity from the connect-time whoami probe -> the Board readout
+        (device_id first, like the heater pane)."""
         try:
             identity = json.loads(body)
         except Exception:
             logger.error(f"Unparseable board id payload: {body!r}")
             return
-        name = identity.get("name", "?")
-        leds = identity.get("leds", [])
-        self.model.board_id_text = f"{name} ({len(leds)} LEDs)" if leds else name
+        self.model.board_id_text = str(
+            identity.get("device_id") or identity.get("uid") or "unknown")
