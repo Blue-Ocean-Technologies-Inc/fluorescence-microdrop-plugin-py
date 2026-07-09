@@ -1,15 +1,17 @@
-"""ASI camera-source provider for the device viewer's video layer.
+"""ASI camera-source provider for the device viewer.
 
 Contributed to the ``device_viewer.camera_sources`` extension point: ASI
-cameras appear in the device viewer's own camera dropdown and render
-through the same video item as UVC cameras — inheriting the perspective
-alignment under the electrode layer.
+cameras appear in the device viewer's own camera dropdown, but only for
+CAPTURE — the device viewer keeps its video layer hidden for provider
+sources (rendering full-resolution sensor frames under the electrodes
+costs GUI smoothness) and the preview lives in the fluorescence image
+viewer pane instead.
 
 Exposure/gain live in the fluorescence controls pane only: its per-mode
 values are mirrored into the shared ``asi_camera_settings`` singleton and
 the running feed applies every change to the camera.
 """
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QMetaMethod, QObject, Signal
 from PySide6.QtGui import QImage
 
 from logger.logger_service import get_logger
@@ -44,10 +46,14 @@ class AsiCameraFeed(QObject):
         asi_camera_settings.observe(self._on_settings_changed, "gain")
 
     def _on_thread_frame(self, raw):
-        # Queued onto the GUI thread: keep the raw sensor frame for captures
-        # and convert for the display sink.
+        # Queued onto the GUI thread: keep the raw sensor frame for captures.
+        # The display conversion is heavy on full-resolution 16-bit frames,
+        # so it runs only when someone actually previews (the device viewer
+        # doesn't — its video layer stays hidden for provider sources).
         self._last_raw = raw
-        self.frame.emit(frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))))
+        if self.isSignalConnected(QMetaMethod.fromSignal(self.frame)):
+            self.frame.emit(
+                frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))))
 
     def raw_frame(self):
         """The latest unprocessed sensor frame (16-bit) as a lossless
