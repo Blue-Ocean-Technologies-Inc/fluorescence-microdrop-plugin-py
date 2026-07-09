@@ -3,76 +3,74 @@
 Contributed to the ``device_viewer.camera_sources`` extension point: ASI
 cameras appear in the device viewer's own camera dropdown and render
 through the same video item as UVC cameras — inheriting the perspective
-alignment under the electrode layer. The feed wraps ASIVideoThread and
-exposes live exposure/gain controls.
+alignment under the electrode layer.
+
+Exposure/gain live in the fluorescence controls pane only: its per-mode
+values are mirrored into the shared ``asi_camera_settings`` singleton and
+the running feed applies every change to the camera.
 """
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSpinBox, QWidget
 
 from logger.logger_service import get_logger
 
-from .asi_thread import ASIVideoThread, frame_to_qimage
-from .consts import (
-    ASI_EXPOSURE_MIN, ASI_EXPOSURE_MAX, ASI_EXPOSURE_DEFAULT,
-    ASI_GAIN_MIN, ASI_GAIN_MAX, ASI_GAIN_DEFAULT,
+from .asi_thread import (
+    ASIVideoThread, debayered_to_rgb, frame_to_qimage, raw_to_qimage,
+    to_display_8bit,
 )
+from .camera_settings import asi_camera_settings
 from .zwoasi import default_asi_sdk_dir, list_asi_cameras
 
 logger = get_logger(__name__)
 
 
 class AsiCameraFeed(QObject):
-    """One live ASI capture: frames out as QImages, plus settings controls.
-
-    The device viewer connects ``frame``/``error`` (queued across the grabber
-    thread) and calls ``start``/``stop``; ``create_controls`` supplies the
-    exposure/gain row shown while this feed's source is selected.
-    """
+    """One live ASI capture: frames out as QImages, settings from the shared
+    ASI camera settings (applied live while running)."""
 
     frame = Signal(QImage)
     error = Signal(str)
 
     def __init__(self, sdk_dir, camera_id):
         super().__init__()
+        self._last_raw = None
         self._thread = ASIVideoThread(
             sdk_dir, camera_id,
-            exposure=ASI_EXPOSURE_DEFAULT, gain=ASI_GAIN_DEFAULT)
-        self._thread.change_pixmap_signal.connect(
-            lambda img: self.frame.emit(frame_to_qimage(img)))
+            exposure=asi_camera_settings.exposure,
+            gain=asi_camera_settings.gain)
+        self._thread.change_pixmap_signal.connect(self._on_thread_frame)
         self._thread.error_signal.connect(self.error)
+        asi_camera_settings.observe(self._on_settings_changed, "exposure")
+        asi_camera_settings.observe(self._on_settings_changed, "gain")
+
+    def _on_thread_frame(self, raw):
+        # Queued onto the GUI thread: keep the raw sensor frame for captures
+        # and convert for the display sink.
+        self._last_raw = raw
+        self.frame.emit(frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))))
+
+    def raw_frame(self):
+        """The latest unprocessed sensor frame (16-bit) as a lossless
+        QImage — saved next to display captures by the device viewer."""
+        if self._last_raw is None:
+            return None
+        return raw_to_qimage(self._last_raw)
+
+    def _on_settings_changed(self, event):
+        self._thread.set_camera_settings(
+            exposure=asi_camera_settings.exposure,
+            gain=asi_camera_settings.gain)
 
     def start(self):
         self._thread.start()
 
     def stop(self):
+        asi_camera_settings.observe(self._on_settings_changed, "exposure",
+                                    remove=True)
+        asi_camera_settings.observe(self._on_settings_changed, "gain",
+                                    remove=True)
         self._thread.stop()
         self._thread.wait(3000)
-
-    def create_controls(self, parent) -> QWidget:
-        controls = QWidget(parent)
-        row = QHBoxLayout(controls)
-        row.setContentsMargins(0, 0, 0, 0)
-
-        row.addWidget(QLabel("ASI:", controls))
-        exposure = QSpinBox(controls)
-        exposure.setRange(ASI_EXPOSURE_MIN, ASI_EXPOSURE_MAX)
-        exposure.setValue(self._thread.exposure)
-        exposure.setSuffix(" µs")
-        exposure.setToolTip("ASI exposure time")
-        exposure.valueChanged.connect(
-            lambda value: self._thread.set_camera_settings(exposure=value))
-        row.addWidget(exposure, stretch=1)
-
-        gain = QSpinBox(controls)
-        gain.setRange(ASI_GAIN_MIN, ASI_GAIN_MAX)
-        gain.setValue(self._thread.gain)
-        gain.setPrefix("gain ")
-        gain.setToolTip("ASI gain")
-        gain.valueChanged.connect(
-            lambda value: self._thread.set_camera_settings(gain=value))
-        row.addWidget(gain, stretch=1)
-        return controls
 
 
 class AsiCameraSourceProvider:
