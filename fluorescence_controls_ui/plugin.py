@@ -38,6 +38,11 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
         from .dock_pane import FluorescenceStatusDockPane
         return FluorescenceStatusDockPane
 
+    def _get_extra_dock_pane_classes(self) -> list:
+        # Second dock pane: live camera preview.
+        from .preview.dock_pane import FluorescencePreviewDockPane
+        return [FluorescencePreviewDockPane]
+
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
 
