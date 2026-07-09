@@ -30,7 +30,7 @@ LED_WAVELENGTHS = (
     "Orange (600 nm)", "Red (630 nm)", "Deep Red (660 nm)",
 )
 LED_DUTY_MIN, LED_DUTY_MAX = 0, 100
-LED_FREQUENCY_MIN, LED_FREQUENCY_MAX = 1, 100000
+LED_FREQUENCY_MIN, LED_FREQUENCY_MAX = 20, 100000
 
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
