@@ -47,6 +47,11 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
         from .dock_pane import FluorescenceStatusDockPane
         return FluorescenceStatusDockPane
 
+    def _get_extra_dock_pane_classes(self) -> list:
+        # Second dock pane: 16-bit-aware viewer for captured images.
+        from .image_viewer.dock_pane import FluorescenceImageViewerDockPane
+        return [FluorescenceImageViewerDockPane]
+
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
 
