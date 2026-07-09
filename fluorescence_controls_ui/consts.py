@@ -37,7 +37,7 @@ FL_EXPOSURE_DEFAULT, FL_GAIN_DEFAULT = 20, 300
 # Control-pane values persisted across sessions: model trait ->
 # FluorescencePreferences trait. light_on is deliberately absent — the
 # light always starts OFF regardless of how the last session ended.
-PERSISTED_CONTROL_TRAITS = ["mode", "br_wavelength", "br_frequency", "br_gain", "br_exposure", "fl_wavelength", "fl_frequency", "fl_gain", "fl_exposure"]
+PERSISTED_CONTROL_TRAITS = ["mode", "br_intensity", "br_wavelength", "br_frequency", "br_gain", "br_exposure", "fl_intensity", "fl_wavelength", "fl_frequency", "fl_gain", "fl_exposure"]
 
 # Image-viewer display-window values persisted across sessions: model trait
 # -> FluorescencePreferences trait. window_max restores BEFORE window_min:
