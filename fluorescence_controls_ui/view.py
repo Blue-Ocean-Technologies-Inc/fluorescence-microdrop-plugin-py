@@ -23,7 +23,7 @@ control_group = VGroup(
              editor=EnumEditor(values={"br": "Brightfield",
                                        "fl": "Fluorescence",
                                        "dual": "Dual"}, cols=3)),
-        Item("light_on", label="Light", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
+        UItem("light_on", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
              enabled_when="connected"),
     ),
     visible_when="show_control",
@@ -34,9 +34,9 @@ control_group = VGroup(
 # controls active in br+dual, fluorescence controls in fl+dual.
 brightfield_group = VGroup(
     Item("br_wavelength", label="Wavelength"),
-    Item("br_intensity", label="Intensity"),
-    Item("br_frequency", label="Frequency"),
-    Item("br_exposure", label="Exposure"),
+    Item("br_intensity", label="Intensity (%)"),
+    Item("br_frequency", label="Frequency (Hz)"),
+    Item("br_exposure", label="Exposure (ms)"),
     Item("br_gain", label="Gain"),
     visible_when="show_brightfield",
     enabled_when="mode != 'fl'",

@@ -4,9 +4,9 @@ A small PreferencesHelper on the SAME "Peripheral Settings" node the other
 peripheral plugins use (``microdrop.peripheral_settings``), holding only the
 fluorescence plugin's own traits.
 """
-from apptools.preferences.api import PreferencesHelper, get_default_preferences
+from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesPane
-from traits.api import Bool, Directory, Int, Str
+from traits.api import Bool, Directory, Int, Str, Float
 from traitsui.api import Item, View, VGroup
 
 from microdrop_style.text_styles import preferences_group_style_sheet
@@ -50,10 +50,10 @@ class FluorescencePreferences(PreferencesHelper):
     fluorescence_viewer_auto_contrast = Bool(
         True, desc="Auto-contrast the image viewer display window"
     )
-    fluorescence_viewer_window_min = Int(
+    fluorescence_viewer_window_min = Float(
         0, desc="Manual display-window minimum (used when auto-contrast is off)"
     )
-    fluorescence_viewer_window_max = Int(
+    fluorescence_viewer_window_max = Float(
         10000, desc="Manual display-window maximum (used when auto-contrast is off)"
     )
 
@@ -67,7 +67,7 @@ class FluorescencePreferences(PreferencesHelper):
         BR_INTENSITY_DEFAULT, desc="Brightfield LED duty (%)")
     br_frequency = Int(
         BR_FREQUENCY_DEFAULT, desc="Brightfield LED PWM frequency (Hz)")
-    br_exposure = Int(
+    br_exposure = Float(
         BR_EXPOSURE_DEFAULT, desc="Brightfield camera exposure (ms)")
     br_gain = Int(
         BR_GAIN_DEFAULT, desc="Brightfield camera gain")
@@ -77,7 +77,7 @@ class FluorescencePreferences(PreferencesHelper):
         FL_INTENSITY_DEFAULT, desc="Fluorescence LED duty (%)")
     fl_frequency = Int(
         FL_FREQUENCY_DEFAULT, desc="Fluorescence LED PWM frequency (Hz)")
-    fl_exposure = Int(
+    fl_exposure = Float(
         FL_EXPOSURE_DEFAULT, desc="Fluorescence camera exposure (ms)")
     fl_gain = Int(
         FL_GAIN_DEFAULT, desc="Fluorescence camera gain")

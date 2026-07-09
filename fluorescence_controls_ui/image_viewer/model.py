@@ -59,15 +59,15 @@ class FluorescenceImageViewerModel(HasTraits):
     _max_window_min = Property(observe="window_max")
 
     window_min = RangeWithViewHints(
-        0,
+        0.0,
         "_max_window_min",
-        0,
+        0.0,
         desc="intensity displayed as black"
     )
     window_max = RangeWithViewHints(
-        1,
-        65535,
-        10000,
+        1.0,
+        65535.0,
+        10000.0,
         desc="intensity displayed as white"
     )
 

@@ -1,7 +1,7 @@
-from traits.api import Bool, Enum, Str, observe, Instance
+from traits.api import Bool, Enum, Str, observe, Instance, Range
 from traits.observation.api import parse
 
-from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
+from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
 from template_status_and_controls.base_model import BaseStatusModel
 
@@ -55,39 +55,39 @@ class FluorescenceStatusModel(BaseStatusModel):
 
     # Brightfield LED set.
     br_wavelength = Enum(*LED_WAVELENGTHS)
-    br_intensity = RangeWithSteppedSpinViewHint(
-        LED_DUTY_MIN, LED_DUTY_MAX, value=BR_INTENSITY_DEFAULT, suffix=" %",
+    br_intensity = Range(
+        LED_DUTY_MIN, LED_DUTY_MAX, value=BR_INTENSITY_DEFAULT, mode="slider",
         desc="brightfield LED duty to apply (%)",
     )
-    br_frequency = RangeWithSteppedSpinViewHint(
-        LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=BR_FREQUENCY_DEFAULT, suffix=" Hz",
+    br_frequency = Range(
+        LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=BR_FREQUENCY_DEFAULT, mode="xslider",
         desc="brightfield LED PWM frequency (Hz)",
     )
-    br_exposure = RangeWithSteppedSpinViewHint(
-        EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, value=BR_EXPOSURE_DEFAULT, suffix=" ms",
+    br_exposure = RangeWithViewHints(
+        float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=float(BR_EXPOSURE_DEFAULT),
         desc="brightfield camera exposure (milliseconds)",
     )
-    br_gain = RangeWithSteppedSpinViewHint(
-        ASI_GAIN_MIN, ASI_GAIN_MAX, value=BR_GAIN_DEFAULT,
+    br_gain = Range(
+        ASI_GAIN_MIN, ASI_GAIN_MAX, value=BR_GAIN_DEFAULT, mode="slider",
         desc="brightfield camera gain",
     )
 
     # Fluorescence LED set.
     fl_wavelength = Enum(*LED_WAVELENGTHS)
-    fl_intensity = RangeWithSteppedSpinViewHint(
-        LED_DUTY_MIN, LED_DUTY_MAX, value=FL_INTENSITY_DEFAULT, suffix=" %",
+    fl_intensity = Range(
+        LED_DUTY_MIN, LED_DUTY_MAX, value=FL_INTENSITY_DEFAULT, mode="slider",
         desc="fluorescence LED duty to apply (%)",
     )
-    fl_frequency = RangeWithSteppedSpinViewHint(
-        LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=FL_FREQUENCY_DEFAULT, suffix=" Hz",
+    fl_frequency = Range(
+        LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=FL_FREQUENCY_DEFAULT, mode="xslider",
         desc="fluorescence LED PWM frequency (Hz)",
     )
-    fl_exposure = RangeWithSteppedSpinViewHint(
-        EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, value=FL_EXPOSURE_DEFAULT, suffix=" ms",
+    fl_exposure = RangeWithViewHints(
+        float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=float(FL_EXPOSURE_DEFAULT),
         desc="fluorescence camera exposure (milliseconds)",
     )
-    fl_gain = RangeWithSteppedSpinViewHint(
-        ASI_GAIN_MIN, ASI_GAIN_MAX, value=FL_GAIN_DEFAULT,
+    fl_gain = Range(
+        ASI_GAIN_MIN, ASI_GAIN_MAX, value=FL_GAIN_DEFAULT, mode="slider",
         desc="fluorescence camera gain",
     )
 

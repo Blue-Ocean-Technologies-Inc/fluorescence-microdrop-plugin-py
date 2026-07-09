@@ -56,6 +56,15 @@ class FluorescenceControlsController(BaseStatusController):
         return payload
 
     # ------------------------------------------------------------------ #
+    # Controller Interface                                                 #
+    # ------------------------------------------------------------------ #
+    def br_frequency_setattr(self, info, object, traitname, value):
+        return super().setattr(info, object, traitname, int(value))
+
+    def fl_frequency_setattr(self, info, object, traitname, value):
+        return super().setattr(info, object, traitname, int(value))
+
+    # ------------------------------------------------------------------ #
     # Master light toggle                                                  #
     # ------------------------------------------------------------------ #
     @observe("model:light_on")
@@ -126,8 +135,8 @@ class FluorescenceControlsController(BaseStatusController):
     def _push_active_camera_settings(self, event):
         # The pane shows milliseconds; the camera takes microseconds.
         if self._camera_mode_is_fl():
-            asi_camera_settings.exposure = self.model.fl_exposure * 1000
-            asi_camera_settings.gain = self.model.fl_gain
+            asi_camera_settings.exposure = int(self.model.fl_exposure * 1000)
+            asi_camera_settings.gain = int(self.model.fl_gain)
         else:
-            asi_camera_settings.exposure = self.model.br_exposure * 1000
-            asi_camera_settings.gain = self.model.br_gain
+            asi_camera_settings.exposure = int(self.model.br_exposure * 1000)
+            asi_camera_settings.gain = int(self.model.br_gain)
