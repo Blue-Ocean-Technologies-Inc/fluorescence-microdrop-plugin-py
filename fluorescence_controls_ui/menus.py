@@ -1,8 +1,26 @@
-from pyface.action.schema.schema import SMenu
+import webbrowser
+
+from pyface.action.api import Action
+from pyface.action.schema.schema import SGroup, SMenu
+from traits.api import Str
 
 from microdrop_utils.dramatiq_traits_helpers import DramatiqMessagePublishAction
 
-from .consts import START_DEVICE_MONITORING
+from .consts import START_DEVICE_MONITORING, ASI_DRIVER_URL
+
+
+class InstallAsiDriverAction(Action):
+    name = Str("Install Fluorescence Camera &Driver (Windows)...")
+    tooltip = "Open the ZWO ASI camera driver download page"
+
+    def perform(self, event):
+        webbrowser.open(ASI_DRIVER_URL)
+
+
+def help_menu_factory():
+    """Help-menu group: the Windows camera-driver download link (the same
+    URL the launch notice points at)."""
+    return SGroup(InstallAsiDriverAction(), id="fluorescence_help_actions")
 
 
 def fluorescence_tools_menu_factory():

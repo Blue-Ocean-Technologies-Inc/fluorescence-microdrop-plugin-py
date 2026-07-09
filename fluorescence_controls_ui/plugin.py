@@ -1,5 +1,8 @@
 import platform
 
+from envisage.ids import PREFERENCES_PANES
+from traits.api import List
+
 from fluorescence_controller.consts import FLUORESCENCE_HWID, START_DEVICE_MONITORING
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.hardware_device_monitoring_helpers import check_connected_ports_hwid
@@ -23,6 +26,14 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
     id = PKG + ".plugin"
     name = f"{PKG_name} Plugin"
 
+    # Fluorescence group on the shared Peripheral Settings preferences tab
+    # (re-enable the driver notice there after opting out of the popup).
+    preferences_panes = List(contributes_to=PREFERENCES_PANES)
+
+    def _preferences_panes_default(self):
+        from .preferences import FluorescencePreferencesPane
+        return [FluorescencePreferencesPane]
+
     def _get_dock_pane_class(self):
         from .dock_pane import FluorescenceStatusDockPane
         return FluorescenceStatusDockPane
@@ -32,12 +43,19 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
 
     def _get_menu_additions(self) -> list:
         from pyface.action.schema.schema_addition import SchemaAddition
-        from .menus import tools_menu_factory
+        from .menus import tools_menu_factory, help_menu_factory
         return [
             SchemaAddition(
                 factory=tools_menu_factory,
                 path="MenuBar/Tools",
-            )
+            ),
+            # Help > Install Fluorescence Camera Driver (Windows)... — the
+            # same ZWO download the launch notice points at, reachable any
+            # time (the notice can be opted out of).
+            SchemaAddition(
+                factory=help_menu_factory,
+                path="MenuBar/Help",
+            ),
         ]
 
     def start(self):
