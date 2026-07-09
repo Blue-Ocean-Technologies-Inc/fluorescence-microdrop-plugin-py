@@ -1,4 +1,4 @@
-from traits.api import observe
+from traits.api import Instance, observe
 from pyface.qt.QtCore import Qt
 
 from template_status_and_controls.base_dock_pane import (
@@ -11,6 +11,7 @@ from logger.logger_service import get_logger
 from .consts import PKG, PKG_name, listener_name, START_DEVICE_MONITORING
 from .model import FluorescenceStatusModel
 from .controller import FluorescenceControlsController
+from .preferences import FluorescencePreferences
 from .view import UnifiedView
 from .message_handler import FluorescenceMessageHandler
 
@@ -24,12 +25,11 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
     connection scan — same as Tools ▸ Peripherals ▸ Fluorescence ▸
     Search Connection)."""
 
-    id = PKG + ".dock_pane"
+    id = PKG + ".status_controls.dock_pane"
     name = f"{PKG_name} Dock Pane"
 
     view = UnifiedView
     status_bar_icon_glyph = ICON_EMOJI_OBJECTS
-
     # ------------------------------------------------------------------ #
     # BaseStatusDockPane factory hooks                                     #
     # ------------------------------------------------------------------ #
@@ -37,7 +37,12 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
         return FluorescenceStatusModel()
 
     def _create_controller(self):
-        return FluorescenceControlsController(self.model)
+        controller = FluorescenceControlsController(self.model)
+        # Mirror the restored mode's exposure/gain into the shared ASI
+        # camera settings once — the controller's observers only fire on
+        # later edits, and the camera-settings defaults are the fl pair.
+        controller._push_active_camera_settings(None)
+        return controller
 
     def _create_message_handler(self) -> FluorescenceMessageHandler:
         return FluorescenceMessageHandler(model=self.model, name=listener_name)

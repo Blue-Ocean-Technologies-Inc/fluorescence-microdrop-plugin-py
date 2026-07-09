@@ -36,6 +36,8 @@ brightfield_group = VGroup(
     Item("br_wavelength", label="Wavelength"),
     Item("br_intensity", label="Intensity"),
     Item("br_frequency", label="Frequency"),
+    Item("br_exposure", label="Exposure"),
+    Item("br_gain", label="Gain"),
     visible_when="show_brightfield",
     enabled_when="mode != 'fl'",
     show_border=True,
@@ -45,6 +47,10 @@ fluorescence_group = VGroup(
     Item("fl_wavelength", label="Wavelength"),
     Item("fl_intensity", label="Intensity"),
     Item("fl_frequency", label="Frequency"),
+    # In dual mode the camera runs on the brightfield pair (the controller
+    # gives it priority), so these two stay editable only in fl mode.
+    Item("fl_exposure", label="Exposure", enabled_when="mode == 'fl'"),
+    Item("fl_gain", label="Gain", enabled_when="mode == 'fl'"),
     visible_when="show_fluorescence",
     enabled_when="mode != 'br'",
     show_border=True,

@@ -7,6 +7,7 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.traitsui_qt_helpers import stretch_group_layouts_horizontally
 from logger.logger_service import get_logger
 
+from .cameras.camera_settings import asi_camera_settings
 from .consts import SET_LED, SET_LED_FREQUENCY, ALL_LEDS_OFF
 
 logger = get_logger(__name__)
@@ -107,3 +108,26 @@ class FluorescenceControlsController(BaseStatusController):
     def _fl_wavelength_changed(self, event):
         if self._fl_live():
             self._publish(SET_LED, self._active_led_payload(exclusive=True))
+
+    # ------------------------------------------------------------------ #
+    # Camera settings (per-mode, like the standalone UI's br_/fl_          #
+    # exposure/gain): the CURRENT mode's pair is mirrored into the shared  #
+    # ASI settings, which the running camera feed applies live. The pane   #
+    # is the ONLY editor — the device viewer shows no settings row.        #
+    # ------------------------------------------------------------------ #
+    def _camera_mode_is_fl(self):
+        return self.model.mode == "fl"
+
+    @observe("model:mode")
+    @observe("model:br_exposure")
+    @observe("model:br_gain")
+    @observe("model:fl_exposure")
+    @observe("model:fl_gain")
+    def _push_active_camera_settings(self, event):
+        # The pane shows milliseconds; the camera takes microseconds.
+        if self._camera_mode_is_fl():
+            asi_camera_settings.exposure = self.model.fl_exposure * 1000
+            asi_camera_settings.gain = self.model.fl_gain
+        else:
+            asi_camera_settings.exposure = self.model.br_exposure * 1000
+            asi_camera_settings.gain = self.model.br_gain

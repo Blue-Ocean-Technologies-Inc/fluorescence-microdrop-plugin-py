@@ -1,18 +1,25 @@
-from traits.api import Bool, Enum, Str, observe
+from traits.api import Bool, Enum, Str, observe, Instance
+from traits.observation.api import parse
 
 from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
 
 from template_status_and_controls.base_model import BaseStatusModel
 
+from .cameras.consts import ASI_GAIN_MIN, ASI_GAIN_MAX
 from .consts import (
     disconnected_color, connected_color, halted_color,
     LED_WAVELENGTHS, LED_DUTY_MIN, LED_DUTY_MAX,
     LED_FREQUENCY_MIN, LED_FREQUENCY_MAX,
     BR_INTENSITY_DEFAULT, BR_FREQUENCY_DEFAULT,
     FL_INTENSITY_DEFAULT, FL_FREQUENCY_DEFAULT,
+    BR_EXPOSURE_DEFAULT, BR_GAIN_DEFAULT,
+    FL_EXPOSURE_DEFAULT, FL_GAIN_DEFAULT,
+    EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, PERSISTED_CONTROL_TRAITS,
 )
 
 from logger.logger_service import get_logger
+from .preferences import FluorescencePreferences
+
 logger = get_logger(__name__)
 
 
@@ -26,13 +33,13 @@ class FluorescenceStatusModel(BaseStatusModel):
     dual capture sequence alternates LEDs itself).
     """
 
-    DISCONNECTED_COLOR = disconnected_color
+    DISCONNECTED_COLOR = Str(disconnected_color)
     # No "connected but no chip" sub-state on the LED board — the base model
     # parks connected devices on CONNECTED_NO_DEVICE_COLOR until a DropBot
     # chip_inserted signal that never comes, so connected maps straight to green.
-    CONNECTED_NO_DEVICE_COLOR = connected_color
-    CONNECTED_COLOR = connected_color
-    HALTED_COLOR = halted_color
+    CONNECTED_NO_DEVICE_COLOR = Str(connected_color)
+    CONNECTED_COLOR = Str(connected_color)
+    HALTED_COLOR = Str(halted_color)
 
     # Imaging mode: brightfield / fluorescence / dual.
     mode = Enum("br", "fl", "dual")
@@ -56,6 +63,14 @@ class FluorescenceStatusModel(BaseStatusModel):
         LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=BR_FREQUENCY_DEFAULT, suffix=" Hz",
         desc="brightfield LED PWM frequency (Hz)",
     )
+    br_exposure = RangeWithSteppedSpinViewHint(
+        EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, value=BR_EXPOSURE_DEFAULT, suffix=" ms",
+        desc="brightfield camera exposure (milliseconds)",
+    )
+    br_gain = RangeWithSteppedSpinViewHint(
+        ASI_GAIN_MIN, ASI_GAIN_MAX, value=BR_GAIN_DEFAULT,
+        desc="brightfield camera gain",
+    )
 
     # Fluorescence LED set.
     fl_wavelength = Enum(*LED_WAVELENGTHS)
@@ -67,6 +82,26 @@ class FluorescenceStatusModel(BaseStatusModel):
         LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=FL_FREQUENCY_DEFAULT, suffix=" Hz",
         desc="fluorescence LED PWM frequency (Hz)",
     )
+    fl_exposure = RangeWithSteppedSpinViewHint(
+        EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, value=FL_EXPOSURE_DEFAULT, suffix=" ms",
+        desc="fluorescence camera exposure (milliseconds)",
+    )
+    fl_gain = RangeWithSteppedSpinViewHint(
+        ASI_GAIN_MIN, ASI_GAIN_MAX, value=FL_GAIN_DEFAULT,
+        desc="fluorescence camera gain",
+    )
+
+    preferences = Instance(FluorescencePreferences, FluorescencePreferences())
+
+    #: Guards the two-way preferences sync against echoing its own writes
+    #: (declared trait, so the pull observer can read it in any ordering).
+    _self_preference_change = Bool(False)
+
+    def traits_init(self):
+        logger.debug(f"Fluorescence Status Model: Initial fluorescence preferences to model sync")
+        self._self_preference_change = True
+        self.trait_set(**{key: self.preferences.trait_get(key)[key] for key in PERSISTED_CONTROL_TRAITS})
+        self._self_preference_change = False # private trait to stop pull preference observer acting on self updates
 
     # ------------------------------------------------------------------ #
     # Collapsible-section switches (view headers toggle these)             #
@@ -91,3 +126,16 @@ class FluorescenceStatusModel(BaseStatusModel):
     @property
     def fl_led_index(self) -> int:
         return LED_WAVELENGTHS.index(self.fl_wavelength)
+
+    @observe(f"[{','.join(PERSISTED_CONTROL_TRAITS)}]", post_init=True)
+    def _push_preferences(self, event):
+        logger.debug(f"Fluorescence Status Model: Saving preferences event: {event}")
+        self._self_preference_change = True
+        self.preferences.trait_set(**{event.name: event.new})
+        self._self_preference_change = False
+
+    @observe(parse("preferences").match(lambda name, trait: name in PERSISTED_CONTROL_TRAITS))
+    def _pull_preferences(self, event):
+        if not self._self_preference_change:
+            logger.debug(f"Fluorescence Status Model: Syncing changed preferences values into model: {event}")
+            self.trait_set(**{event.name: event.new})
