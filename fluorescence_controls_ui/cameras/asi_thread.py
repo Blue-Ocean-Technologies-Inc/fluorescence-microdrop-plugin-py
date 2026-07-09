@@ -150,7 +150,7 @@ class ASIVideoThread(QThread):
                         break
                     time.sleep(0.1)
         except Exception as e:
-            logger.error(f"ASI camera initialization error: {e}")
+            logger.error(f"ASI camera initialization error: {e}", exc_info=True)
             self.error_signal.emit(f"ASI camera initialization error: {e}")
         finally:
             self.cleanup_camera()
