@@ -20,6 +20,7 @@ packages = ["fluorescence_controller", "fluorescence_controls_ui"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "microdrop_plugin.toml" = "fluorescence_controller/microdrop_plugin.toml"
+"ASI_SDK" = "fluorescence_controls_ui/ASI_SDK"
 
 [tool.pixi.workspace]
 channels = ["conda-forge", "alexsk", "vignesh229"]

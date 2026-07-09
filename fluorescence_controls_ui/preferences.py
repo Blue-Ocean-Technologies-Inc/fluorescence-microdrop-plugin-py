@@ -6,8 +6,8 @@ fluorescence plugin's own traits.
 """
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesPane
-from traits.api import Bool
-from traitsui.api import Item, View
+from traits.api import Bool, Directory
+from traitsui.api import Item, View, VGroup
 
 from microdrop_style.text_styles import preferences_group_style_sheet
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
@@ -24,6 +24,16 @@ class FluorescencePreferences(PreferencesHelper):
         True, desc="Show the ASI camera driver download notice on plugin start"
     )
 
+    # Root of the ZWO ASI SDK (the directory holding Win/ and Unix/).
+    # Defaults to the copy bundled with the plugin; empty disables ASI.
+    fluorescence_asi_sdk_dir = Directory(
+        desc="Directory of the ZWO ASI camera SDK (holds Win/ and Unix/)"
+    )
+
+    def _fluorescence_asi_sdk_dir_default(self):
+        from .cameras.zwoasi import default_asi_sdk_dir
+        return default_asi_sdk_dir()
+
 
 class FluorescencePreferencesPane(PreferencesPane):
     """Fluorescence group on the shared Peripheral Settings tab.
@@ -37,18 +47,16 @@ class FluorescencePreferencesPane(PreferencesPane):
 
     category = "microdrop.peripheral_settings"
 
-    fluorescence_group = create_item_label_group(
-        "fluorescence_show_asi_driver_notice",
-        label_text="Show the ASI camera driver notice at launch (Windows)",
-        orientation="horizontal",
-        label_position="last",
-        group_label="Fluorescence",
-        group_show_border=True,
-        group_style_sheet=preferences_group_style_sheet,
+    settings = VGroup(
+        create_item_label_group("fluorescence_show_asi_driver_notice", label_text="Show the ASI camera driver notice at launch (Windows)"),
+        create_item_label_group("fluorescence_asi_sdk_dir", label_text="ASI Camera SDK Directory"),
+        label="Remote Backend",
+        show_border=True,
+        style_sheet=preferences_group_style_sheet,
     )
 
     view = View(
-        fluorescence_group,
+        settings,
         Item("_"),  # Separator to space this out from further contributions.
         resizable=True,
     )
