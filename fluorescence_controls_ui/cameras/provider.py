@@ -1,11 +1,11 @@
 """ASI camera-source provider for the device viewer.
 
 Contributed to the ``device_viewer.camera_sources`` extension point: ASI
-cameras appear in the device viewer's own camera dropdown, but only for
-CAPTURE — the device viewer keeps its video layer hidden for provider
-sources (rendering full-resolution sensor frames under the electrodes
-costs GUI smoothness) and the preview lives in the fluorescence image
-viewer pane instead.
+cameras appear in the device viewer's own camera dropdown, primarily for
+CAPTURE — the device viewer renders provider frames only when its "Live
+feed" checkbox is on (rendering full-resolution sensor frames under the
+electrodes costs GUI smoothness), and captures land in the fluorescence
+image viewer pane regardless.
 
 Exposure/gain live in the fluorescence controls pane only: its per-mode
 values are mirrored into the shared ``asi_camera_settings`` singleton and
@@ -49,7 +49,7 @@ class AsiCameraFeed(QObject):
         # Queued onto the GUI thread: keep the raw sensor frame for captures.
         # The display conversion is heavy on full-resolution 16-bit frames,
         # so it runs only when someone actually previews (the device viewer
-        # doesn't — its video layer stays hidden for provider sources).
+        # connects only while its "Live feed" checkbox is on).
         self._last_raw = raw
         if self.isSignalConnected(QMetaMethod.fromSignal(self.frame)):
             self.frame.emit(
