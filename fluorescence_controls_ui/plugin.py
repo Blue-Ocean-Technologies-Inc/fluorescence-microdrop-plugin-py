@@ -1,5 +1,6 @@
 import platform
 
+from device_viewer.consts import CAMERA_SOURCES
 from envisage.ids import PREFERENCES_PANES
 from traits.api import List
 
@@ -34,14 +35,17 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
         from .preferences import FluorescencePreferencesPane
         return [FluorescencePreferencesPane]
 
+    # ASI cameras join the device viewer's own camera dropdown and render
+    # through its video layer (perspective-aligned under the electrodes).
+    camera_sources = List(contributes_to=CAMERA_SOURCES)
+
+    def _camera_sources_default(self):
+        from .cameras.provider import AsiCameraSourceProvider
+        return [AsiCameraSourceProvider]
+
     def _get_dock_pane_class(self):
         from .dock_pane import FluorescenceStatusDockPane
         return FluorescenceStatusDockPane
-
-    def _get_extra_dock_pane_classes(self) -> list:
-        # Second dock pane: live camera preview.
-        from .preview.dock_pane import FluorescencePreviewDockPane
-        return [FluorescencePreviewDockPane]
 
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
