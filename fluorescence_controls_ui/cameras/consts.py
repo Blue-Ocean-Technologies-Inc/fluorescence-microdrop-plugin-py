@@ -29,6 +29,14 @@ AUTO_BRIGHTNESS_TOLERANCE = 5
 #: Sensor temperature poll cadence in the capture thread.
 TEMPERATURE_POLL_INTERVAL_S = 2.0
 
+# Device-viewer preview stream limits: frames composited under the
+# electrodes are full-scene repaints, and the viewport is far smaller than
+# the sensor — so preview frames are rate-capped and downscaled BEFORE the
+# heavy 16-bit display conversion. Captures always keep the full-rate,
+# full-resolution raw frames.
+DEVICE_VIEWER_STREAM_MAX_FPS = 20
+DEVICE_VIEWER_STREAM_MAX_WIDTH = 960
+
 # Display adjustments (like the ZWO native app's image panel): software
 # post-processing applied to the live preview only — NOT camera controls,
 # and never applied to the saved raw captures. 1.0 = neutral for all three.

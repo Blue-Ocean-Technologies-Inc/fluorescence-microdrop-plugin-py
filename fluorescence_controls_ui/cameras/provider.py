@@ -11,6 +11,7 @@ Exposure/gain and the stream checkbox live in the fluorescence controls
 pane only: they are mirrored into the shared ``asi_camera_settings``
 singleton and the running feed observes every change.
 """
+import time
 from datetime import datetime
 
 from PySide6.QtCore import QObject, Signal
@@ -25,6 +26,7 @@ from .asi_thread import (
 from .camera_settings import (
     ADVANCED_CAMERA_TRAITS, AUTO_SETTING_TRAITS, asi_camera_settings,
 )
+from .consts import DEVICE_VIEWER_STREAM_MAX_FPS, DEVICE_VIEWER_STREAM_MAX_WIDTH
 from .zwoasi import default_asi_sdk_dir, list_asi_cameras
 
 logger = get_logger(__name__)
@@ -45,6 +47,7 @@ class AsiCameraFeed(QObject):
     def __init__(self, sdk_dir, camera_id):
         super().__init__()
         self._last_raw = None
+        self._last_preview_time = 0.0
         # Display-adjustment LUT cache (rebuilt when the trio changes).
         self._display_lut = None
         self._display_lut_key = None
@@ -74,14 +77,27 @@ class AsiCameraFeed(QObject):
     def _on_thread_frame(self, raw):
         # Queued onto the GUI thread: keep the raw sensor frame for captures.
         # The display conversion is heavy on full-resolution 16-bit frames,
-        # so it runs only while the device-viewer stream checkbox is on.
+        # so it runs only while the device-viewer stream checkbox is on —
+        # rate-capped and downscaled to preview size (captures keep the
+        # full-rate, full-resolution raw frames).
         self._last_raw = raw
-        if asi_camera_settings.device_viewer_stream:
-            image = frame_to_qimage(debayered_to_rgb(
-                self._apply_display_adjustments(to_display_8bit(raw))))
-            if asi_camera_settings.add_timestamp:
-                image = self._stamp_timestamp(image)
-            self.frame.emit(image)
+        if not asi_camera_settings.device_viewer_stream:
+            return
+        now = time.monotonic()
+        if now - self._last_preview_time < 1.0 / DEVICE_VIEWER_STREAM_MAX_FPS:
+            return
+        self._last_preview_time = now
+        # Stride-subsample to roughly the viewport's size BEFORE converting
+        # (the frame is already debayered/mono here, so striding is safe).
+        preview = raw
+        stride = max(1, raw.shape[1] // DEVICE_VIEWER_STREAM_MAX_WIDTH)
+        if stride > 1:
+            preview = raw[::stride, ::stride]
+        image = frame_to_qimage(debayered_to_rgb(
+            self._apply_display_adjustments(to_display_8bit(preview))))
+        if asi_camera_settings.add_timestamp:
+            image = self._stamp_timestamp(image)
+        self.frame.emit(image)
 
     def _apply_display_adjustments(self, img):
         """Preview-only gamma/contrast/brightness (the pane's display
