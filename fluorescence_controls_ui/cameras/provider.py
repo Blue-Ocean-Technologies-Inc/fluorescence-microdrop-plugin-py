@@ -2,16 +2,16 @@
 
 Contributed to the ``device_viewer.camera_sources`` extension point: ASI
 cameras appear in the device viewer's own camera dropdown, primarily for
-CAPTURE — the device viewer renders provider frames only when its "Live
-feed" checkbox is on (rendering full-resolution sensor frames under the
-electrodes costs GUI smoothness), and captures land in the fluorescence
-image viewer pane regardless.
+CAPTURE — the device viewer renders frames only while the fluorescence
+controls pane's "Device View Stream" checkbox is on (rendering
+full-resolution sensor frames under the electrodes costs GUI smoothness),
+and captures land in the fluorescence image viewer pane regardless.
 
-Exposure/gain live in the fluorescence controls pane only: its per-mode
-values are mirrored into the shared ``asi_camera_settings`` singleton and
-the running feed applies every change to the camera.
+Exposure/gain and the stream checkbox live in the fluorescence controls
+pane only: they are mirrored into the shared ``asi_camera_settings``
+singleton and the running feed observes every change.
 """
-from PySide6.QtCore import QMetaMethod, QObject, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
 from logger.logger_service import get_logger
@@ -27,10 +27,15 @@ logger = get_logger(__name__)
 
 
 class AsiCameraFeed(QObject):
-    """One live ASI capture: frames out as QImages, settings from the shared
-    ASI camera settings (applied live while running)."""
+    """One live ASI capture: keeps the latest raw sensor frame for
+    ``raw_frame()`` captures, previews as QImages while the device-viewer
+    stream is on, settings from the shared ASI camera settings (applied
+    live while running)."""
 
     frame = Signal(QImage)
+    #: Preview state: the consumer shows its video layer only while True
+    #: (emitted on start and whenever the pane's stream checkbox changes).
+    streaming = Signal(bool)
     error = Signal(str)
 
     def __init__(self, sdk_dir, camera_id):
@@ -44,16 +49,20 @@ class AsiCameraFeed(QObject):
         self._thread.error_signal.connect(self.error)
         asi_camera_settings.observe(self._on_settings_changed, "exposure")
         asi_camera_settings.observe(self._on_settings_changed, "gain")
+        asi_camera_settings.observe(self._on_stream_setting_changed,
+                                    "device_viewer_stream")
 
     def _on_thread_frame(self, raw):
         # Queued onto the GUI thread: keep the raw sensor frame for captures.
         # The display conversion is heavy on full-resolution 16-bit frames,
-        # so it runs only when someone actually previews (the device viewer
-        # connects only while its "Live feed" checkbox is on).
+        # so it runs only while the device-viewer stream checkbox is on.
         self._last_raw = raw
-        if self.isSignalConnected(QMetaMethod.fromSignal(self.frame)):
+        if asi_camera_settings.device_viewer_stream:
             self.frame.emit(
                 frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))))
+
+    def _on_stream_setting_changed(self, event):
+        self.streaming.emit(event.new)
 
     def raw_frame(self):
         """The latest unprocessed sensor frame (16-bit) as a lossless
@@ -68,6 +77,9 @@ class AsiCameraFeed(QObject):
             gain=asi_camera_settings.gain)
 
     def start(self):
+        # The consumer connects before start(): report the current preview
+        # state up front so its video layer matches the pane's checkbox.
+        self.streaming.emit(asi_camera_settings.device_viewer_stream)
         self._thread.start()
 
     def stop(self):
@@ -75,6 +87,8 @@ class AsiCameraFeed(QObject):
                                     remove=True)
         asi_camera_settings.observe(self._on_settings_changed, "gain",
                                     remove=True)
+        asi_camera_settings.observe(self._on_stream_setting_changed,
+                                    "device_viewer_stream", remove=True)
         self._thread.stop()
         self._thread.wait(3000)
 

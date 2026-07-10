@@ -16,7 +16,7 @@ status_group = VGroup(
     show_border=True,
 )
 
-# Imaging mode + master light toggle.
+# Imaging mode + master light toggle + device-viewer stream checkbox.
 control_group = VGroup(
     HGroup(
         Item("mode", style="custom", show_label=False,
@@ -26,6 +26,9 @@ control_group = VGroup(
         UItem("light_on", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
              enabled_when="connected"),
     ),
+    # Live ASI preview in the device viewer — independent of the LED board
+    # connection (it only needs the camera), hence no enabled_when.
+    Item("device_viewer_stream", label="Device View Stream"),
     visible_when="show_control",
     show_border=True,
 )

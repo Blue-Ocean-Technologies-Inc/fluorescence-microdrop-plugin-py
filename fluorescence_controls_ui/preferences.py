@@ -81,6 +81,8 @@ class FluorescencePreferences(PreferencesHelper):
         FL_EXPOSURE_DEFAULT, desc="Fluorescence camera exposure (ms)")
     fl_gain = Int(
         FL_GAIN_DEFAULT, desc="Fluorescence camera gain")
+    device_viewer_stream = Bool(
+        True, desc="Render the live ASI feed in the device viewer")
 
 
 class FluorescencePreferencesPane(PreferencesPane):

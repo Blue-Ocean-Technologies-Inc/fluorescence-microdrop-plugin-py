@@ -53,6 +53,12 @@ class FluorescenceStatusModel(BaseStatusModel):
     # Master light toggle (the standalone light button).
     light_on = Bool(False)
 
+    # Render the live ASI feed in the device viewer's video layer. On by
+    # default; uncheck for a smoother GUI — full-resolution sensor frames
+    # under the electrodes cost rendering time, and the image viewer pane
+    # previews captures regardless.
+    device_viewer_stream = Bool(True)
+
     # Brightfield LED set.
     br_wavelength = Enum(*LED_WAVELENGTHS)
     br_intensity = Range(

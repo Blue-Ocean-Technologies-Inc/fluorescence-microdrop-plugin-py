@@ -140,3 +140,7 @@ class FluorescenceControlsController(BaseStatusController):
         else:
             asi_camera_settings.exposure = int(self.model.br_exposure * 1000)
             asi_camera_settings.gain = int(self.model.br_gain)
+
+    @observe("model:device_viewer_stream")
+    def _push_device_viewer_stream(self, event):
+        asi_camera_settings.device_viewer_stream = self.model.device_viewer_stream

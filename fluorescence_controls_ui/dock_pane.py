@@ -46,10 +46,12 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
 
     def _create_controller(self):
         controller = FluorescenceControlsController(self.model)
-        # Mirror the restored mode's exposure/gain into the shared ASI
-        # camera settings once — the controller's observers only fire on
-        # later edits, and the camera-settings defaults are the fl pair.
+        # Mirror the restored mode's exposure/gain and the device-viewer
+        # stream checkbox into the shared ASI camera settings once — the
+        # controller's observers only fire on later edits, and the restored
+        # values may differ from the camera-settings defaults.
         controller._push_active_camera_settings(None)
+        controller._push_device_viewer_stream(None)
         return controller
 
     def _create_message_handler(self) -> FluorescenceMessageHandler:
