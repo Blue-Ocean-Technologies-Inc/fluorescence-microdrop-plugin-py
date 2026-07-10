@@ -19,6 +19,14 @@ class FluorescenceMessageHandler(BaseMessageHandler):
 
     model = Instance(FluorescenceStatusModel)
 
+    def _on_searching_triggered(self, body):
+        """Backend scan state (json bool) -> the model, which drives the
+        status-bar icon's click affordance and tooltip."""
+        try:
+            self.model.searching = json.loads(body)
+        except Exception:
+            logger.error(f"Unparseable searching payload: {body!r}")
+
     def _on_telemetry_triggered(self, body):
         """Raw board ack line -> the Log readout."""
         self.model.last_reading = body
