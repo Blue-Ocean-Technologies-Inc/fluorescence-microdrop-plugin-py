@@ -35,12 +35,22 @@ control_group = VGroup(
 
 # Per-mode LED sets. Enablement mirrors the standalone app: brightfield
 # controls active in br+dual, fluorescence controls in fl+dual.
+# The Auto checkboxes (camera-level, shared by both LED sets) hand
+# exposure/gain to the capture thread's brightness loop; the manual
+# sliders disable while their auto is on.
 brightfield_group = VGroup(
     Item("br_wavelength", label="Wavelength"),
     Item("br_intensity", label="Intensity (%)"),
     Item("br_frequency", label="Frequency (Hz)"),
-    Item("br_exposure", label="Exposure (ms)"),
-    Item("br_gain", label="Gain"),
+    HGroup(
+        Item("br_exposure", label="Exposure (ms)",
+             enabled_when="not auto_exposure"),
+        Item("auto_exposure", label="Auto"),
+    ),
+    HGroup(
+        Item("br_gain", label="Gain", enabled_when="not auto_gain"),
+        Item("auto_gain", label="Auto"),
+    ),
     visible_when="show_brightfield",
     enabled_when="mode != 'fl'",
     show_border=True,
@@ -52,8 +62,16 @@ fluorescence_group = VGroup(
     Item("fl_frequency", label="Frequency"),
     # In dual mode the camera runs on the brightfield pair (the controller
     # gives it priority), so these two stay editable only in fl mode.
-    Item("fl_exposure", label="Exposure", enabled_when="mode == 'fl'"),
-    Item("fl_gain", label="Gain", enabled_when="mode == 'fl'"),
+    HGroup(
+        Item("fl_exposure", label="Exposure",
+             enabled_when="mode == 'fl' and not auto_exposure"),
+        Item("auto_exposure", label="Auto"),
+    ),
+    HGroup(
+        Item("fl_gain", label="Gain",
+             enabled_when="mode == 'fl' and not auto_gain"),
+        Item("auto_gain", label="Auto"),
+    ),
     visible_when="show_fluorescence",
     enabled_when="mode != 'br'",
     show_border=True,

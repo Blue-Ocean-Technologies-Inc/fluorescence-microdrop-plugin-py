@@ -144,3 +144,9 @@ class FluorescenceControlsController(BaseStatusController):
     @observe("model:device_viewer_stream")
     def _push_device_viewer_stream(self, event):
         asi_camera_settings.device_viewer_stream = self.model.device_viewer_stream
+
+    @observe("model:auto_exposure")
+    @observe("model:auto_gain")
+    def _push_auto_flags(self, event):
+        asi_camera_settings.auto_exposure = self.model.auto_exposure
+        asi_camera_settings.auto_gain = self.model.auto_gain

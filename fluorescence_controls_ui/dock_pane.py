@@ -52,6 +52,7 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
         # values may differ from the camera-settings defaults.
         controller._push_active_camera_settings(None)
         controller._push_device_viewer_stream(None)
+        controller._push_auto_flags(None)
         return controller
 
     def _create_message_handler(self) -> FluorescenceMessageHandler:
