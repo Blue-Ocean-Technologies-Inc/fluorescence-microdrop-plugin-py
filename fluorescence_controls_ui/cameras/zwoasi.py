@@ -66,15 +66,64 @@ ASI_EXP_WORKING = 1
 ASI_EXP_SUCCESS = 2
 ASI_EXP_FAILED = 3
 
-# Image type constants
+# Image type constants (ASI_IMG_TYPE)
 ASI_IMG_RAW8 = 0
 ASI_IMG_RGB24 = 1
 ASI_IMG_RAW16 = 2
 ASI_IMG_Y8 = 3
 
-# Control type constants (subset used here)
+#: Image type by the UI's lowercase name, and bytes per pixel of each.
+ASI_IMG_TYPES = {
+    "raw8": ASI_IMG_RAW8,
+    "rgb24": ASI_IMG_RGB24,
+    "raw16": ASI_IMG_RAW16,
+    "y8": ASI_IMG_Y8,
+}
+ASI_IMG_BYTES_PER_PIXEL = {
+    ASI_IMG_RAW8: 1,
+    ASI_IMG_RGB24: 3,
+    ASI_IMG_RAW16: 2,
+    ASI_IMG_Y8: 1,
+}
+
+# Control type constants (ASI_CONTROL_TYPE)
 ASI_GAIN = 0
 ASI_EXPOSURE = 1
+ASI_GAMMA = 2
+ASI_WB_R = 3
+ASI_WB_B = 4
+ASI_OFFSET = 5
+ASI_BANDWIDTHOVERLOAD = 6
+ASI_OVERCLOCK = 7
+ASI_TEMPERATURE = 8          # read-only, 10 * degrees C
+ASI_FLIP = 9
+ASI_AUTO_MAX_GAIN = 10
+ASI_AUTO_MAX_EXP = 11
+ASI_AUTO_TARGET_BRIGHTNESS = 12
+ASI_HARDWARE_BIN = 13
+ASI_HIGH_SPEED_MODE = 14
+ASI_COOLER_POWER_PERC = 15
+ASI_TARGET_TEMP = 16
+ASI_COOLER_ON = 17
+ASI_MONO_BIN = 18
+ASI_FAN_ON = 19
+ASI_PATTERN_ADJUST = 20
+ASI_ANTI_DEW_HEATER = 21
+
+#: Flip value by the UI's lowercase name (ASI_FLIP_STATUS).
+ASI_FLIP_VALUES = {"none": 0, "horizontal": 1, "vertical": 2, "both": 3}
+
+
+def roi_dimensions(max_width, max_height, binning, width=None, height=None):
+    """The SDK-legal (width, height) for a centered crop of the binned
+    field: None means the full binned frame, requests larger than it are
+    clamped, and width % 8 == 0 / height % 2 == 0 are enforced. Shared by
+    set_roi and the advanced pane's resolution choices."""
+    binned_width = max_width // binning
+    binned_height = max_height // binning
+    width = binned_width if width is None else min(width, binned_width)
+    height = binned_height if height is None else min(height, binned_height)
+    return width // 8 * 8, height // 2 * 2
 
 
 class ASIError(Exception):
@@ -110,6 +159,16 @@ class ASICamera:
         self.camera_info = None
         self.is_open = False
         self.default_timeout = -1
+        # Per-camera control caps ({control_type: ASI_CONTROL_CAPS}) and the
+        # active ROI format — populated by open_camera / set_roi.
+        self.control_caps = {}
+        # Unsupported-capability warnings already logged, so a UI slider the
+        # camera lacks warns once instead of on every edit.
+        self._warned_unsupported = set()
+        self.roi_width = 0
+        self.roi_height = 0
+        self.roi_binning = 1
+        self.roi_img_type = ASI_IMG_RAW16
         self._load_sdk(Path(sdk_dir))
 
     def _load_sdk(self, sdk_dir):
@@ -194,25 +253,169 @@ class ASICamera:
             self.is_open = False
             self.camera_id = None
             self.camera_info = None
+            self.control_caps = {}
 
     def init_camera(self):
-        """Initialize: full-resolution RAW16, no binning, origin at (0, 0)."""
+        """Initialize: full-resolution RAW16, no binning, centered — and
+        read the camera's control caps for later clamped control writes."""
         if not self.is_open:
             return False
         result = self.asidll.ASIInitCamera(self.camera_id)
         if result != 0:
             logger.error(f"Failed to initialize camera: {result}")
             return False
-        result = self.asidll.ASISetROIFormat(
-            self.camera_id, self.camera_info.MaxWidth,
-            self.camera_info.MaxHeight, 1, ASI_IMG_RAW16)
+        self.control_caps = self._read_control_caps()
+        return self.set_roi()
+
+    # ------------------------------------------------------------------ #
+    # Capabilities                                                          #
+    # ------------------------------------------------------------------ #
+    def _read_control_caps(self):
+        """{control_type: ASI_CONTROL_CAPS} for every control the connected
+        camera reports (the set varies per model)."""
+        num_controls = c_int()
+        result = self.asidll.ASIGetNumOfControls(
+            self.camera_id, byref(num_controls))
         if result != 0:
-            logger.error(f"Failed to set ROI format: {result}")
+            logger.warning(f"Failed to get number of controls: {result}")
+            return {}
+        caps = {}
+        for index in range(num_controls.value):
+            control = ASI_CONTROL_CAPS()
+            if self.asidll.ASIGetControlCaps(
+                    self.camera_id, index, byref(control)) == 0:
+                caps[control.ControlType] = control
+        return caps
+
+    def supported_bins(self):
+        """Binning factors the camera supports (the info array is
+        zero-terminated)."""
+        bins = []
+        for value in self.camera_info.SupportedBins:
+            if value == 0:
+                break
+            bins.append(value)
+        return bins
+
+    def supported_img_types(self):
+        """Image types the camera supports (the info array is terminated
+        by ASI_IMG_END == -1)."""
+        img_types = []
+        for value in self.camera_info.SupportedVideoFormat:
+            if value == -1:
+                break
+            img_types.append(value)
+        return img_types
+
+    # ------------------------------------------------------------------ #
+    # Controls                                                              #
+    # ------------------------------------------------------------------ #
+    def set_control_value(self, control_type, value):
+        """Write one control, clamped to the camera's reported range.
+
+        Controls the camera does not report (or reports read-only) are
+        skipped with a warning instead of erroring, so one UI can drive
+        cameras with different capability sets."""
+        if not self.is_open:
             return False
-        result = self.asidll.ASISetStartPos(self.camera_id, 0, 0)
+        caps = self.control_caps.get(control_type)
+        if caps is None:
+            if control_type not in self._warned_unsupported:
+                self._warned_unsupported.add(control_type)
+                logger.warning(
+                    f"Camera does not support control {control_type}; "
+                    "skipping (warned once)")
+            return False
+        if not caps.IsWritable:
+            if control_type not in self._warned_unsupported:
+                self._warned_unsupported.add(control_type)
+                logger.warning(
+                    f"Control {caps.Name.decode(errors='replace')} is "
+                    "read-only; skipping (warned once)")
+            return False
+        clamped = max(caps.MinValue, min(caps.MaxValue, int(value)))
+        if clamped != int(value):
+            logger.warning(
+                f"Control {caps.Name.decode(errors='replace')} value {value} "
+                f"clamped to camera range [{caps.MinValue}, {caps.MaxValue}]")
+        result = self.asidll.ASISetControlValue(
+            self.camera_id, control_type, c_long(clamped), 0)
+        if result != 0:
+            logger.error(f"Failed to set control {control_type}: {result}")
+            return False
+        return True
+
+    def get_control_value(self, control_type):
+        """Current value of one control, or None (e.g. ASI_TEMPERATURE
+        returns 10 * degrees C)."""
+        if not self.is_open:
+            return None
+        value = c_long()
+        auto = c_int()
+        result = self.asidll.ASIGetControlValue(
+            self.camera_id, control_type, byref(value), byref(auto))
+        if result != 0:
+            return None
+        return value.value
+
+    # ------------------------------------------------------------------ #
+    # ROI format (resolution / binning / image type)                        #
+    # ------------------------------------------------------------------ #
+    def set_roi(self, binning=1, img_type=ASI_IMG_RAW16, width=None,
+                height=None):
+        """Set binning, output image type, and a centered crop.
+
+        ``width``/``height`` are the requested crop of the binned field of
+        view (None = full binned frame; oversize requests are clamped).
+        The SDK requires width % 8 == 0 and height % 2 == 0; start position
+        is in binned coordinates. Must not be called during an exposure
+        (the capture thread applies changes between frames)."""
+        if not self.is_open:
+            return False
+        if binning not in self.supported_bins():
+            logger.warning(
+                f"Camera does not support bin {binning} "
+                f"(supported: {self.supported_bins()}); keeping bin "
+                f"{self.roi_binning}")
+            binning = self.roi_binning
+        if img_type not in self.supported_img_types():
+            # Nearest supported fallback: Y8 (color-cam mono output) and
+            # RGB24 requests degrade to RAW8 when available — the same bit
+            # depth, just undebayered — else RAW16.
+            fallback = (ASI_IMG_RAW8
+                        if ASI_IMG_RAW8 in self.supported_img_types()
+                        and img_type in (ASI_IMG_Y8, ASI_IMG_RGB24)
+                        else ASI_IMG_RAW16)
+            logger.warning(
+                f"Camera does not support image type {img_type} "
+                f"(supported: {self.supported_img_types()}); using "
+                f"{fallback}")
+            img_type = fallback
+        binned_width = self.camera_info.MaxWidth // binning
+        binned_height = self.camera_info.MaxHeight // binning
+        width, height = roi_dimensions(
+            self.camera_info.MaxWidth, self.camera_info.MaxHeight,
+            binning, width, height)
+        result = self.asidll.ASISetROIFormat(
+            self.camera_id, width, height, binning, img_type)
+        if result != 0:
+            logger.error(
+                f"Failed to set ROI format {width}x{height} bin {binning} "
+                f"type {img_type}: {result}")
+            return False
+        result = self.asidll.ASISetStartPos(
+            self.camera_id, (binned_width - width) // 2,
+            (binned_height - height) // 2)
         if result != 0:
             logger.error(f"Failed to set start position: {result}")
             return False
+        self.roi_width = width
+        self.roi_height = height
+        self.roi_binning = binning
+        self.roi_img_type = img_type
+        logger.info(
+            f"ASI ROI format: {width}x{height}, bin {binning}, "
+            f"image type {img_type}")
         return True
 
     # ------------------------------------------------------------------ #
@@ -310,20 +513,33 @@ class ASICamera:
         if result != 0:
             raise ASIIOError(f"Failed to stop exposure: {result}")
 
-        width = self.camera_info.MaxWidth
-        height = self.camera_info.MaxHeight
-        buffer_size = width * height * 2  # RAW16: 2 bytes per pixel
+        width = self.roi_width
+        height = self.roi_height
+        img_type = self.roi_img_type
+        buffer_size = width * height * ASI_IMG_BYTES_PER_PIXEL[img_type]
         buffer = create_string_buffer(buffer_size)
 
         result = self.asidll.ASIGetDataAfterExp(self.camera_id, buffer, buffer_size)
-        if result == 0:
+        if result != 0:
+            return None
+        if img_type == ASI_IMG_RAW16:
             img = np.frombuffer(buffer, dtype=np.uint16).reshape((height, width))
             if self.camera_info.IsColorCam:
                 img = self.debayer_image(img)
             if self.camera_info.BitDepth == 12:
                 img = img >> 4
             return img
-        return None
+        if img_type == ASI_IMG_RAW8:
+            img = np.frombuffer(buffer, dtype=np.uint8).reshape((height, width))
+            if self.camera_info.IsColorCam:
+                img = self.debayer_image(img)
+            return img
+        if img_type == ASI_IMG_RGB24:
+            # Debayered on-camera; BGR channel order like the debayer path,
+            # so the shared display/save swap applies unchanged.
+            return np.frombuffer(buffer, dtype=np.uint8).reshape(
+                (height, width, 3))
+        return np.frombuffer(buffer, dtype=np.uint8).reshape((height, width))
 
 
 def default_asi_sdk_dir() -> str:
