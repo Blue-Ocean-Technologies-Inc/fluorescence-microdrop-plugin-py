@@ -30,6 +30,14 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
 
     view = UnifiedView
     status_bar_icon_glyph = ICON_EMOJI_OBJECTS
+
+    def _status_bar_plugin_id_default(self):
+        # The pane id carries an extra ".status_controls" segment (to
+        # distinguish it from the image viewer pane), so the base class's
+        # "<pkg>.plugin" convention would derive a nonexistent plugin id
+        # and the status-bar icon would be silently skipped.
+        return PKG + ".plugin"
+
     # ------------------------------------------------------------------ #
     # BaseStatusDockPane factory hooks                                     #
     # ------------------------------------------------------------------ #
