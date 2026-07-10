@@ -11,16 +11,20 @@ Exposure/gain and the stream checkbox live in the fluorescence controls
 pane only: they are mirrored into the shared ``asi_camera_settings``
 singleton and the running feed observes every change.
 """
+from datetime import datetime
+
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QColor, QImage, QPainter
 
 from logger.logger_service import get_logger
 
 from .asi_thread import (
-    ASIVideoThread, debayered_to_rgb, frame_to_qimage, raw_to_qimage,
-    to_display_8bit,
+    ASIVideoThread, THREAD_APPLIED_SETTINGS, debayered_to_rgb,
+    display_adjust_lut, frame_to_qimage, raw_to_qimage, to_display_8bit,
 )
-from .camera_settings import asi_camera_settings
+from .camera_settings import (
+    ADVANCED_CAMERA_TRAITS, AUTO_SETTING_TRAITS, asi_camera_settings,
+)
 from .zwoasi import default_asi_sdk_dir, list_asi_cameras
 
 logger = get_logger(__name__)
@@ -41,16 +45,31 @@ class AsiCameraFeed(QObject):
     def __init__(self, sdk_dir, camera_id):
         super().__init__()
         self._last_raw = None
+        # Display-adjustment LUT cache (rebuilt when the trio changes).
+        self._display_lut = None
+        self._display_lut_key = None
         self._thread = ASIVideoThread(
             sdk_dir, camera_id,
             exposure=asi_camera_settings.exposure,
-            gain=asi_camera_settings.gain)
+            gain=asi_camera_settings.gain,
+            advanced={name: getattr(asi_camera_settings, name)
+                      for name in ADVANCED_CAMERA_TRAITS
+                      if name in THREAD_APPLIED_SETTINGS})
+        self._thread.set_auto_settings(**{
+            name: getattr(asi_camera_settings, name)
+            for name in AUTO_SETTING_TRAITS})
         self._thread.change_pixmap_signal.connect(self._on_thread_frame)
+        self._thread.camera_caps_signal.connect(self._on_camera_caps)
+        self._thread.temperature_signal.connect(self._on_camera_temperature)
         self._thread.error_signal.connect(self.error)
         asi_camera_settings.observe(self._on_settings_changed, "exposure")
         asi_camera_settings.observe(self._on_settings_changed, "gain")
         asi_camera_settings.observe(self._on_stream_setting_changed,
                                     "device_viewer_stream")
+        asi_camera_settings.observe(self._on_advanced_setting_changed,
+                                    ",".join(ADVANCED_CAMERA_TRAITS))
+        asi_camera_settings.observe(self._on_auto_setting_changed,
+                                    ",".join(AUTO_SETTING_TRAITS))
 
     def _on_thread_frame(self, raw):
         # Queued onto the GUI thread: keep the raw sensor frame for captures.
@@ -58,8 +77,24 @@ class AsiCameraFeed(QObject):
         # so it runs only while the device-viewer stream checkbox is on.
         self._last_raw = raw
         if asi_camera_settings.device_viewer_stream:
-            self.frame.emit(
-                frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))))
+            image = frame_to_qimage(debayered_to_rgb(
+                self._apply_display_adjustments(to_display_8bit(raw))))
+            if asi_camera_settings.add_timestamp:
+                image = self._stamp_timestamp(image)
+            self.frame.emit(image)
+
+    def _apply_display_adjustments(self, img):
+        """Preview-only gamma/contrast/brightness (the pane's display
+        trio), via a cached LUT. Raw captures are never touched."""
+        key = (asi_camera_settings.display_gamma,
+               asi_camera_settings.display_contrast,
+               asi_camera_settings.display_brightness)
+        if key == (1.0, 1.0, 1.0):
+            return img
+        if key != self._display_lut_key:
+            self._display_lut = display_adjust_lut(*key)
+            self._display_lut_key = key
+        return self._display_lut[img]
 
     def _on_stream_setting_changed(self, event):
         self.streaming.emit(event.new)
@@ -76,6 +111,41 @@ class AsiCameraFeed(QObject):
             exposure=asi_camera_settings.exposure,
             gain=asi_camera_settings.gain)
 
+    @staticmethod
+    def _stamp_timestamp(image):
+        """Draw the current time onto a preview frame (display-only; the
+        raw captures are never stamped)."""
+        image = image.convertToFormat(QImage.Format_RGB888)
+        text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        painter = QPainter(image)
+        font = painter.font()
+        font.setPointSize(max(10, image.height() // 60))
+        painter.setFont(font)
+        # Shadowed for readability on any background.
+        painter.setPen(QColor("black"))
+        painter.drawText(11, font.pointSize() * 2 + 1, text)
+        painter.setPen(QColor("white"))
+        painter.drawText(10, font.pointSize() * 2, text)
+        painter.end()
+        return image
+
+    def _on_advanced_setting_changed(self, event):
+        # The display_* trio and add_timestamp never reach the camera —
+        # the preview conversion reads them live from the settings.
+        if event.name in THREAD_APPLIED_SETTINGS:
+            self._thread.set_advanced_settings(**{event.name: event.new})
+
+    def _on_auto_setting_changed(self, event):
+        self._thread.set_auto_settings(**{event.name: event.new})
+
+    def _on_camera_temperature(self, degrees_c):
+        asi_camera_settings.camera_temperature = degrees_c
+
+    def _on_camera_caps(self, caps):
+        # Queued onto the GUI thread: the advanced pane narrows its
+        # dropdowns to these (kept after stop — the camera rarely changes).
+        asi_camera_settings.trait_set(**caps)
+
     def start(self):
         # The consumer connects before start(): report the current preview
         # state up front so its video layer matches the pane's checkbox.
@@ -89,6 +159,12 @@ class AsiCameraFeed(QObject):
                                     remove=True)
         asi_camera_settings.observe(self._on_stream_setting_changed,
                                     "device_viewer_stream", remove=True)
+        asi_camera_settings.observe(self._on_advanced_setting_changed,
+                                    ",".join(ADVANCED_CAMERA_TRAITS),
+                                    remove=True)
+        asi_camera_settings.observe(self._on_auto_setting_changed,
+                                    ",".join(AUTO_SETTING_TRAITS),
+                                    remove=True)
         self._thread.stop()
         self._thread.wait(3000)
 

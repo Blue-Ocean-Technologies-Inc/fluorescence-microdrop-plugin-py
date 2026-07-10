@@ -51,13 +51,19 @@ def test_running_feed_applies_pane_edits(monkeypatch):
 
     class FakeThread:
         change_pixmap_signal = FakeSignal()
+        camera_caps_signal = FakeSignal()
+        temperature_signal = FakeSignal()
         error_signal = FakeSignal()
 
-        def __init__(self, sdk_dir, camera_id, exposure=None, gain=None):
+        def __init__(self, sdk_dir, camera_id, exposure=None, gain=None,
+                     advanced=None):
             pass
 
         def set_camera_settings(self, exposure=None, gain=None):
             applied.append((exposure, gain))
+
+        def set_auto_settings(self, **settings):
+            pass
 
         def stop(self):
             pass
