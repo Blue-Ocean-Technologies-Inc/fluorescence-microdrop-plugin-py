@@ -15,6 +15,11 @@ from pyface.tasks.api import TraitsDockPane
 from PySide6.QtCore import QTimer
 from traits.api import Any, Instance, observe
 
+# Sanctioned cross-plugin channel: device_viewer.consts is the published
+# contract for locating and now NOTICING captures (same pattern as the
+# capture-layout constants imported by the controller).
+from device_viewer.consts import media_capture_event_model
+
 from logger.logger_service import get_logger
 
 from ..consts import PKG
@@ -42,13 +47,27 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
     def traits_init(self):
         self.model = FluorescenceImageViewerModel()
         self.controller = FluorescenceImageViewerController(model=self.model)
+        # Event-driven refresh: the device viewer fires this the moment a
+        # capture file finishes writing, so new images appear immediately
+        # instead of on the next poll tick (the poll below stays only to
+        # follow experiment-folder switches).
+        media_capture_event_model.observe(self._on_media_captured, "captured")
+
+    def destroy(self):
+        media_capture_event_model.observe(self._on_media_captured, "captured",
+                                          remove=True)
+        super().destroy()
+
+    def _on_media_captured(self, event):
+        self.controller.rescan()
 
     def create_contents(self, parent):
         self.ui = self.edit_traits(
             kind="subpanel", parent=parent, handler=self.controller)
         control = self.ui.control
-        # Qt schedulers are view-owned: the slideshow tick and the capture
-        # discovery poll (which also picks up experiment-folder switches).
+        # Qt schedulers are view-owned: the slideshow tick and the
+        # experiment-folder-switch poll (new captures arrive event-driven
+        # via media_capture_event_model above).
         self._play_timer = QTimer(control)
         self._play_timer.setInterval(SLIDESHOW_INTERVAL_MS)
         self._play_timer.timeout.connect(lambda: self.controller.step(1))
