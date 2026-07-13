@@ -8,7 +8,11 @@ from microdrop_utils.traitsui_qt_helpers import stretch_group_layouts_horizontal
 from logger.logger_service import get_logger
 
 from .cameras.camera_settings import asi_camera_settings
-from .consts import SET_LED, SET_LED_FREQUENCY, ALL_LEDS_OFF
+from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
+from .consts import (
+    ALL_LEDS_OFF, EXPOSURE_MS_MAX, EXPOSURE_MS_MIN, SET_LED,
+    SET_LED_FREQUENCY,
+)
 
 logger = get_logger(__name__)
 
@@ -150,3 +154,28 @@ class FluorescenceControlsController(BaseStatusController):
     def _push_auto_flags(self, event):
         asi_camera_settings.auto_exposure = self.model.auto_exposure
         asi_camera_settings.auto_gain = self.model.auto_gain
+        # Toggling auto OFF adopts the camera's converged value as the
+        # manual setting for the active mode (persisted via the model's
+        # preference push), so disabling auto keeps the current look
+        # instead of snapping back to the stale manual value.
+        if event:
+            if event.old and not event.new:
+                self._adopt_auto_value(event.name)
+
+    def _adopt_auto_value(self, auto_flag_name):
+        prefix = "fl" if self._camera_mode_is_fl() else "br"
+        if auto_flag_name == "auto_exposure":
+            exposure_us = asi_camera_settings.auto_current_exposure
+            if exposure_us < 0:   # no camera report yet
+                return
+            # The camera runs microseconds; the pane shows milliseconds,
+            # clamped to the manual slider's range.
+            setattr(self.model, f"{prefix}_exposure",
+                    min(max(exposure_us / 1000.0, float(EXPOSURE_MS_MIN)),
+                        float(EXPOSURE_MS_MAX)))
+        else:
+            gain = asi_camera_settings.auto_current_gain
+            if gain < 0:   # no camera report yet
+                return
+            setattr(self.model, f"{prefix}_gain",
+                    int(min(max(gain, ASI_GAIN_MIN), ASI_GAIN_MAX)))

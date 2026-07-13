@@ -64,6 +64,7 @@ class AsiCameraFeed(QObject):
         self._thread.change_pixmap_signal.connect(self._on_thread_frame)
         self._thread.camera_caps_signal.connect(self._on_camera_caps)
         self._thread.temperature_signal.connect(self._on_camera_temperature)
+        self._thread.auto_values_signal.connect(self._on_auto_values)
         self._thread.error_signal.connect(self.error)
         asi_camera_settings.observe(self._on_settings_changed, "exposure")
         asi_camera_settings.observe(self._on_settings_changed, "gain")
@@ -156,6 +157,13 @@ class AsiCameraFeed(QObject):
 
     def _on_camera_temperature(self, degrees_c):
         asi_camera_settings.camera_temperature = degrees_c
+
+    def _on_auto_values(self, exposure_us, gain):
+        # Queued onto the GUI thread: the capture thread's operating
+        # values while auto runs. Traits only notify on real changes, so
+        # the per-frame report is cheap.
+        asi_camera_settings.trait_set(auto_current_exposure=exposure_us,
+                                      auto_current_gain=gain)
 
     def _on_camera_caps(self, caps):
         # Queued onto the GUI thread: the advanced pane narrows its

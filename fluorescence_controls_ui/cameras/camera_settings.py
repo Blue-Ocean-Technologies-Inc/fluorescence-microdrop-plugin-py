@@ -135,6 +135,14 @@ class AsiCameraSettings(HasTraits):
     #: thread; NaN until a camera reports).
     camera_temperature = Float(float("nan"))
 
+    #: The camera's operating exposure (microseconds) / gain while software
+    #: auto-exposure / auto-gain runs (reported every frame by the capture
+    #: thread; -1 until a camera reports). The controls pane adopts these
+    #: as the manual values when the user toggles auto off, so disabling
+    #: auto keeps the current look.
+    auto_current_exposure = Int(-1)
+    auto_current_gain = Int(-1)
+
 
 #: Module-level singleton shared inside the fluorescence plugin.
 asi_camera_settings = AsiCameraSettings()

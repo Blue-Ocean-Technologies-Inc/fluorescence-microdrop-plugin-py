@@ -142,6 +142,10 @@ class ASIVideoThread(QThread):
     camera_caps_signal = Signal(dict)
     #: Sensor temperature in degrees C, polled every few seconds.
     temperature_signal = Signal(float)
+    #: The operating (exposure_us, gain) while software auto-exposure /
+    #: auto-gain is on — emitted every frame so the UI can adopt the
+    #: converged values when the user toggles auto off.
+    auto_values_signal = Signal(int, int)
     error_signal = Signal(str)
 
     def __init__(self, sdk_dir, camera_index, exposure=20000, gain=300,
@@ -273,6 +277,9 @@ class ASIVideoThread(QThread):
                         # frame for captures.
                         self.change_pixmap_signal.emit(img)
                         self._auto_adjust(img)
+                        if self.auto_exposure or self.auto_gain:
+                            self.auto_values_signal.emit(
+                                self.exposure, self.gain)
                         self._poll_temperature()
                     else:
                         frame_error_count += 1
