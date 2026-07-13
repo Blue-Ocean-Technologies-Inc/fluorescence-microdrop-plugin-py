@@ -62,8 +62,8 @@ class FluorescenceStatusModel(BaseStatusModel):
     # Software auto-exposure / auto-gain: the capture thread converges the
     # frame brightness on the Auto-tab target (advanced camera pane) within
     # its limits; the manual sliders are ignored (and disabled) while on.
-    auto_exposure = Bool(False)
-    auto_gain = Bool(False)
+    auto_exposure = Bool(True)
+    auto_gain = Bool(True)
 
     # Brightfield LED set.
     br_wavelength = Enum(*LED_WAVELENGTHS)
