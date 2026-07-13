@@ -12,7 +12,6 @@ bucket BEFORE the capture/record columns, so a Step Start capture sees
 the settled light and exposure.
 """
 import json
-import time
 
 from pyface.gui import GUI
 from pyface.qt.QtCore import Qt
@@ -118,7 +117,10 @@ class FluorescenceStepHandler(BaseColumnHandler):
 
         # Let the light/exposure settle before the capture bucket fires
         # (the standalone waited its led_stabilization_time the same way).
-        time.sleep(LED_STABILIZATION_S)
+        # ctx.sleep, not time.sleep: stop-aware, and the status timers
+        # freeze (ack-wait accounting) so the settle is not misreported
+        # as step time.
+        ctx.sleep(LED_STABILIZATION_S)
 
     @staticmethod
     def _apply_camera_settings(settings):
