@@ -1,4 +1,4 @@
-from traits.api import Bool, Enum, Str, observe, Instance, Range
+from traits.api import Bool, Enum, Event, Str, observe, Instance, Range
 from traits.observation.api import parse
 
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
@@ -52,6 +52,16 @@ class FluorescenceStatusModel(BaseStatusModel):
 
     # Master light toggle (the standalone light button).
     light_on = Bool(False)
+
+    # Master gate paralleling the heater pane's stream toggle: while off,
+    # the pane sends the LED board no commands — lighting edits are staged
+    # and applied when the stream starts. Deliberately not persisted (the
+    # board always starts silent), like light_on.
+    stream_active = Bool(False, desc="LED board control active")
+
+    # Fired by the controller when a lighting edit is staged because the
+    # stream is off; the dock pane shows a one-time warning in response.
+    stream_off_edit_warning = Event()
 
     # Render the live ASI feed in the device viewer's video layer. On by
     # default; uncheck for a smoother GUI — full-resolution sensor frames
