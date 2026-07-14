@@ -122,16 +122,58 @@ class FluorescenceControlsController(BaseStatusController):
         # toggle only mirrors their state.
         if self.model.protocol_running:
             return
+        if not self.model.stream_active:
+            # Staged: applies when the stream starts. Snapshot loads stage
+            # silently — the toggle wasn't a user edit.
+            if event.new and not fluorescence_live_state.loading_step_snapshot:
+                self.model.stream_off_edit_warning = True
+            return
         if event.new:
             self._publish(SET_LED, self._active_led_payload())
         else:
             self._publish(ALL_LEDS_OFF, {})
 
     # ------------------------------------------------------------------ #
-    # Brightfield set (live only in br mode with the light on, idle)       #
+    # Stream master gate (heater pane parity)                             #
+    # ------------------------------------------------------------------ #
+    @observe("model:stream_active")
+    def _stream_toggled(self, event):
+        """Starting re-asserts the staged lighting state: the active set's
+        frequency, then the light as one exclusive off->on set if staged
+        on. Stopping turns the lights out and forces the light toggle off
+        — the board is silent while the stream is off."""
+        if self.model.protocol_running:
+            return
+        if event.new:
+            fl_mode = self.model.mode == "fl"
+            self._publish(SET_LED_FREQUENCY, {
+                "led": self.model.fl_led_index if fl_mode
+                else self.model.br_led_index,
+                "frequency": self.model.fl_frequency if fl_mode
+                else self.model.br_frequency,
+            })
+            if self.model.light_on:
+                self._publish(SET_LED,
+                              self._active_led_payload(exclusive=True))
+        else:
+            # Forcing the toggle off is a stream-session action, not a
+            # step edit — it must not re-snapshot into a tracked step.
+            # The light toggle observer publishes nothing here either
+            # (the gate is already off); one explicit all-off silences
+            # the board.
+            fluorescence_live_state.loading_step_snapshot = True
+            try:
+                self.model.light_on = False
+            finally:
+                fluorescence_live_state.loading_step_snapshot = False
+            self._publish(ALL_LEDS_OFF, {})
+
+    # ------------------------------------------------------------------ #
+    # Brightfield set (live only in br mode, light on, stream on, idle)    #
     # ------------------------------------------------------------------ #
     def _br_live(self):
-        return (self.model.light_on and self.model.mode == "br"
+        return (self.model.stream_active and self.model.light_on
+                and self.model.mode == "br"
                 and not self.model.protocol_running)
 
     @observe("model:br_intensity")
@@ -151,10 +193,11 @@ class FluorescenceControlsController(BaseStatusController):
             self._publish(SET_LED, self._active_led_payload(exclusive=True))
 
     # ------------------------------------------------------------------ #
-    # Fluorescence set (live only in fl mode with the light on, idle)      #
+    # Fluorescence set (live only in fl mode, light on, stream on, idle)   #
     # ------------------------------------------------------------------ #
     def _fl_live(self):
-        return (self.model.light_on and self.model.mode == "fl"
+        return (self.model.stream_active and self.model.light_on
+                and self.model.mode == "fl"
                 and not self.model.protocol_running)
 
     @observe("model:fl_intensity")

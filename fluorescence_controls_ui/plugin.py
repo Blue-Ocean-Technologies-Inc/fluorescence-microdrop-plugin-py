@@ -1,7 +1,7 @@
 import platform
 
 from device_viewer.consts import CAMERA_SOURCES
-from envisage.ids import PREFERENCES_PANES
+from envisage.api import PREFERENCES_PANES, PREFERENCES_CATEGORIES
 from traits.api import List
 
 from fluorescence_controller.consts import FLUORESCENCE_HWID, START_DEVICE_MONITORING
@@ -30,10 +30,15 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
     # Fluorescence group on the shared Peripheral Settings preferences tab
     # (re-enable the driver notice there after opting out of the popup).
     preferences_panes = List(contributes_to=PREFERENCES_PANES)
+    preferences_categories = List(contributes_to=PREFERENCES_CATEGORIES)
 
     def _preferences_panes_default(self):
         from .preferences import FluorescencePreferencesPane
         return [FluorescencePreferencesPane]
+
+    def _preferences_categories_default(self):
+        from .preferences import fluorescence_tab
+        return [fluorescence_tab]
 
     # ASI cameras join the device viewer's own camera dropdown and render
     # through its video layer (perspective-aligned under the electrodes).

@@ -3,6 +3,7 @@ from pyface.qt.QtCore import Qt
 
 from template_status_and_controls.base_dock_pane import (
     BaseStatusDockPane, build_status_icon_tooltip, status_bar_icon_font)
+from microdrop_application.dialogs.pyface_wrapper import information
 from microdrop_style.icons.icons import ICON_EMOJI_OBJECTS
 from microdrop_utils.pyside_helpers import ClickableLabel
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -92,6 +93,27 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
             logger.debug("Fluorescence search already active; ignoring status-icon click")
             return
         publish_message(topic=START_DEVICE_MONITORING, message="")
+
+    # ------------------------------------------------------------------ #
+    # "Applies when the stream starts" warning (lighting edit, stream off) #
+    # ------------------------------------------------------------------ #
+    @observe("model:stream_off_edit_warning", dispatch="ui")
+    def _warn_edit_stream_off(self, event):
+        """One-time staged-edit note (heater pane parity); the
+        don't-show-again checkbox persists to preferences."""
+        preferences = self.model.preferences
+        if not preferences.fluorescence_show_stream_off_warning:
+            return
+        result = information(
+            parent=None,
+            title="Stream is off",
+            message="The lighting change will apply when you start the stream.",
+            cancel=False,
+            checkbox_text="Don't show this again",
+        )
+        # With checkbox_text, information() returns (result, checked).
+        if isinstance(result, tuple) and result[1]:
+            preferences.fluorescence_show_stream_off_warning = False
 
     @observe("model:searching", dispatch="ui")
     def _sync_search_affordance(self, event=None):
