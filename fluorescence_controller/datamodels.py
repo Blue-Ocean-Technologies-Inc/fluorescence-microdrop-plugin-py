@@ -1,6 +1,11 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from .consts import LED_WAVELENGTHS, LED_DUTY_MAX, LED_FREQUENCY_MIN, LED_FREQUENCY_MAX
+from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
+
+from .consts import (
+    LED_WAVELENGTHS, LED_DUTY_MAX, LED_FREQUENCY_MIN, LED_FREQUENCY_MAX,
+    PROTOCOL_SET_FLUORESCENCE,
+)
 
 
 class _LedCommand(BaseModel):
@@ -24,3 +29,35 @@ class SetLedData(_LedCommand):
 class SetLedFrequencyData(_LedCommand):
     """LED PWM frequency -> ``ledf_<index>_<frequency>`` (Hz)."""
     frequency: int = Field(ge=LED_FREQUENCY_MIN, le=LED_FREQUENCY_MAX)
+
+
+class ProtocolSetFluorescenceData(_LedCommand):
+    """One protocol step's LED state, applied atomically then settled then
+    acked. ``led``/``duty``/``frequency`` are ignored when ``light_on`` is
+    False (the step turns the light off)."""
+    light_on: bool
+    duty: int = Field(ge=0, le=LED_DUTY_MAX)
+    frequency: int = Field(ge=LED_FREQUENCY_MIN, le=LED_FREQUENCY_MAX)
+    settle_s: float = Field(ge=0.0, le=60.0)
+
+
+class ProtocolSetFluorescencePublisher(ValidatedTopicPublisher):
+    """Validated publisher for the ``PROTOCOL_SET_FLUORESCENCE`` topic.
+
+    Exposes a keyword-only .publish(...) method that mirrors the
+    ProtocolSetFluorescenceData fields for call-site readability.
+    """
+    validator_class = ProtocolSetFluorescenceData
+
+    def publish(self, *, light_on, led, duty, frequency, settle_s, **kw):
+        super().publish({
+            "light_on": light_on,
+            "led": led,
+            "duty": duty,
+            "frequency": frequency,
+            "settle_s": settle_s,
+        }, **kw)
+
+
+protocol_set_fluorescence_publisher = ProtocolSetFluorescencePublisher(
+    topic=PROTOCOL_SET_FLUORESCENCE)

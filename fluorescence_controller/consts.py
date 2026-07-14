@@ -13,6 +13,15 @@ FLUORESCENCE_HWID = "VID:PID=2E8A:0005"
 DEVICE_ID_FRAGMENT = "fluo"
 BOARD_BAUDRATE = 115200
 
+# Serial timeouts + write-retry policy (heater proxy parity). A write that
+# cannot complete within the write timeout means the board is not draining
+# its USB CDC buffer (wedged firmware or unplugged) — after the retries the
+# proxy disconnects so the monitor can rediscover the board.
+SERIAL_READ_TIMEOUT_S = 1.0
+SERIAL_WRITE_TIMEOUT_S = 2.0
+MAX_COMMAND_RETRIES = 2
+COMMAND_RETRY_DELAY_S = 0.1
+
 # Topics published by this plugin (signals)
 CONNECTED = connected_topic(DEVICE_NAME)
 DISCONNECTED = disconnected_topic(DEVICE_NAME)
@@ -30,7 +39,7 @@ LED_WAVELENGTHS = (
     "Orange (600 nm)", "Red (630 nm)", "Deep Red (660 nm)",
 )
 LED_DUTY_MIN, LED_DUTY_MAX = 0, 100
-LED_FREQUENCY_MIN, LED_FREQUENCY_MAX = 1, 100000
+LED_FREQUENCY_MIN, LED_FREQUENCY_MAX = 20, 100000
 
 # Service Request Topics
 START_DEVICE_MONITORING = f"{DEVICE_NAME}/requests/start_device_monitoring"
@@ -42,6 +51,12 @@ SET_LED = f"{DEVICE_NAME}/requests/set_led"
 SET_LED_FREQUENCY = f"{DEVICE_NAME}/requests/set_led_frequency"
 ALL_LEDS_OFF = f"{DEVICE_NAME}/requests/all_leds_off"
 ALL_LEDS_ON = f"{DEVICE_NAME}/requests/all_leds_on"
+# Protocol-driven atomic apply: one step's LED state (frequency + exclusive
+# off->on set, or all off) + settle in ONE handler call. The backend acks
+# with FLUORESCENCE_APPLIED only after the settle, so a protocol step can
+# block until the light is truly capture-ready (magnet backend pattern).
+PROTOCOL_SET_FLUORESCENCE = f"{DEVICE_NAME}/requests/protocol_set_fluorescence"
+FLUORESCENCE_APPLIED = f"{DEVICE_NAME}/signals/fluorescence_applied"
 
 # Topics actor declared by plugin subscribes to. The listener-name key MUST
 # match FluorescenceControllerBase.listener_name.

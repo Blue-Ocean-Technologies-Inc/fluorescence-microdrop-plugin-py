@@ -1,4 +1,4 @@
-from traits.api import observe
+from traits.api import Instance, observe
 from pyface.qt.QtCore import Qt
 
 from template_status_and_controls.base_dock_pane import (
@@ -11,6 +11,7 @@ from logger.logger_service import get_logger
 from .consts import PKG, PKG_name, listener_name, START_DEVICE_MONITORING
 from .model import FluorescenceStatusModel
 from .controller import FluorescenceControlsController
+from .preferences import FluorescencePreferences
 from .view import UnifiedView
 from .message_handler import FluorescenceMessageHandler
 
@@ -24,11 +25,18 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
     connection scan — same as Tools ▸ Peripherals ▸ Fluorescence ▸
     Search Connection)."""
 
-    id = PKG + ".dock_pane"
+    id = PKG + ".status_controls.dock_pane"
     name = f"{PKG_name} Dock Pane"
 
     view = UnifiedView
     status_bar_icon_glyph = ICON_EMOJI_OBJECTS
+
+    def _status_bar_plugin_id_default(self):
+        # The pane id carries an extra ".status_controls" segment (to
+        # distinguish it from the image viewer pane), so the base class's
+        # "<pkg>.plugin" convention would derive a nonexistent plugin id
+        # and the status-bar icon would be silently skipped.
+        return PKG + ".plugin"
 
     # ------------------------------------------------------------------ #
     # BaseStatusDockPane factory hooks                                     #
@@ -37,7 +45,15 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
         return FluorescenceStatusModel()
 
     def _create_controller(self):
-        return FluorescenceControlsController(self.model)
+        controller = FluorescenceControlsController(self.model)
+        # Mirror the restored mode's exposure/gain and the device-viewer
+        # stream checkbox into the shared ASI camera settings once — the
+        # controller's observers only fire on later edits, and the restored
+        # values may differ from the camera-settings defaults.
+        controller._push_active_camera_settings(None)
+        controller._push_device_viewer_stream(None)
+        controller._push_auto_flags(None)
+        return controller
 
     def _create_message_handler(self) -> FluorescenceMessageHandler:
         return FluorescenceMessageHandler(model=self.model, name=listener_name)

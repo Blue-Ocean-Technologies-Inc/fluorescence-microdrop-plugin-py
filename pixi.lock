@@ -1,0 +1,10 @@
+version: 7
+platforms: []
+environments:
+  default:
+    channels:
+    - url: https://conda.anaconda.org/conda-forge/
+    - url: https://conda.anaconda.org/alexsk/
+    - url: https://conda.anaconda.org/vignesh229/
+    packages: {}
+packages: []

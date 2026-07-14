@@ -16,26 +16,41 @@ status_group = VGroup(
     show_border=True,
 )
 
-# Imaging mode + master light toggle.
+# Imaging mode + master light toggle + device-viewer stream checkbox.
 control_group = VGroup(
     HGroup(
         Item("mode", style="custom", show_label=False,
              editor=EnumEditor(values={"br": "Brightfield",
                                        "fl": "Fluorescence",
                                        "dual": "Dual"}, cols=3)),
-        Item("light_on", label="Light", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
+        UItem("light_on", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
              enabled_when="connected"),
     ),
+    # Live ASI preview in the device viewer — independent of the LED board
+    # connection (it only needs the camera), hence no enabled_when.
+    Item("device_viewer_stream", label="Device View Stream"),
     visible_when="show_control",
     show_border=True,
 )
 
 # Per-mode LED sets. Enablement mirrors the standalone app: brightfield
 # controls active in br+dual, fluorescence controls in fl+dual.
+# The Auto checkboxes (camera-level, shared by both LED sets) hand
+# exposure/gain to the capture thread's brightness loop; the manual
+# sliders disable while their auto is on.
 brightfield_group = VGroup(
     Item("br_wavelength", label="Wavelength"),
-    Item("br_intensity", label="Intensity"),
-    Item("br_frequency", label="Frequency"),
+    Item("br_intensity", label="Intensity (%)"),
+    Item("br_frequency", label="Frequency (Hz)"),
+    HGroup(
+        Item("br_exposure", label="Exposure (ms)",
+             enabled_when="not auto_exposure"),
+        Item("auto_exposure", label="Auto"),
+    ),
+    HGroup(
+        Item("br_gain", label="Gain", enabled_when="not auto_gain"),
+        Item("auto_gain", label="Auto"),
+    ),
     visible_when="show_brightfield",
     enabled_when="mode != 'fl'",
     show_border=True,
@@ -45,6 +60,18 @@ fluorescence_group = VGroup(
     Item("fl_wavelength", label="Wavelength"),
     Item("fl_intensity", label="Intensity"),
     Item("fl_frequency", label="Frequency"),
+    # In dual mode the camera runs on the brightfield pair (the controller
+    # gives it priority), so these two stay editable only in fl mode.
+    HGroup(
+        Item("fl_exposure", label="Exposure",
+             enabled_when="mode == 'fl' and not auto_exposure"),
+        Item("auto_exposure", label="Auto"),
+    ),
+    HGroup(
+        Item("fl_gain", label="Gain",
+             enabled_when="mode == 'fl' and not auto_gain"),
+        Item("auto_gain", label="Auto"),
+    ),
     visible_when="show_fluorescence",
     enabled_when="mode != 'br'",
     show_border=True,

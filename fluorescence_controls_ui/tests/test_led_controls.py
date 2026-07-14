@@ -139,12 +139,13 @@ def test_wavelength_switch_staged_while_off(published):
 # --- board identity + section auto-collapse ---------------------------------------
 
 def test_board_id_signal_fills_board_readout():
+    # whoami identity (device_id first, heater-pane parity)
     from fluorescence_controls_ui.message_handler import FluorescenceMessageHandler
     model = FluorescenceStatusModel()
     handler = FluorescenceMessageHandler(model=model, name="fluorescence_controls_ui_listener")
     handler._on_board_id_triggered(json.dumps(
-        {"name": "LED Controller", "leds": ["blue", "cyan"]}))
-    assert model.board_id_text == "LED Controller (2 LEDs)"
+        {"uid": "a1b2c3d4", "device_id": "fluo_board"}))
+    assert model.board_id_text == "fluo_board"
 
 
 def test_mode_auto_collapses_unused_sections():
