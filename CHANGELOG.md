@@ -1,3 +1,10 @@
+## v0.4.0 (2026-07-14)
+
+### Feat
+
+- **controls-ui**: stream master gate for the LED board
+- **controls-ui**: own Fluorescence Settings preferences tab
+
 ## v0.3.0 (2026-07-14)
 
 ### Feat
