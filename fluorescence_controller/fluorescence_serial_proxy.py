@@ -1,12 +1,17 @@
 import json
 import threading
+import time
 
 import serial
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 
-from .consts import CONNECTED, DISCONNECTED, TELEMETRY, BOARD_ID, BOARD_BAUDRATE
+from .consts import (
+    BOARD_BAUDRATE, BOARD_ID, COMMAND_RETRY_DELAY_S, CONNECTED, DISCONNECTED,
+    MAX_COMMAND_RETRIES, SERIAL_READ_TIMEOUT_S, SERIAL_WRITE_TIMEOUT_S,
+    TELEMETRY,
+)
 
 logger = get_logger(__name__)
 
@@ -39,7 +44,23 @@ class FluorescenceSerialProxy:
 
     def __init__(self, port):
         self.port = port
-        self._serial = serial.Serial(port, BOARD_BAUDRATE, timeout=1)
+        self._serial = serial.Serial(
+            port, BOARD_BAUDRATE,
+            timeout=SERIAL_READ_TIMEOUT_S,
+            write_timeout=SERIAL_WRITE_TIMEOUT_S,
+        )
+        # One writer at a time: commands arrive on the multi-threaded
+        # dramatiq worker pool, and concurrent writes on one serial handle
+        # interleave bytes mid-line (observed on Windows as garbled
+        # commands + write timeouts). Reentrant so a handler can hold it
+        # around a multi-command sequence while send_command re-acquires.
+        self.transaction_lock = threading.RLock()
+        # Flush any stale bytes before we start reading (heater parity).
+        try:
+            self._serial.reset_input_buffer()
+            self._serial.reset_output_buffer()
+        except Exception as e:
+            logger.debug(f"Could not flush fluorescence serial buffers: {e}")
         self._stop = threading.Event()
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
@@ -52,8 +73,30 @@ class FluorescenceSerialProxy:
     # Serial I/O                                                          #
     # ------------------------------------------------------------------ #
     def send_command(self, command: str):
+        """Send one newline-terminated command, retrying transient write
+        failures; a persistent failure disconnects the board (the write
+        buffer is not draining — wedged firmware or unplugged), so the
+        monitor can rediscover it instead of every later command erroring
+        forever."""
         logger.debug(f"-> {command}")
-        self._serial.write(f"{command}\r\n".encode())
+        data = f"{command}\r\n".encode()
+        for attempt in range(MAX_COMMAND_RETRIES):
+            try:
+                with self.transaction_lock:
+                    self._serial.write(data)
+                return
+            except (serial.SerialException, OSError) as e:
+                if attempt < MAX_COMMAND_RETRIES - 1:
+                    logger.warning(
+                        f"Fluorescence write failed (attempt {attempt + 1}"
+                        f"/{MAX_COMMAND_RETRIES}): {e}")
+                    time.sleep(COMMAND_RETRY_DELAY_S)
+                    continue
+                logger.error(
+                    f"Fluorescence write failed after {MAX_COMMAND_RETRIES} "
+                    f"attempts ({command!r}): {e}; disconnecting")
+                self.terminate()
+                raise
 
     def _read_loop(self):
         while not self._stop.is_set():
