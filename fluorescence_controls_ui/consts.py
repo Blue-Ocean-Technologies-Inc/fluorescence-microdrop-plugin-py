@@ -1,4 +1,6 @@
+from device_viewer.consts import PROTOCOL_RUNNING
 from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, GREY
+from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 
 from fluorescence_controller.consts import (  # noqa: F401 (re-export)
     DEVICE_NAME, START_DEVICE_MONITORING, SEND_COMMAND, TELEMETRY,
@@ -13,9 +15,15 @@ PKG_name = PKG.title().replace("_", " ").replace("Ui", "UI")
 listener_name = f"{PKG}_listener"
 
 # Main listener subscribes to all fluorescence signals
-# (connected/disconnected/searching, telemetry).
+# (connected/disconnected/searching, telemetry), the run state (a running
+# protocol owns the hardware — the pane's publishes are gated then), and
+# the protocol tree's selected-step broadcast (snapshot live-tracking).
 ACTOR_TOPIC_DICT = {
-    listener_name: [f"{DEVICE_NAME}/signals/#"],
+    listener_name: [
+        f"{DEVICE_NAME}/signals/#",
+        PROTOCOL_RUNNING,
+        PROTOCOL_TREE_ROW_SELECTED,
+    ],
 }
 
 # Status colors. Connected maps straight to the green "connected" color

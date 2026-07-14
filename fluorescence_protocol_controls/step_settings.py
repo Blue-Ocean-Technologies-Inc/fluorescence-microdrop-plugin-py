@@ -1,19 +1,20 @@
-"""Per-step fluorescence state: the same knobs as the controls pane
-(mode, light, per-mode wavelength/intensity/frequency/exposure/gain),
-edited in the protocol column's dialog and stored on the row as a plain
-dict — or None when the step leaves the fluorescence state untouched.
+"""Per-step fluorescence state: a snapshot of the live controls pane
+(mode, light, per-mode wavelength/intensity/frequency/exposure/gain, the
+auto exposure/gain flags, and the advanced camera settings), grabbed when
+the user checks the step's fluorescence cell and stored on the row as a
+plain dict — or None when the step leaves the fluorescence state untouched.
 """
-from traits.api import Bool, Enum, HasTraits
-from traitsui.api import EnumEditor, HGroup, Item, OKCancelButtons, VGroup, View
+from traits.api import Bool, Dict, Enum, HasTraits
 
-from microdrop_utils.traitsui_qt_helpers import (
-    InPlaceToggleEditor, RangeWithSteppedSpinViewHint,
-)
+from microdrop_utils.traitsui_qt_helpers import RangeWithSteppedSpinViewHint
 from logger.logger_service import get_logger
 
 from fluorescence_controller.consts import (
     LED_WAVELENGTHS, LED_DUTY_MIN, LED_DUTY_MAX,
     LED_FREQUENCY_MIN, LED_FREQUENCY_MAX,
+)
+from fluorescence_controls_ui.cameras.camera_settings import (
+    ADVANCED_CAMERA_TRAITS, asi_camera_settings,
 )
 from fluorescence_controls_ui.cameras.consts import ASI_GAIN_MIN, ASI_GAIN_MAX
 from fluorescence_controls_ui.consts import (
@@ -23,21 +24,18 @@ from fluorescence_controls_ui.consts import (
     FL_INTENSITY_DEFAULT, FL_FREQUENCY_DEFAULT,
     FL_EXPOSURE_DEFAULT, FL_GAIN_DEFAULT,
 )
+from fluorescence_controls_ui.live_state import fluorescence_live_state
+from fluorescence_controls_ui.preferences import FluorescencePreferences
+
+from .consts import STEP_SETTING_TRAITS
 
 logger = get_logger(__name__)
 
-#: The dict keys a step stores (identical to the pane's trait names).
-STEP_SETTING_TRAITS = (
-    "mode", "light_on",
-    "br_wavelength", "br_intensity", "br_frequency", "br_exposure", "br_gain",
-    "fl_wavelength", "fl_intensity", "fl_frequency", "fl_exposure", "fl_gain",
-)
-
 
 class FluorescenceStepSettings(HasTraits):
-    """Dialog model for one step's fluorescence state."""
+    """Typed carrier for one step's fluorescence state."""
 
-    #: Unchecked = the step leaves the fluorescence state untouched (the
+    #: False = the step leaves the fluorescence state untouched (the
     #: column's stored value stays None).
     apply = Bool(False, desc="Set the fluorescence state on this step")
 
@@ -54,7 +52,8 @@ class FluorescenceStepSettings(HasTraits):
         suffix=" Hz", desc="brightfield LED PWM frequency (Hz)",
     )
     br_exposure = RangeWithSteppedSpinViewHint(
-        EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, value=BR_EXPOSURE_DEFAULT,
+        float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX),
+        value=float(BR_EXPOSURE_DEFAULT),
         suffix=" ms", desc="brightfield camera exposure (milliseconds)",
     )
     br_gain = RangeWithSteppedSpinViewHint(
@@ -72,13 +71,22 @@ class FluorescenceStepSettings(HasTraits):
         suffix=" Hz", desc="fluorescence LED PWM frequency (Hz)",
     )
     fl_exposure = RangeWithSteppedSpinViewHint(
-        EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, value=FL_EXPOSURE_DEFAULT,
+        float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX),
+        value=float(FL_EXPOSURE_DEFAULT),
         suffix=" ms", desc="fluorescence camera exposure (milliseconds)",
     )
     fl_gain = RangeWithSteppedSpinViewHint(
         ASI_GAIN_MIN, ASI_GAIN_MAX, value=FL_GAIN_DEFAULT,
         desc="fluorescence camera gain",
     )
+
+    #: Software auto-exposure / auto-gain flags, snapshotted with the rest.
+    auto_exposure = Bool(False)
+    auto_gain = Bool(False)
+
+    #: Advanced camera settings (ADVANCED_CAMERA_TRAITS name -> value),
+    #: snapshotted from the shared ASI settings. JSON-native values.
+    advanced = Dict()
 
     @property
     def br_led_index(self) -> int:
@@ -92,10 +100,36 @@ class FluorescenceStepSettings(HasTraits):
     # Column-value round trip                                              #
     # ------------------------------------------------------------------ #
     @classmethod
+    def snapshot_current(cls):
+        """Settings grabbed from the LIVE fluorescence controls (device-
+        viewer semantics: arrange the pane, then check the step's cell).
+
+        The LED sets, mode and auto flags come from FluorescencePreferences
+        (the pane mirrors every persisted control there as it changes), the
+        light state from the live-state singleton (deliberately never
+        persisted), and the advanced camera settings from the shared ASI
+        camera settings."""
+        settings = cls(apply=True,
+                       light_on=fluorescence_live_state.light_on)
+        preferences = FluorescencePreferences()
+        for name in STEP_SETTING_TRAITS:
+            if name == "light_on":
+                continue
+            try:
+                setattr(settings, name, getattr(preferences, name))
+            except Exception as e:
+                logger.warning(
+                    f"Snapshot keeps the default for {name}: {e}")
+        settings.advanced = {
+            name: getattr(asi_camera_settings, name)
+            for name in ADVANCED_CAMERA_TRAITS}
+        return settings
+
+    @classmethod
     def from_value(cls, value):
         """Settings seeded from a stored column value (dict or None).
         Unknown/invalid stored entries are skipped so a stale protocol
-        file can't break the dialog."""
+        file can't break the run."""
         settings = cls()
         if isinstance(value, dict):
             settings.apply = True
@@ -106,6 +140,10 @@ class FluorescenceStepSettings(HasTraits):
                     except Exception as e:
                         logger.warning(f"Ignoring stored step setting "
                                        f"{name}={value[name]!r}: {e}")
+            settings.advanced = {
+                name: stored
+                for name, stored in (value.get("advanced") or {}).items()
+                if name in ADVANCED_CAMERA_TRAITS}
         return settings
 
     def to_value(self):
@@ -113,49 +151,6 @@ class FluorescenceStepSettings(HasTraits):
         applies nothing."""
         if not self.apply:
             return None
-        return {name: getattr(self, name) for name in STEP_SETTING_TRAITS}
-
-
-# The controls-pane layout, per step: mode + light on top, then the two
-# LED sets with the pane's exact gating (brightfield editable outside fl
-# mode; in dual mode the camera runs on the brightfield pair, so the fl
-# exposure/gain stay editable only in fl mode).
-step_settings_view = View(
-    VGroup(
-        Item("apply", label="Set fluorescence state on this step"),
-        VGroup(
-            HGroup(
-                Item("mode", style="custom", show_label=False,
-                     editor=EnumEditor(values={"br": "Brightfield",
-                                               "fl": "Fluorescence",
-                                               "dual": "Dual"}, cols=3)),
-                Item("light_on", label="Light",
-                     editor=InPlaceToggleEditor(on_label="Light On",
-                                                off_label="Light Off")),
-            ),
-            VGroup(
-                Item("br_wavelength", label="Wavelength"),
-                Item("br_intensity", label="Intensity"),
-                Item("br_frequency", label="Frequency"),
-                Item("br_exposure", label="Exposure"),
-                Item("br_gain", label="Gain"),
-                label="Brightfield", show_border=True,
-                enabled_when="mode != 'fl'",
-            ),
-            VGroup(
-                Item("fl_wavelength", label="Wavelength"),
-                Item("fl_intensity", label="Intensity"),
-                Item("fl_frequency", label="Frequency"),
-                Item("fl_exposure", label="Exposure",
-                     enabled_when="mode == 'fl'"),
-                Item("fl_gain", label="Gain", enabled_when="mode == 'fl'"),
-                label="Fluorescence", show_border=True,
-                enabled_when="mode != 'br'",
-            ),
-            enabled_when="apply",
-        ),
-    ),
-    title="Fluorescence Step Settings",
-    buttons=OKCancelButtons,
-    resizable=True,
-)
+        value = {name: getattr(self, name) for name in STEP_SETTING_TRAITS}
+        value["advanced"] = dict(self.advanced)
+        return value
