@@ -5,7 +5,7 @@ peripheral plugins use (``microdrop.peripheral_settings``), holding only the
 fluorescence plugin's own traits.
 """
 from apptools.preferences.api import PreferencesHelper
-from envisage.ui.tasks.api import PreferencesPane
+from envisage.ui.tasks.api import PreferencesPane, PreferencesCategory
 from traits.api import Bool, Directory, Int, Str, Float
 from traitsui.api import Item, View, VGroup
 
@@ -41,6 +41,13 @@ class FluorescencePreferences(PreferencesHelper):
     # download (required before an ASI camera can be used).
     fluorescence_show_asi_driver_notice = Bool(
         True, desc="Show the ASI camera driver download notice on plugin start"
+    )
+
+    # One-time note that lighting edits made while the pane's stream is off
+    # are staged until the stream starts (heater pane parity; the dialog's
+    # don't-show-again checkbox clears this).
+    fluorescence_show_stream_off_warning = Bool(
+        True, desc="Warn when a lighting edit is staged because the stream is off"
     )
 
     # Root of the ZWO ASI SDK (the directory holding Win/ and Unix/).
@@ -137,28 +144,42 @@ class FluorescencePreferences(PreferencesHelper):
         "ms", desc="Unit of the max exposure limit: ms or s")
 
 
-class FluorescencePreferencesPane(PreferencesPane):
-    """Fluorescence group on the shared Peripheral Settings tab.
+fluorescence_tab = PreferencesCategory(
+    id="microdrop.peripheral_settings.fluorescence",
+    name="Fluorescence Settings",
+    after="microdrop.dropbot_settings"
+)
 
-    Same category id the magnet/heater settings use; envisage merges panes
-    of one category into a single tab (and auto-creates the category when
-    the magnet group that declares it is not loaded).
-    """
+class FluorescencePreferencesPane(PreferencesPane):
+    """The fluorescence plugin's own Fluorescence Settings tab (its traits
+    stay on the shared ``microdrop.peripheral_settings`` node, so values
+    saved before the tab split keep working)."""
 
     model_factory = FluorescencePreferences
 
-    category = "microdrop.peripheral_settings"
+    category = fluorescence_tab.id
 
     settings = VGroup(
         create_item_label_group("fluorescence_show_asi_driver_notice", label_text="Show the ASI camera driver notice at launch (Windows)"),
         create_item_label_group("fluorescence_asi_sdk_dir", label_text="ASI Camera SDK Directory"),
-        label="Remote Backend",
+        label="Backend",
         show_border=True,
         style_sheet=preferences_group_style_sheet,
     )
 
+    controls_group = create_item_label_group(
+        "fluorescence_show_stream_off_warning",
+        label_text="Warn when a lighting edit is staged because the stream is off",
+        orientation="horizontal",
+        label_position="last",
+        group_label="Controls",
+        group_show_border=True,
+        group_style_sheet=preferences_group_style_sheet,
+    )
+
     view = View(
         settings,
+        controls_group,
         Item("_"),  # Separator to space this out from further contributions.
         resizable=True,
     )
