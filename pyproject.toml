@@ -1,6 +1,6 @@
 [project]
 name = "fluorescence-microdrop-plugin"
-version = "0.2.1"
+version = "0.3.0"
 description = "MicroDrop fluorescence plugin: board driver and status/controls UI"
 requires-python = ">=3.11"
 dependencies = []
@@ -28,7 +28,7 @@ preview = ["pixi-build"]
 
 [tool.pixi.package]
 name = "fluorescence-microdrop-plugin"
-version = "0.2.1"
+version = "0.3.0"
 
 [tool.pixi.package.build.backend]
 name = "pixi-build-python"
