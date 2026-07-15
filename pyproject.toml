@@ -5,6 +5,9 @@ description = "MicroDrop fluorescence plugin: board driver and status/controls U
 requires-python = ">=3.11"
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py"
+
 # Discovered by MicroDrop's plugin manager: the entry point anchors the
 # distribution; the microdrop_plugin.toml manifest (shipped as package data of
 # the anchor via force-include) declares the toggleable plugin groups.
