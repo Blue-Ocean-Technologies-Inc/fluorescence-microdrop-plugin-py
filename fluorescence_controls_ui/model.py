@@ -137,8 +137,13 @@ class FluorescenceStatusModel(BaseStatusModel):
     # logic (`FluorescenceControlsController.add_capture`/`run_capture`) —
     # that logic needs controller-level access (chain write-back,
     # threading), so it stays out of the model.
-    add_capture_button = Button("Add")
-    run_capture_button = Button("Run Capture")
+    # Button labels are Material Symbols glyph names: the app-wide
+    # BASE_BUTTON_STYLE puts the icon font on every QPushButton, so a
+    # Button("play_circle") renders as a glyph — same scheme as the route
+    # view's run_controls (device_viewer/models/route.py:203-208).
+    add_capture_button = Button("add")
+    run_capture_button = Button("play_circle")
+    delete_capture_button = Button("delete")
 
     @observe(f"[{','.join(PERSISTED_CONTROL_TRAITS)}]", post_init=True)
     def _push_preferences(self, event):

@@ -374,3 +374,131 @@ def test_mid_run_selection_does_not_show_dialog_or_clear_free_chain(monkeypatch)
     assert [r.label for r in model.free_chain] == ["A"]
     assert set_cell == []
     assert add_step == []
+
+
+# --- delete: button (selected-else-last), right-click menu, Delete key ----------------
+
+def test_delete_capture_removes_selected_row_and_pushes(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    row0, row1 = FluorescenceChainRow(label="A"), FluorescenceChainRow(label="B")
+    model.chain_rows = [row0, row1]
+    model.chain_selection = row0
+    set_cell.clear()
+
+    controller.delete_capture()
+
+    assert [r.label for r in model.chain_rows] == ["B"]
+    assert model.chain_selection is None
+    assert len(set_cell) == 1
+    assert [e["label"] for e in set_cell[-1]["value"]] == ["B"]
+
+
+def test_delete_capture_without_selection_removes_last_row(monkeypatch):
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    row0, row1 = FluorescenceChainRow(label="A"), FluorescenceChainRow(label="B")
+    model.chain_rows = [row0, row1]
+    model.chain_selection = None
+
+    controller.delete_capture()
+
+    assert [r.label for r in model.chain_rows] == ["A"]
+
+
+def test_delete_capture_on_empty_chain_is_a_noop(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller.delete_capture()
+    assert model.chain_rows == [] and set_cell == []
+
+
+def test_delete_capture_in_free_mode_syncs_free_chain(monkeypatch):
+    """Free-mode deletion has no cell to write; the stash must shrink."""
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    row0, row1 = FluorescenceChainRow(label="A"), FluorescenceChainRow(label="B")
+    model.chain_rows = [row0, row1]
+    model.free_chain = [row0, row1]
+
+    controller.delete_capture()
+
+    assert [r.label for r in model.free_chain] == ["A"]
+    assert set_cell == []
+
+
+def test_delete_chain_row_menu_action_deletes_clicked_row(monkeypatch):
+    """The right-click Menu Action dispatches (info, rows) with the
+    length-1 clicked-row list — route-table handler parity."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    row0, row1 = FluorescenceChainRow(label="A"), FluorescenceChainRow(label="B")
+    model.chain_rows = [row0, row1]
+
+    controller.delete_chain_row(None, [row0])
+
+    assert [r.label for r in model.chain_rows] == ["B"]
+
+
+def test_handle_delete_key_only_acts_on_a_selection(monkeypatch):
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    row0 = FluorescenceChainRow(label="A")
+    model.chain_rows = [row0]
+    model.chain_selection = None
+
+    controller.handle_delete_key(None)          # no selection: no-op
+    assert [r.label for r in model.chain_rows] == ["A"]
+
+    model.chain_selection = row0
+    controller.handle_delete_key(None)
+    assert model.chain_rows == []
+
+
+# --- per-row auto modes ----------------------------------------------------------------
+
+def test_auto_flags_sync_panel_to_selected_row(monkeypatch):
+    """The panel's Auto checkboxes are part of the row now: toggling one
+    with a row selected saves into the row and pushes the chain."""
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    row0 = FluorescenceChainRow(label="A", auto_exposure=False)
+    model.chain_rows = [row0]
+    model.chain_selection = row0
+    set_cell.clear()
+
+    model.auto_exposure = True
+
+    assert row0.auto_exposure is True
+    assert set_cell and set_cell[-1]["value"][0]["auto_exposure"] is True
+
+
+def test_row_click_loads_auto_flags_into_panel(monkeypatch):
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    row0 = FluorescenceChainRow(label="A", auto_exposure=True, auto_gain=True)
+    model.chain_rows = [row0]
+    model.auto_exposure = False
+    model.auto_gain = False
+
+    model.chain_selection = row0
+
+    assert model.auto_exposure is True and model.auto_gain is True
+
+
+def test_reorder_of_chain_rows_pushes_chain(monkeypatch):
+    """The table is reorderable and chain order IS execution order: an
+    in-place reorder (what TableEditor drag does) must persist."""
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    row0, row1 = FluorescenceChainRow(label="A"), FluorescenceChainRow(label="B")
+    model.chain_rows = [row0, row1]
+    set_cell.clear()
+
+    model.chain_rows[0:2] = [row1, row0]        # in-place reorder
+
+    assert set_cell
+    assert [e["label"] for e in set_cell[-1]["value"]] == ["B", "A"]

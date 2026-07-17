@@ -1,10 +1,13 @@
 from traitsui.api import (
     View, VGroup, HGroup, Item, UItem, Readonly, TableEditor, Label,
 )
-from traitsui.extras.checkbox_column import CheckboxColumn
+from traitsui.key_bindings import KeyBindings, KeyBinding
+from traitsui.menu import Menu, Action
 
+from microdrop_style.icons.icons import ICON_DELETE
 from microdrop_utils.traitsui_qt_helpers import (
-    InPlaceToggleEditor, IconToggleEditor, ObjectColumn,
+    CustomCheckboxColumn, IconButtonEditor, InPlaceToggleEditor,
+    IconToggleEditor, ObjectColumn,
 )
 
 # Every section is collapsible: an arrow glyph acts as the section header and
@@ -67,28 +70,58 @@ params_group = VGroup(
     show_border=True,
 )
 
-# Capture-chain table (issue #6): Add seeds a new row from the panel's
-# current values (controller.add_capture — no inline row factory, Add owns
-# creation); Run Capture fires the chain's ticked rows as a burst
-# (controller.run_capture), gated the same way a running protocol gates the
-# rest of the pane.
-chain_table_editor = TableEditor(
-    columns=[
-        ObjectColumn(name="label", label="Label", editable=True),
-        CheckboxColumn(name="run", label="Run"),
-    ],
-    editable=True,
-    sortable=False,
-    auto_size=True,
-    selected="chain_selection",
-    selection_mode="row",
+# Capture-chain table (issue #6), copied from the device viewer's route
+# table (route_selection_view.py): the Run column is a glyph, not a Qt
+# checkbox — CustomCheckboxColumn renders Material Symbols text and
+# toggles the bool on click.
+class RunColumn(CustomCheckboxColumn):
+    def formatter(self, value):
+        return "play_arrow" if value else "play_disabled"
+
+
+# Right-click menu on a chain row (route-table Menu parity): the Action
+# name dispatches to the View's handler — the pane's controller.
+ChainRowMenu = Menu(
+    Action(name="&Delete", action="delete_chain_row"),
 )
 
+chain_table_editor = TableEditor(
+    columns=[
+        ObjectColumn(name="label", label="Label", resize_mode="stretch"),
+        RunColumn(
+            name="run",
+            label="Run",
+            editable=False,
+            horizontal_alignment="center",
+            width=16,
+        ),
+    ],
+    menu=ChainRowMenu,
+    show_lines=False,
+    selected="chain_selection",
+    sortable=False,
+    reorderable=True,
+    show_column_labels=True,
+    show_row_labels=True,
+)
+
+# Glyph buttons above the table (route run_controls parity; IconButtonEditor
+# because — unlike the DV sidebar — this pane gets no ancestor QSS that
+# maps QPushButton text into the icon font). Add seeds a new row from the
+# panel's params (controller.add_capture — no inline row factory, Add owns
+# creation); Run Capture bursts the ticked rows; Delete removes the
+# selected row, or the last one when nothing is selected.
 chain_group = VGroup(
     HGroup(
-        UItem("add_capture_button"),
-        UItem("run_capture_button",
+        UItem("add_capture_button", editor=IconButtonEditor(
+            glyph="add", tooltip="Add a capture from the panel's params")),
+        UItem("run_capture_button", editor=IconButtonEditor(
+            glyph="play_circle", tooltip="Run the ticked captures now"),
               enabled_when="connected and not protocol_running"),
+        UItem("delete_capture_button", editor=IconButtonEditor(
+            glyph=ICON_DELETE,
+            tooltip="Delete the selected capture (the last one when "
+                    "nothing is selected)")),
     ),
     UItem("chain_rows", editor=chain_table_editor),
     show_border=True,
@@ -121,4 +154,9 @@ UnifiedView = View(
     # contents stay reachable when the dock is shorter than the sections.
     resizable=True,
     scrollable=True,
+    # Route-view parity: Delete over the pane removes the selected chain
+    # row (handler method lives on the controller — the View's handler).
+    key_bindings=KeyBindings(
+        KeyBinding(binding1="Delete", method_name="handle_delete_key"),
+    ),
 )

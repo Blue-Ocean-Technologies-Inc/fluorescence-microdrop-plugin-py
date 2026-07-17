@@ -83,3 +83,12 @@ def test_unique_label_no_collision_returns_as_is():
 
 def test_unique_label_suffixes_first_free_number():
     assert unique_label("GFP", {"GFP", "GFP_2"}) == "GFP_3"
+
+
+def test_chains_saved_before_auto_flags_load_with_auto_off():
+    """Back-compat: pre-auto chain dicts (no auto_* keys) parse with the
+    flags defaulted off."""
+    old = {"label": "GFP", "wavelength": LED_WAVELENGTHS[2], "intensity": 50,
+           "frequency": 40000, "exposure_ms": 10.0, "gain": 0, "run": True}
+    [entry] = parse_chain([old])
+    assert entry.auto_exposure is False and entry.auto_gain is False

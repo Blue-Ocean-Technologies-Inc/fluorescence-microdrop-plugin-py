@@ -134,3 +134,17 @@ def test_persisted_control_traits_is_the_new_single_set():
         "wavelength", "intensity", "frequency", "gain", "exposure",
         "device_viewer_stream", "auto_exposure", "auto_gain",
     ]
+
+
+def test_auto_flags_round_trip_between_row_and_entry():
+    """Per-row auto modes are part of the stored chain value now."""
+    row = FluorescenceChainRow(label="A", auto_exposure=True, auto_gain=True)
+    d = row.to_entry_dict()
+    assert d["auto_exposure"] is True and d["auto_gain"] is True
+    back = FluorescenceChainRow.from_entry(ChainEntry(**d))
+    assert back.auto_exposure is True and back.auto_gain is True
+
+
+def test_auto_flags_default_off():
+    d = FluorescenceChainRow(label="A").to_entry_dict()
+    assert d["auto_exposure"] is False and d["auto_gain"] is False

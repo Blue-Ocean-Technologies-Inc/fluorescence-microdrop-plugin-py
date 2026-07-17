@@ -85,9 +85,15 @@ def apply_camera_settings(entry) -> None:
     """Mirror the entry's exposure/gain into the shared ASI settings ON
     THE GUI THREAD (the burst runs off it; the settings singleton and the
     running feed's observers live with the GUI) — same ms->us marshalling
-    the deleted per-step compound column's `_apply_camera_settings` used."""
+    the deleted per-step compound column's `_apply_camera_settings` used.
+
+    The entry's per-row auto modes ride along: with auto on, the capture
+    thread's brightness loop owns exposure/gain during the settle window
+    and the stored values are only the starting point."""
     GUI.invoke_later(asi_camera_settings.trait_set,
-                     exposure=int(entry.exposure_ms * 1000), gain=entry.gain)
+                     exposure=int(entry.exposure_ms * 1000), gain=entry.gain,
+                     auto_exposure=entry.auto_exposure,
+                     auto_gain=entry.auto_gain)
 
 
 def save_entry_capture(entry, folder: Path) -> Path:

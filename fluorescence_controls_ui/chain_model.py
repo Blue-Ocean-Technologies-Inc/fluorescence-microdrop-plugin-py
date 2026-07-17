@@ -30,6 +30,8 @@ class FluorescenceChainRow(HasTraits):
     exposure = Range(float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=10.0)
     gain = Range(ASI_GAIN_MIN, ASI_GAIN_MAX, value=0)
     run = Bool(True)
+    auto_exposure = Bool(False)
+    auto_gain = Bool(False)
 
     def to_entry_dict(self) -> dict:
         """This row's params as a `ChainEntry`-shaped dict (`exposure` ->
@@ -42,6 +44,8 @@ class FluorescenceChainRow(HasTraits):
             "exposure_ms": self.exposure,
             "gain": self.gain,
             "run": self.run,
+            "auto_exposure": self.auto_exposure,
+            "auto_gain": self.auto_gain,
         }
 
     @classmethod
@@ -55,4 +59,6 @@ class FluorescenceChainRow(HasTraits):
             exposure=entry.exposure_ms,
             gain=entry.gain,
             run=entry.run,
+            auto_exposure=entry.auto_exposure,
+            auto_gain=entry.auto_gain,
         )

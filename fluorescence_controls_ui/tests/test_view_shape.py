@@ -69,3 +69,25 @@ def test_chain_buttons_present():
     names = _all_item_names()
     assert "add_capture_button" in names
     assert "run_capture_button" in names
+
+
+def test_delete_button_present_in_chain_group():
+    from fluorescence_controls_ui.view import UnifiedView
+    assert "delete_capture_button" in _item_names(UnifiedView.content)
+
+
+def test_run_column_is_a_glyph_not_a_checkbox():
+    """Route-table parity: the Run column renders Material glyphs."""
+    from fluorescence_controls_ui.view import RunColumn, chain_table_editor
+    col = chain_table_editor.columns[1]
+    assert isinstance(col, RunColumn)
+    assert col.formatter(True) == "play_arrow"
+    assert col.formatter(False) == "play_disabled"
+
+
+def test_chain_table_has_right_click_delete_menu():
+    from fluorescence_controls_ui.view import chain_table_editor
+    actions = [item.action.action
+               for group in chain_table_editor.menu.groups
+               for item in group.items]
+    assert "delete_chain_row" in actions

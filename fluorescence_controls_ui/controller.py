@@ -35,7 +35,8 @@ logger = get_logger(__name__)
 #: existing single-set observers below), a panel edit re-saves them into
 #: the selected row.
 CHAIN_ROW_PARAM_TRAITS = (
-    "label", "wavelength", "intensity", "frequency", "exposure", "gain")
+    "label", "wavelength", "intensity", "frequency", "exposure", "gain",
+    "auto_exposure", "auto_gain")
 CHAIN_ROW_PARAM_TRAITS_EXPRESSION = f"[{','.join(CHAIN_ROW_PARAM_TRAITS)}]"
 
 
@@ -259,6 +260,11 @@ class FluorescenceControlsController(BaseStatusController):
         self._loading_row = True
         try:
             self.model.label = row.label
+            # Auto flags FIRST: an auto OFF-transition adopts the camera's
+            # current values into model.exposure/gain (_adopt_auto_value),
+            # and the row's stored numbers below must win that write.
+            self.model.auto_exposure = row.auto_exposure
+            self.model.auto_gain = row.auto_gain
             self.model.intensity = row.intensity
             self.model.frequency = row.frequency
             self.model.exposure = row.exposure
@@ -306,6 +312,17 @@ class FluorescenceControlsController(BaseStatusController):
             return
         self._push_chain_to_step()
 
+    @observe("model:chain_rows:items")
+    def _push_chain_on_membership_change(self, event):
+        """Row removal (delete button / right-click / Delete key) and
+        drag-reorders (the table is `reorderable`, and chain order IS the
+        execution order) persist like any other edit. Whole-list
+        REPLACEMENTS (row loads, attach, free-mode swaps) don't fire this
+        items observer — those paths push explicitly where needed."""
+        if self._loading_row:
+            return
+        self._push_chain_to_step()
+
     def _push_chain_to_step(self):
         """Persist `chain_rows` to wherever it currently lives: an
         attached step's cell (tree write-back, blanking the cell when the
@@ -333,6 +350,45 @@ class FluorescenceControlsController(BaseStatusController):
     @observe("model:run_capture_button")
     def _run_capture_button_clicked(self, event):
         self.run_capture()
+
+    @observe("model:delete_capture_button")
+    def _delete_capture_button_clicked(self, event):
+        self.delete_capture()
+
+    # ------------------------------------------------------------------ #
+    # Delete — three routes into _remove_chain_row (route-table parity):   #
+    # the toolbar button (selected row, else the last one), the table's    #
+    # right-click Menu Action, and the Delete key over the pane.           #
+    # ------------------------------------------------------------------ #
+    def delete_capture(self):
+        """Delete the selected chain row; with no selection, the last row
+        (the protocol tree's delete-last quick-action convention)."""
+        rows = self.model.chain_rows
+        if not rows:
+            return
+        self._remove_chain_row(self.model.chain_selection or rows[-1])
+
+    def delete_chain_row(self, info, rows):
+        """Right-click 'Delete' on a chain row. TraitsUI calls the View
+        handler (this controller) with the length-1 clicked-row list —
+        the route table's RouteLayerTableHandler signature."""
+        if rows:
+            self._remove_chain_row(rows[0])
+
+    def handle_delete_key(self, info, *args, **kwargs):
+        """Delete keypress over the pane removes the SELECTED row only
+        (no last-row fallback on a keystroke — route-view parity)."""
+        if self.model.chain_selection is not None:
+            self._remove_chain_row(self.model.chain_selection)
+
+    def _remove_chain_row(self, row):
+        if row not in self.model.chain_rows:
+            return
+        if self.model.chain_selection is row:
+            self.model.chain_selection = None
+        # In-place removal fires the items observer above, which persists
+        # the shrunken chain (attached cell or free-mode stash).
+        self.model.chain_rows.remove(row)
 
     # ------------------------------------------------------------------ #
     # Add                                                                   #

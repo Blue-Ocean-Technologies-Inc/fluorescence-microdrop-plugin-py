@@ -34,6 +34,11 @@ class ChainEntry(BaseModel):
     exposure_ms: float = Field(ge=EXPOSURE_MS_MIN, le=EXPOSURE_MS_MAX)
     gain: int = Field(ge=ASI_GAIN_MIN, le=ASI_GAIN_MAX)
     run: bool = True
+    # Per-row auto camera modes: when on, the capture thread's brightness
+    # loop owns exposure/gain and the stored values are only the starting
+    # point (a deliberate trade of replay determinism for convenience).
+    auto_exposure: bool = False
+    auto_gain: bool = False
 
     @field_validator("wavelength")
     @classmethod

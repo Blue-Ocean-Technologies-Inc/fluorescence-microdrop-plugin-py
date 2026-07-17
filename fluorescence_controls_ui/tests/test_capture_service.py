@@ -338,3 +338,23 @@ def test_run_burst_timeout_raises_and_still_turns_leds_off(
 
     assert len(calls) == 1
     assert off_calls == [(ALL_LEDS_OFF, "")]
+
+
+def test_apply_camera_settings_forwards_auto_flags(sync_gui):
+    """Per-row auto modes ride into the shared ASI settings alongside
+    exposure/gain (with auto on, the capture thread's brightness loop
+    owns the values during the settle window)."""
+    from fluorescence_controls_ui.cameras.camera_settings import (
+        asi_camera_settings,
+    )
+    entry = _entry("A")
+    entry.auto_exposure = True
+    entry.auto_gain = True
+    capture_service.apply_camera_settings(entry)
+    assert asi_camera_settings.auto_exposure is True
+    assert asi_camera_settings.auto_gain is True
+    entry.auto_exposure = False
+    entry.auto_gain = False
+    capture_service.apply_camera_settings(entry)
+    assert asi_camera_settings.auto_exposure is False
+    assert asi_camera_settings.auto_gain is False
