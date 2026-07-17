@@ -9,17 +9,48 @@ No real ASI hardware anywhere: `ASIVideoThread` is replaced with a fake
 registry tests, and `run_burst`'s feed is a tiny stub carrying the two
 attributes `wait_for_frame_after` needs (`frame_seq`, `_last_raw`).
 """
+import sys
 import time
 
 import numpy as np
 import pytest
 
-import fluorescence_controls_ui.capture_service as capture_service
+import fluorescence_controls_ui
 from fluorescence_controller.consts import ALL_LEDS_OFF, LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 
 ENTRY_KW = dict(wavelength=LED_WAVELENGTHS[0], intensity=50, frequency=1000,
                 exposure_ms=10.0, gain=0)
+
+capture_service = None   # populated by _capture_service_module below
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _capture_service_module():
+    """Import `capture_service` for this module's own tests, then undo the
+    package-attribute binding the import creates.
+
+    `import fluorescence_controls_ui.capture_service` binds `capture_service`
+    onto the `fluorescence_controls_ui` package object as a side effect. Left
+    in place, that binding outlives this module: CPython's `IMPORT_FROM`
+    resolves `from fluorescence_controls_ui import capture_service` (as
+    controller.py's `run_capture` does) via `getattr(package,
+    "capture_service")` FIRST, only falling back to `sys.modules` on
+    AttributeError. So a leftover attribute silently shadows the
+    `sys.modules["fluorescence_controls_ui.capture_service"]` fake module
+    that test_led_controls.py's `fake_capture_service` fixture installs,
+    and controller.py ends up calling the real `run_burst` instead of the
+    fake — deterministically breaking whichever test_led_controls case runs
+    after this module. Deleting the attribute (and the cached module) here
+    restores the clean-slate precondition that mocking strategy needs.
+    """
+    global capture_service
+    import fluorescence_controls_ui.capture_service as _capture_service
+    capture_service = _capture_service
+    yield
+    if hasattr(fluorescence_controls_ui, "capture_service"):
+        delattr(fluorescence_controls_ui, "capture_service")
+    sys.modules.pop("fluorescence_controls_ui.capture_service", None)
 
 
 def _entry(label, run=True, **overrides):

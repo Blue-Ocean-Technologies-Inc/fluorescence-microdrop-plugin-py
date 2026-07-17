@@ -98,6 +98,10 @@ class AsiCameraFeed(QObject):
         # so it runs only while the device-viewer stream checkbox is on —
         # rate-capped and downscaled to preview size (captures keep the
         # full-rate, full-resolution raw frames).
+        # Lock-free by convention (see _last_raw elsewhere in this file): a
+        # reader on another thread has a nanosecond-scale window to observe
+        # the bumped frame_seq alongside the still-previous _last_raw. Not
+        # worth a lock against the ~20 ms poll cadence; accepted.
         self.frame_seq += 1
         self._last_raw = raw
         if not asi_camera_settings.device_viewer_stream:
