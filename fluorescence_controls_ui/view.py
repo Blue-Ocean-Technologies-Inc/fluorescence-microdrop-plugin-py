@@ -1,11 +1,15 @@
-from traitsui.api import View, VGroup, HGroup, Item, UItem, Readonly, EnumEditor, Label
+from traitsui.api import (
+    View, VGroup, HGroup, Item, UItem, Readonly, TableEditor, Label,
+)
+from traitsui.extras.checkbox_column import CheckboxColumn
 
-from microdrop_utils.traitsui_qt_helpers import InPlaceToggleEditor, IconToggleEditor
+from microdrop_utils.traitsui_qt_helpers import (
+    InPlaceToggleEditor, IconToggleEditor, ObjectColumn,
+)
 
 # Every section is collapsible: an arrow glyph acts as the section header and
-# the bordered group below it is shown only while its `show_*` trait is ticked
-# (same structure as the heater controls pane). Selecting a mode also
-# auto-collapses the set it disables (see the model's mode observer).
+# the bordered group below it is shown only while its `show_*` trait is
+# ticked (same structure as the heater controls pane).
 
 # Connection / board identity / last board ack.
 status_group = VGroup(
@@ -16,13 +20,11 @@ status_group = VGroup(
     show_border=True,
 )
 
-# Imaging mode + master light toggle + device-viewer stream checkbox.
+# Master light toggle + device-viewer stream checkbox. The mode selector
+# (br/fl/dual) is gone (issue #6): a single LED/camera param set now drives
+# whichever chain row is being edited.
 control_group = VGroup(
     HGroup(
-        Item("mode", style="custom", show_label=False,
-             editor=EnumEditor(values={"br": "Brightfield",
-                                       "fl": "Fluorescence",
-                                       "dual": "Dual"}, cols=3)),
         UItem("light_on", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
              enabled_when="connected"),
     ),
@@ -42,47 +44,53 @@ control_group = VGroup(
     show_border=True,
 )
 
-# Per-mode LED sets. Enablement mirrors the standalone app: brightfield
-# controls active in br+dual, fluorescence controls in fl+dual.
-# The Auto checkboxes (camera-level, shared by both LED sets) hand
-# exposure/gain to the capture thread's brightness loop; the manual
-# sliders disable while their auto is on.
-brightfield_group = VGroup(
-    Item("br_wavelength", label="Wavelength"),
-    Item("br_intensity", label="Intensity (%)"),
-    Item("br_frequency", label="Frequency (Hz)"),
+# Single LED/camera param set (issue #6): replaces the old brightfield_group
+# / fluorescence_group per-mode split. Doubles as the editor for whichever
+# capture-chain row is selected (see the controller's panel<->row binding).
+# The Auto checkboxes hand exposure/gain to the capture thread's brightness
+# loop; the manual sliders disable while their auto is on.
+params_group = VGroup(
+    Item("label", label="Label"),
+    Item("wavelength", label="Wavelength"),
+    Item("intensity", label="Intensity (%)"),
+    Item("frequency", label="Frequency (Hz)"),
     HGroup(
-        Item("br_exposure", label="Exposure (ms)",
+        Item("exposure", label="Exposure (ms)",
              enabled_when="not auto_exposure"),
         Item("auto_exposure", label="Auto"),
     ),
     HGroup(
-        Item("br_gain", label="Gain", enabled_when="not auto_gain"),
+        Item("gain", label="Gain", enabled_when="not auto_gain"),
         Item("auto_gain", label="Auto"),
     ),
-    visible_when="show_brightfield",
-    enabled_when="mode != 'fl'",
+    visible_when="show_params",
     show_border=True,
 )
 
-fluorescence_group = VGroup(
-    Item("fl_wavelength", label="Wavelength"),
-    Item("fl_intensity", label="Intensity"),
-    Item("fl_frequency", label="Frequency"),
-    # In dual mode the camera runs on the brightfield pair (the controller
-    # gives it priority), so these two stay editable only in fl mode.
+# Capture-chain table (issue #6): Add seeds a new row from the panel's
+# current values (controller.add_capture — no inline row factory, Add owns
+# creation); Run Capture fires the chain's ticked rows as a burst
+# (controller.run_capture), gated the same way a running protocol gates the
+# rest of the pane.
+chain_table_editor = TableEditor(
+    columns=[
+        ObjectColumn(name="label", label="Label", editable=True),
+        CheckboxColumn(name="run", label="Run"),
+    ],
+    editable=True,
+    sortable=False,
+    auto_size=True,
+    selected="chain_selection",
+    selection_mode="row",
+)
+
+chain_group = VGroup(
     HGroup(
-        Item("fl_exposure", label="Exposure",
-             enabled_when="mode == 'fl' and not auto_exposure"),
-        Item("auto_exposure", label="Auto"),
+        UItem("add_capture_button"),
+        UItem("run_capture_button",
+              enabled_when="connected and not protocol_running"),
     ),
-    HGroup(
-        Item("fl_gain", label="Gain",
-             enabled_when="mode == 'fl' and not auto_gain"),
-        Item("auto_gain", label="Auto"),
-    ),
-    visible_when="show_fluorescence",
-    enabled_when="mode != 'br'",
+    UItem("chain_rows", editor=chain_table_editor),
     show_border=True,
 )
 
@@ -104,11 +112,10 @@ UnifiedView = View(
         _collapse_header("show_control", "Control"),
         control_group,
 
-        _collapse_header("show_brightfield", "Brightfield"),
-        brightfield_group,
+        _collapse_header("show_params", "LED / Camera Params"),
+        params_group,
 
-        _collapse_header("show_fluorescence", "Fluorescence"),
-        fluorescence_group,
+        chain_group,
     ),
     # Resizable so the pane can be dragged larger/smaller; scrollable so the
     # contents stay reachable when the dock is shorter than the sections.

@@ -310,6 +310,19 @@ class FluorescenceControlsController(BaseStatusController):
             self.model.free_chain = list(self.model.chain_rows)
 
     # ------------------------------------------------------------------ #
+    # Chain-table button wiring (model:add_capture_button/run_capture_button
+    # are Button traits — see model.py; the click fires an Event, the value
+    # itself is unused here, only the firing matters).                      #
+    # ------------------------------------------------------------------ #
+    @observe("model:add_capture_button")
+    def _add_capture_button_clicked(self, event):
+        self.add_capture()
+
+    @observe("model:run_capture_button")
+    def _run_capture_button_clicked(self, event):
+        self.run_capture()
+
+    # ------------------------------------------------------------------ #
     # Add                                                                   #
     # ------------------------------------------------------------------ #
     def add_capture(self):

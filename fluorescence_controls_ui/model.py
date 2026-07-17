@@ -1,4 +1,6 @@
-from traits.api import Bool, Enum, Event, Instance, List, Range, Str, observe
+from traits.api import (
+    Bool, Button, Enum, Event, Instance, List, Range, Str, observe,
+)
 from traits.observation.api import parse
 
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
@@ -128,6 +130,15 @@ class FluorescenceStatusModel(BaseStatusModel):
     attached_group_id = Str("")
     #: The unattached stash, shown whenever `attached_step_id == ""`.
     free_chain = List(Instance(FluorescenceChainRow))
+
+    # Chain-table buttons (Qt-free `Button` traits, same convention as the
+    # advanced-camera pane's "Defaults" buttons): the view fires these on
+    # click, the controller observes them and runs the actual add/run
+    # logic (`FluorescenceControlsController.add_capture`/`run_capture`) —
+    # that logic needs controller-level access (chain write-back,
+    # threading), so it stays out of the model.
+    add_capture_button = Button("Add")
+    run_capture_button = Button("Run Capture")
 
     @observe(f"[{','.join(PERSISTED_CONTROL_TRAITS)}]", post_init=True)
     def _push_preferences(self, event):
