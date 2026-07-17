@@ -10,6 +10,10 @@ FLUORESCENCE_COMPOUND_BASE_ID = "fluorescence"
 FLUORESCENCE_ON_COLUMN_ID = "fluorescence_on"
 #: Settings field (row trait): dict snapshot of the live controls, or None.
 FLUORESCENCE_SETTINGS_COLUMN_ID = "fluorescence_settings"
+#: Capture-chain field (row trait): list of ChainEntry dicts, or None/[].
+#: Replaces FLUORESCENCE_SETTINGS_COLUMN_ID (retired in Task 9); old ids
+#: stay in place until then so existing protocols keep loading.
+FLUORESCENCE_CHAIN_COLUMN_ID = "fluorescence_chain"
 
 #: The scalar dict keys a step's fluorescence snapshot stores — identical
 #: to the controls-pane model's trait names, so the pane and the column
