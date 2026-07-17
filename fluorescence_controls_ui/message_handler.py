@@ -39,11 +39,19 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         fluorescence_live_state.tree_row_selected = row_selected_msg
 
     def _on_fluorescence_applied_triggered(self, body):
-        """Backend ack for a protocol step's LED apply — consumed by the
-        protocol executor's ack mailbox; the signals/# subscription lands
-        it here too, so it needs a handler (else a missing-handler error
-        is logged on every step)."""
+        """Backend ack for an LED apply — consumed by the protocol
+        executor's ack mailbox (the signals/# subscription lands it here
+        too, so it needs a handler, else a missing-handler error is logged
+        on every step) AND by the burst capture service's own Event, for
+        the pane's Run Capture path which has no executor mailbox.
+
+        `capture_service` is imported lazily (same convention as
+        `controller.run_capture`): importing it at module load time would
+        bind it as an attribute on the `fluorescence_controls_ui` package,
+        which shadows tests' `sys.modules` monkeypatching of it."""
         logger.debug(f"Fluorescence applied ack: {body}")
+        from . import capture_service
+        capture_service.notify_applied()
 
     def _on_searching_triggered(self, body):
         """Backend scan state (json bool) -> the model, which drives the

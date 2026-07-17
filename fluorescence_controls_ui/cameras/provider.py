@@ -31,6 +31,16 @@ from .zwoasi import default_asi_sdk_dir, list_asi_cameras
 
 logger = get_logger(__name__)
 
+#: The most-recently-opened running feed (module-level registry): the
+#: burst capture service reads the active camera's raw frames through
+#: this, without the device viewer having to hand it a reference.
+_ACTIVE_FEED = None
+
+
+def current_feed():
+    """The active `AsiCameraFeed`, or None while no camera is running."""
+    return _ACTIVE_FEED
+
 
 class AsiCameraFeed(QObject):
     """One live ASI capture: keeps the latest raw sensor frame for
@@ -47,6 +57,9 @@ class AsiCameraFeed(QObject):
     def __init__(self, sdk_dir, camera_id):
         super().__init__()
         self._last_raw = None
+        #: Bumped on every raw frame (before `_last_raw` is stored), so a
+        #: capture can wait for a frame strictly newer than one it saw.
+        self.frame_seq = 0
         self._last_preview_time = 0.0
         # Display-adjustment LUT cache (rebuilt when the trio changes).
         self._display_lut = None
@@ -74,6 +87,10 @@ class AsiCameraFeed(QObject):
                                     ",".join(ADVANCED_CAMERA_TRAITS))
         asi_camera_settings.observe(self._on_auto_setting_changed,
                                     ",".join(AUTO_SETTING_TRAITS))
+        # Register as the active feed for the burst capture service
+        # (current_feed()) — the most recently opened feed wins.
+        global _ACTIVE_FEED
+        _ACTIVE_FEED = self
 
     def _on_thread_frame(self, raw):
         # Queued onto the GUI thread: keep the raw sensor frame for captures.
@@ -81,6 +98,7 @@ class AsiCameraFeed(QObject):
         # so it runs only while the device-viewer stream checkbox is on —
         # rate-capped and downscaled to preview size (captures keep the
         # full-rate, full-resolution raw frames).
+        self.frame_seq += 1
         self._last_raw = raw
         if not asi_camera_settings.device_viewer_stream:
             return
@@ -122,6 +140,15 @@ class AsiCameraFeed(QObject):
         if self._last_raw is None:
             return None
         return raw_to_qimage(self._last_raw)
+
+    def wait_for_frame_after(self, seq: int, timeout: float) -> bool:
+        """Block (worker thread) until a frame newer than ``seq`` lands."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.frame_seq > seq and self._last_raw is not None:
+                return True
+            time.sleep(0.02)
+        return False
 
     def _on_settings_changed(self, event):
         self._thread.set_camera_settings(
@@ -191,6 +218,11 @@ class AsiCameraFeed(QObject):
                                     remove=True)
         self._thread.stop()
         self._thread.wait(3000)
+        # Only clear the registry if a newer feed hasn't already taken
+        # over (this feed's stop() must not evict a feed opened after it).
+        global _ACTIVE_FEED
+        if _ACTIVE_FEED is self:
+            _ACTIVE_FEED = None
 
 
 class AsiCameraSourceProvider:
