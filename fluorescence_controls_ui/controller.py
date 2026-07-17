@@ -358,11 +358,22 @@ class FluorescenceControlsController(BaseStatusController):
 
     def _load_step_chain(self, step_id, cells):
         """Plain step selection: no free-mode captures were in play, so
-        just load the step's own stored chain."""
+        just load the step's own stored chain.
+
+        A panel edit on this same attached step publishes set_cell, which
+        the tree applies and then rebroadcasts PROTOCOL_TREE_ROW_SELECTED
+        for the still-selected step — that echo lands right back here. If
+        the incoming chain matches what `chain_rows` already holds, this
+        is that echo (not a genuine external change): skip the reload so
+        `chain_selection` survives it."""
+        entries = parse_chain(cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
+        if step_id == self.model.attached_step_id and [
+                e.model_dump() for e in entries] == [
+                r.to_entry_dict() for r in self.model.chain_rows]:
+            return
         self.model.attached_step_id = step_id
         self.model.attached_group_id = ""
         self.model.chain_selection = None
-        entries = parse_chain(cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
         self.model.chain_rows = [
             FluorescenceChainRow.from_entry(e) for e in entries]
 

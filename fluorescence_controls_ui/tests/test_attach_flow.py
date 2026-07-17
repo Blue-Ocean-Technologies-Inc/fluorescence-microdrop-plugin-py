@@ -245,6 +245,56 @@ def test_step_selection_append_suffixes_colliding_labels(monkeypatch):
     assert model.attached_step_id == "step-1"
 
 
+def test_row_selected_echo_of_own_edit_keeps_selection(monkeypatch):
+    """A panel edit on the attached row publishes set_cell; the tree
+    applies it and rebroadcasts PROTOCOL_TREE_ROW_SELECTED for the still-
+    selected step (cell-edit rebroadcast). That echo carries the exact
+    chain already in `chain_rows` and must not disturb the selection."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    entries = [ChainEntry(**_entry_dict("A")), ChainEntry(**_entry_dict("B"))]
+    stored = dump_chain(entries)
+    msg = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={FLUORESCENCE_CHAIN_COLUMN_ID: stored})
+    controller._on_tree_row_selected(_event(msg))
+
+    rows = model.chain_rows
+    model.chain_selection = rows[1]
+
+    echo = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={FLUORESCENCE_CHAIN_COLUMN_ID: dump_chain(entries)})
+    controller._on_tree_row_selected(_event(echo))
+
+    assert model.chain_selection is rows[1]
+    assert model.chain_rows is rows
+    assert list(model.chain_rows) == list(rows)
+
+
+def test_row_selected_same_step_with_external_change_reloads(monkeypatch):
+    """A genuinely different chain for the same step (not our own edit's
+    echo) must still reload."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    entries = [ChainEntry(**_entry_dict("A")), ChainEntry(**_entry_dict("B"))]
+    msg = ProtocolTreeRowSelectedMessage(
+        step_id="step-1",
+        cells={FLUORESCENCE_CHAIN_COLUMN_ID: dump_chain(entries)})
+    controller._on_tree_row_selected(_event(msg))
+
+    rows = model.chain_rows
+    model.chain_selection = rows[1]
+
+    changed = entries + [ChainEntry(**_entry_dict("C"))]
+    external = ProtocolTreeRowSelectedMessage(
+        step_id="step-1",
+        cells={FLUORESCENCE_CHAIN_COLUMN_ID: dump_chain(changed)})
+    controller._on_tree_row_selected(_event(external))
+
+    assert model.chain_selection is None
+    assert [r.label for r in model.chain_rows] == ["A", "B", "C"]
+    assert model.chain_rows is not rows
+
+
 def test_dialog_only_shown_when_free_mode_currently_active(monkeypatch):
     """`free` is computed from `attached_step_id == ""` — a non-empty
     `free_chain` stash left over from an earlier session must not trigger
