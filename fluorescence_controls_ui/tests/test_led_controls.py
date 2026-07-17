@@ -9,9 +9,10 @@ controller module.
 
 Also covers the panel<->chain-row live binding (row click loads the row
 into the panel and drives the LED; a panel edit re-saves into the
-selected row and pushes the chain), Add, label re-uniquify on collision,
-and Run Capture's lazy `capture_service` import (Task 6's module, which
-does not exist yet).
+selected row and pushes the chain), Add (labels DERIVED from
+image_tag/wavelength/position on push, never authored), and Run
+Capture's lazy `capture_service` import (Task 6's module, which does not
+exist yet).
 """
 import json
 import sys
@@ -167,30 +168,38 @@ def test_board_id_signal_fills_board_readout():
 
 def test_add_capture_appends_row_from_panel_values():
     controller, model = _controller()
-    model.label = "GFP"
+    model.image_tag = "GFP"
     model.wavelength = LED_WAVELENGTHS[2]
     model.intensity = 75
+    model.auto_exposure = True
+    model.auto_gain = True
     controller.add_capture()
     assert len(model.chain_rows) == 1
     row = model.chain_rows[0]
-    assert row.label == "GFP"
+    assert row.image_tag == "GFP"
     assert row.wavelength == LED_WAVELENGTHS[2]
     assert row.intensity == 75
+    assert row.auto_exposure is True
+    assert row.auto_gain is True
+    # add_capture's push derives the label from tag/wavelength/position.
+    assert row.label == "GFP_Green_540_nm_1"
     assert model.chain_selection is row
 
 
 def test_add_capture_defaults_label_from_wavelength():
     controller, model = _controller()
     controller.add_capture()
-    assert model.chain_rows[0].label == "Blue_460_nm"
+    assert model.chain_rows[0].label == "Blue_460_nm_1"
 
 
 def test_add_capture_uniquifies_colliding_labels():
+    """Two adds of the same wavelength no longer collide-suffix — each
+    push re-derives the label from the row's chain position."""
     controller, model = _controller()
-    model.label = "GFP"
     controller.add_capture()
     controller.add_capture()
-    assert [r.label for r in model.chain_rows] == ["GFP", "GFP_2"]
+    assert [r.label for r in model.chain_rows] == [
+        "Blue_460_nm_1", "Blue_460_nm_2"]
 
 
 def test_add_capture_in_free_mode_stashes_into_free_chain():
@@ -217,25 +226,12 @@ def test_add_capture_while_attached_pushes_set_cell(monkeypatch):
     assert calls[0]["value"][0]["label"] == model.chain_rows[0].label
 
 
-# --- chain ops: label re-uniquify on direct rename -------------------------------------
-
-def test_direct_label_rename_collision_gets_suffixed():
-    controller, model = _controller()
-    model.label = "GFP"
-    controller.add_capture()
-    model.chain_selection = None       # deselect: next edit isn't a row write-back
-    model.label = "DAPI"
-    controller.add_capture()
-    model.chain_rows[1].label = "GFP"          # direct table-style rename
-    assert [r.label for r in model.chain_rows] == ["GFP", "GFP_2"]
-
-
 # --- panel <-> chain-row live binding ---------------------------------------------------
 
 def test_row_selection_loads_panel_and_drives_led(published):
     controller, model = _live_controller()
     row = FluorescenceChainRow(
-        label="Cy5", wavelength=LED_WAVELENGTHS[3], intensity=80,
+        image_tag="Cy5", wavelength=LED_WAVELENGTHS[3], intensity=80,
         frequency=1234, exposure=5.0, gain=10)
     model.chain_rows = [row]
     model.light_on = True
@@ -243,7 +239,7 @@ def test_row_selection_loads_panel_and_drives_led(published):
 
     model.chain_selection = row
 
-    assert model.label == "Cy5"
+    assert model.image_tag == "Cy5"
     assert model.wavelength == LED_WAVELENGTHS[3]
     assert model.intensity == 80
     # The row's already-updated duty rides the exclusive wavelength publish.

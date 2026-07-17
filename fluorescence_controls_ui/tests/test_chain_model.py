@@ -19,6 +19,7 @@ from fluorescence_controls_ui.model import FluorescenceStatusModel
 def test_chain_row_defaults():
     row = FluorescenceChainRow()
     assert row.label == ""
+    assert row.image_tag == ""
     assert row.wavelength == LED_WAVELENGTHS[0]
     assert row.intensity == 50
     assert row.frequency == 40000
@@ -66,6 +67,14 @@ def test_chain_row_from_entry_to_entry_dict_round_trip():
     assert row.to_entry_dict() == entry.model_dump()
 
 
+def test_chain_row_image_tag_round_trips_through_chain_entry():
+    row = FluorescenceChainRow(image_tag="gfp", wavelength=LED_WAVELENGTHS[0])
+    entry = ChainEntry(**row.to_entry_dict())
+    assert entry.image_tag == "gfp"
+    back = FluorescenceChainRow.from_entry(entry)
+    assert back.image_tag == "gfp"
+
+
 # --- model: deleted traits ---------------------------------------------------------
 
 def test_model_has_no_mode_or_per_mode_traits():
@@ -91,7 +100,7 @@ def test_model_has_no_mode_or_per_mode_traits():
 
 def test_model_has_single_param_set_with_old_br_defaults():
     model = FluorescenceStatusModel()
-    assert model.label == ""
+    assert model.image_tag == ""
     assert model.wavelength == LED_WAVELENGTHS[0]
     assert model.intensity == 50
     assert model.frequency == 40000

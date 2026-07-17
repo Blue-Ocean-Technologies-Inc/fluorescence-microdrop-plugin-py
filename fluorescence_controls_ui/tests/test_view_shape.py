@@ -40,7 +40,7 @@ def test_no_deleted_mode_or_per_mode_item_names():
 
 def test_params_group_present():
     names = _all_item_names()
-    for name in ("label", "wavelength", "intensity", "frequency",
+    for name in ("image_tag", "wavelength", "intensity", "frequency",
                  "exposure", "auto_exposure", "gain", "auto_gain"):
         assert name in names, f"{name!r} missing from view item names"
 

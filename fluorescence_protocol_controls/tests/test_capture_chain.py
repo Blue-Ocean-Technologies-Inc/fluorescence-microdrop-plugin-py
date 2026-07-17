@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import (
     ChainEntry, dump_chain, parse_chain, sanitize_label, ticked,
-    unique_label,
+    chain_label,
 )
 
 
@@ -75,14 +75,18 @@ def test_sanitize_label_empty_result_falls_back_to_capture():
     assert sanitize_label("###") == "capture"
 
 
-# --- unique_label ----------------------------------------------------------
+# --- chain_label -----------------------------------------------------------
 
-def test_unique_label_no_collision_returns_as_is():
-    assert unique_label("GFP", set()) == "GFP"
+def test_chain_label_without_tag_is_wavelength_index():
+    assert chain_label("", "Green (540 nm)", 2) == "Green_540_nm_2"
 
 
-def test_unique_label_suffixes_first_free_number():
-    assert unique_label("GFP", {"GFP", "GFP_2"}) == "GFP_3"
+def test_chain_label_with_tag_prefixes_it():
+    assert chain_label("gfp", "Green (540 nm)", 1) == "gfp_Green_540_nm_1"
+
+
+def test_chain_label_sanitizes_the_tag():
+    assert chain_label("my #tag!", "Blue (460 nm)", 3) == "my_tag_Blue_460_nm_3"
 
 
 def test_chains_saved_before_auto_flags_load_with_auto_off():

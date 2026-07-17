@@ -17,6 +17,7 @@ import fluorescence_controls_ui.controller as controller_mod
 from fluorescence_controls_ui.controller import FluorescenceControlsController
 from fluorescence_controls_ui.chain_model import FluorescenceChainRow
 from fluorescence_controls_ui.model import FluorescenceStatusModel
+from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import ChainEntry, dump_chain
 from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
 from pluggable_protocol_tree.models.cell_sync import (
@@ -193,6 +194,9 @@ def test_step_selection_new_step(monkeypatch):
 
 
 def test_step_selection_replace(monkeypatch):
+    """The attach's push re-derives the label from the merged (here:
+    replaced) position — the free-mode row's authored "A" label is
+    overwritten, same as any other push."""
     monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Replace")
     set_cell = _set_cell_recorder(monkeypatch)
     controller, model = _controller()
@@ -204,14 +208,17 @@ def test_step_selection_replace(monkeypatch):
         step_id="step-1", cells={FLUORESCENCE_CHAIN_COLUMN_ID: existing})
     controller._on_tree_row_selected(_event(msg))
 
-    assert [r.label for r in model.chain_rows] == ["A"]
+    assert [r.label for r in model.chain_rows] == ["Blue_460_nm_1"]
     assert model.attached_step_id == "step-1"
     assert model.free_chain == []
     assert len(set_cell) == 1
-    assert set_cell[0]["value"][0]["label"] == "A"
+    assert set_cell[0]["value"][0]["label"] == "Blue_460_nm_1"
 
 
 def test_step_selection_append_merges_in_order(monkeypatch):
+    """Append's push re-derives every label from the merged position —
+    the existing step's row lands at position 1, the free-mode row at
+    position 2, both as the default wavelength's derived label."""
     monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Append")
     set_cell = _set_cell_recorder(monkeypatch)
     controller, model = _controller()
@@ -223,25 +230,33 @@ def test_step_selection_append_merges_in_order(monkeypatch):
         step_id="step-1", cells={FLUORESCENCE_CHAIN_COLUMN_ID: existing})
     controller._on_tree_row_selected(_event(msg))
 
-    assert [r.label for r in model.chain_rows] == ["A", "B"]
+    assert [r.label for r in model.chain_rows] == [
+        "Blue_460_nm_1", "Blue_460_nm_2"]
     assert model.attached_step_id == "step-1"
     assert model.free_chain == []
     assert len(set_cell) == 1
 
 
-def test_step_selection_append_suffixes_colliding_labels(monkeypatch):
+def test_step_selection_append_relabels_by_merged_position(monkeypatch):
+    """Append no longer suffixes colliding labels on collision — the
+    attach's push re-derives every label from its merged chain position,
+    so four same-wavelength rows land as ..._1 through ..._4 in merged
+    order (existing step rows first, then the free-mode rows)."""
     monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Append")
     _set_cell_recorder(monkeypatch)
     controller, model = _controller()
-    model.free_chain = [FluorescenceChainRow(label="GFP")]
+    model.free_chain = [
+        FluorescenceChainRow(label="C"), FluorescenceChainRow(label="D")]
     model.chain_rows = list(model.free_chain)
 
-    existing = dump_chain([ChainEntry(**_entry_dict("GFP"))])
+    existing = dump_chain([
+        ChainEntry(**_entry_dict("A")), ChainEntry(**_entry_dict("B"))])
     msg = ProtocolTreeRowSelectedMessage(
         step_id="step-1", cells={FLUORESCENCE_CHAIN_COLUMN_ID: existing})
     controller._on_tree_row_selected(_event(msg))
 
-    assert [r.label for r in model.chain_rows] == ["GFP", "GFP_2"]
+    assert [r.label for r in model.chain_rows] == [
+        "Blue_460_nm_1", "Blue_460_nm_2", "Blue_460_nm_3", "Blue_460_nm_4"]
     assert model.attached_step_id == "step-1"
 
 
@@ -389,10 +404,12 @@ def test_delete_capture_removes_selected_row_and_pushes(monkeypatch):
 
     controller.delete_capture()
 
-    assert [r.label for r in model.chain_rows] == ["B"]
+    # The deletion's push re-derives the surviving row's label from its
+    # new (only) position.
+    assert [r.label for r in model.chain_rows] == ["Blue_460_nm_1"]
     assert model.chain_selection is None
     assert len(set_cell) == 1
-    assert [e["label"] for e in set_cell[-1]["value"]] == ["B"]
+    assert [e["label"] for e in set_cell[-1]["value"]] == ["Blue_460_nm_1"]
 
 
 def test_delete_capture_without_selection_removes_last_row(monkeypatch):
@@ -404,7 +421,7 @@ def test_delete_capture_without_selection_removes_last_row(monkeypatch):
 
     controller.delete_capture()
 
-    assert [r.label for r in model.chain_rows] == ["A"]
+    assert [r.label for r in model.chain_rows] == ["Blue_460_nm_1"]
 
 
 def test_delete_capture_on_empty_chain_is_a_noop(monkeypatch):
@@ -424,7 +441,7 @@ def test_delete_capture_in_free_mode_syncs_free_chain(monkeypatch):
 
     controller.delete_capture()
 
-    assert [r.label for r in model.free_chain] == ["A"]
+    assert [r.label for r in model.free_chain] == ["Blue_460_nm_1"]
     assert set_cell == []
 
 
@@ -438,7 +455,7 @@ def test_delete_chain_row_menu_action_deletes_clicked_row(monkeypatch):
 
     controller.delete_chain_row(None, [row0])
 
-    assert [r.label for r in model.chain_rows] == ["B"]
+    assert [r.label for r in model.chain_rows] == ["Blue_460_nm_1"]
 
 
 def test_handle_delete_key_only_acts_on_a_selection(monkeypatch):
@@ -490,7 +507,9 @@ def test_row_click_loads_auto_flags_into_panel(monkeypatch):
 
 def test_reorder_of_chain_rows_pushes_chain(monkeypatch):
     """The table is reorderable and chain order IS execution order: an
-    in-place reorder (what TableEditor drag does) must persist."""
+    in-place reorder (what TableEditor drag does) must persist. Both rows
+    share the default wavelength, so the push's relabel derives purely
+    from the new position: the row moved to the front becomes ..._1."""
     set_cell = _set_cell_recorder(monkeypatch)
     controller, model = _controller()
     model.attached_step_id = "step-1"
@@ -501,4 +520,43 @@ def test_reorder_of_chain_rows_pushes_chain(monkeypatch):
     model.chain_rows[0:2] = [row1, row0]        # in-place reorder
 
     assert set_cell
-    assert [e["label"] for e in set_cell[-1]["value"]] == ["B", "A"]
+    assert [e["label"] for e in set_cell[-1]["value"]] == [
+        "Blue_460_nm_1", "Blue_460_nm_2"]
+
+
+def test_reorder_reindexes_labels(monkeypatch):
+    """Reordering doesn't just persist order — the derived label is
+    position-based, so a swap of two DIFFERENT-wavelength rows re-derives
+    both labels to match their new positions."""
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    row0 = FluorescenceChainRow(wavelength=LED_WAVELENGTHS[0])   # Blue
+    row1 = FluorescenceChainRow(wavelength=LED_WAVELENGTHS[2])   # Green
+    model.chain_rows = [row0, row1]
+    set_cell.clear()
+
+    model.chain_rows[0:2] = [row1, row0]        # in-place reorder
+
+    assert row1.label == "Green_540_nm_1"
+    assert row0.label == "Blue_460_nm_2"
+    assert set_cell
+
+
+def test_image_tag_edit_updates_derived_label_and_pushes(monkeypatch):
+    """A panel Image Tag edit re-saves into the selected row (same as any
+    other CHAIN_ROW_PARAM_TRAITS edit) and the resulting push's relabel
+    picks it up as the label's prefix."""
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    row0 = FluorescenceChainRow()
+    model.chain_rows = [row0]
+    model.chain_selection = row0
+    set_cell.clear()
+
+    model.image_tag = "gfp"
+
+    assert row0.image_tag == "gfp"
+    assert set_cell
+    assert set_cell[-1]["value"][0]["label"] == "gfp_Blue_460_nm_1"

@@ -32,6 +32,9 @@ class FluorescenceChainRow(HasTraits):
     run = Bool(True)
     auto_exposure = Bool(False)
     auto_gain = Bool(False)
+    # Optional user tag; `label` above is derived from it (see
+    # capture_chain.chain_label) and never edited directly.
+    image_tag = Str("")
 
     def to_entry_dict(self) -> dict:
         """This row's params as a `ChainEntry`-shaped dict (`exposure` ->
@@ -46,6 +49,7 @@ class FluorescenceChainRow(HasTraits):
             "run": self.run,
             "auto_exposure": self.auto_exposure,
             "auto_gain": self.auto_gain,
+            "image_tag": self.image_tag,
         }
 
     @classmethod
@@ -61,4 +65,5 @@ class FluorescenceChainRow(HasTraits):
             run=entry.run,
             auto_exposure=entry.auto_exposure,
             auto_gain=entry.auto_gain,
+            image_tag=entry.image_tag,
         )

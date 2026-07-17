@@ -53,7 +53,11 @@ control_group = VGroup(
 # The Auto checkboxes hand exposure/gain to the capture thread's brightness
 # loop; the manual sliders disable while their auto is on.
 params_group = VGroup(
-    Item("label", label="Label"),
+    # The chain-row label is derived (image_tag_wavelength_index) and
+    # read-only in the table; the panel edits only this optional tag.
+    Item("image_tag", label="Image Tag",
+         tooltip="Optional tag prefixed to the derived capture label "
+                 "(tag_wavelength_index); leave empty for none"),
     Item("wavelength", label="Wavelength"),
     Item("intensity", label="Intensity (%)"),
     Item("frequency", label="Frequency (Hz)"),
@@ -87,7 +91,10 @@ ChainRowMenu = Menu(
 
 chain_table_editor = TableEditor(
     columns=[
-        ObjectColumn(name="label", label="Label", resize_mode="stretch"),
+        # Derived (image_tag_wavelength_index) — read-only, route-table
+        # name-column parity; authored only via the panel's Image Tag.
+        ObjectColumn(name="label", label="Label", resize_mode="stretch",
+                     editable=False),
         RunColumn(
             name="run",
             label="Run",

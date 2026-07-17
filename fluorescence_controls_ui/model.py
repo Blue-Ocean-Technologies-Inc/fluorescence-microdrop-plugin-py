@@ -73,7 +73,9 @@ class FluorescenceStatusModel(BaseStatusModel):
     auto_gain = Bool(True)
 
     # Single LED/camera param set (defaults match the old brightfield row).
-    label = Str("")
+    # Chain-row labels are DERIVED (image_tag_wavelength_index, read-only
+    # in the table); the panel edits only this optional tag.
+    image_tag = Str("")
     wavelength = Enum(*LED_WAVELENGTHS)
     intensity = Range(
         LED_DUTY_MIN, LED_DUTY_MAX, value=INTENSITY_DEFAULT, mode="slider",

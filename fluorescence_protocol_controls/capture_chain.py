@@ -39,6 +39,9 @@ class ChainEntry(BaseModel):
     # point (a deliberate trade of replay determinism for convenience).
     auto_exposure: bool = False
     auto_gain: bool = False
+    # Optional user tag; `label` is DERIVED from it via chain_label()
+    # (image_tag_wavelength_index) and is read-only in the UI.
+    image_tag: str = ""
 
     @field_validator("wavelength")
     @classmethod
@@ -88,12 +91,11 @@ def sanitize_label(label: str) -> str:
     return clean or "capture"
 
 
-def unique_label(label: str, existing: set[str]) -> str:
-    """`label`, or `label_2`, `label_3`, ... — the first suffix not
-    already in `existing`."""
-    if label not in existing:
-        return label
-    suffix = 2
-    while f"{label}_{suffix}" in existing:
-        suffix += 1
-    return f"{label}_{suffix}"
+def chain_label(image_tag: str, wavelength: str, index: int) -> str:
+    """The DERIVED label of chain position ``index`` (1-based):
+    ``image_tag_wavelength_index``, with the optional tag omitted when
+    empty. The index makes labels unique within a chain by construction,
+    which is why there is no suffix-on-collision machinery."""
+    parts = ([image_tag, wavelength, str(index)] if image_tag
+             else [wavelength, str(index)])
+    return sanitize_label("_".join(parts))

@@ -14,8 +14,7 @@ from pluggable_protocol_tree.consts import (
 )
 
 from fluorescence_protocol_controls.capture_chain import (
-    ChainEntry, dump_chain, parse_chain, sanitize_label, ticked,
-    unique_label,
+    ChainEntry, chain_label, dump_chain, parse_chain, ticked,
 )
 from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
 
@@ -35,7 +34,7 @@ logger = get_logger(__name__)
 #: existing single-set observers below), a panel edit re-saves them into
 #: the selected row.
 CHAIN_ROW_PARAM_TRAITS = (
-    "label", "wavelength", "intensity", "frequency", "exposure", "gain",
+    "image_tag", "wavelength", "intensity", "frequency", "exposure", "gain",
     "auto_exposure", "auto_gain")
 CHAIN_ROW_PARAM_TRAITS_EXPRESSION = f"[{','.join(CHAIN_ROW_PARAM_TRAITS)}]"
 
@@ -77,8 +76,6 @@ class FluorescenceControlsController(BaseStatusController):
     #: Guards the panel<->row live binding against write-back loops while
     #: a row selection is loading its values into the panel traits.
     _loading_row = Bool(False)
-    #: Guards the label re-uniquify observer against its own rewrite.
-    _relabeling = Bool(False)
 
     # ------------------------------------------------------------------ #
     # UI build hook                                                        #
@@ -259,7 +256,7 @@ class FluorescenceControlsController(BaseStatusController):
             return
         self._loading_row = True
         try:
-            self.model.label = row.label
+            self.model.image_tag = row.image_tag
             # Auto flags FIRST: an auto OFF-transition adopts the camera's
             # current values into model.exposure/gain (_adopt_auto_value),
             # and the row's stored numbers below must win that write.
@@ -282,23 +279,18 @@ class FluorescenceControlsController(BaseStatusController):
         setattr(self.model.chain_selection, event.name, event.new)
         self._push_chain_to_step()
 
-    @observe("model:chain_rows:items:label")
-    def _relabel_on_collision(self, event):
-        """A label edit (panel or direct table edit) that collides with
-        another row in the chain gets suffixed uniquely. Reentrant: the
-        rewrite below re-fires this same observer, guarded off."""
-        if self._relabeling:
-            return
-        row = event.object
-        others = {r.label for r in self.model.chain_rows if r is not row}
-        unique = unique_label(row.label, others)
-        if unique != row.label:
-            self._relabeling = True
-            try:
-                row.label = unique
-            finally:
-                self._relabeling = False
-        self._push_chain_to_step()
+    def _relabel_chain(self, rows=None):
+        """Labels are DERIVED, never authored: image_tag_wavelength_index
+        (1-based chain position, tag omitted when empty — see
+        capture_chain.chain_label). Position makes them unique within a
+        chain by construction, which is what retired the old
+        suffix-on-collision machinery. Nothing observes row.label, so the
+        rewrites below fire no reentrant events."""
+        rows = self.model.chain_rows if rows is None else rows
+        for i, row in enumerate(rows):
+            expected = chain_label(row.image_tag, row.wavelength, i + 1)
+            if row.label != expected:
+                row.label = expected
 
     @observe("model:chain_rows:items:run")
     def _push_chain_on_run_toggle(self, event):
@@ -327,7 +319,9 @@ class FluorescenceControlsController(BaseStatusController):
         """Persist `chain_rows` to wherever it currently lives: an
         attached step's cell (tree write-back, blanking the cell when the
         chain empties), or the free-mode stash (nothing to write to the
-        tree while unattached)."""
+        tree while unattached). Every persist path funnels through here,
+        so this is also where derived labels are refreshed."""
+        self._relabel_chain()
         if self.model.attached_step_id:
             entries = [ChainEntry(**r.to_entry_dict())
                        for r in self.model.chain_rows]
@@ -395,16 +389,16 @@ class FluorescenceControlsController(BaseStatusController):
     # ------------------------------------------------------------------ #
     def add_capture(self):
         """Append a new row seeded from the panel's current values,
-        select it (re-loading it into the panel — a no-op except for the
-        uniquified label), and persist the chain."""
-        existing_labels = {r.label for r in self.model.chain_rows}
-        label = unique_label(
-            sanitize_label(self.model.label or self.model.wavelength),
-            existing_labels)
+        select it (re-loading it into the panel — a no-op), and persist
+        the chain; the push derives the new row's label from its tag,
+        wavelength, and position."""
         row = FluorescenceChainRow(
-            label=label, wavelength=self.model.wavelength,
+            image_tag=self.model.image_tag,
+            wavelength=self.model.wavelength,
             intensity=self.model.intensity, frequency=self.model.frequency,
-            exposure=self.model.exposure, gain=self.model.gain)
+            exposure=self.model.exposure, gain=self.model.gain,
+            auto_exposure=self.model.auto_exposure,
+            auto_gain=self.model.auto_gain)
         self.model.chain_rows = self.model.chain_rows + [row]
         self.model.chain_selection = row
         self._push_chain_to_step()
@@ -412,21 +406,6 @@ class FluorescenceControlsController(BaseStatusController):
     # ------------------------------------------------------------------ #
     # Free-mode attach flow                                                #
     # ------------------------------------------------------------------ #
-    def _suffixed(self, rows, existing):
-        """`rows` (free-mode chain rows) as `ChainEntry` objects, labels
-        re-uniquified against `existing`'s labels (and each other) so an
-        Append never collides."""
-        used = {e.label for e in existing}
-        suffixed = []
-        for row in rows:
-            entry = ChainEntry(**row.to_entry_dict())
-            label = unique_label(entry.label, used)
-            if label != entry.label:
-                entry = entry.model_copy(update={"label": label})
-            used.add(entry.label)
-            suffixed.append(entry)
-        return suffixed
-
     def _attach_to_step(self, step_id, entries):
         """Adopt `entries` (a list[ChainEntry]) as the pane's chain,
         attached to `step_id`, and push the write-back."""
@@ -520,7 +499,10 @@ class FluorescenceControlsController(BaseStatusController):
                 existing = parse_chain(
                     msg.cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
                 if choice == "Append":
-                    merged = existing + self._suffixed(free, existing)
+                    # No collision handling needed: the attach's push
+                    # re-derives every label from its merged position.
+                    merged = existing + [ChainEntry(**r.to_entry_dict())
+                                         for r in free]
                 else:                            # Replace
                     merged = [ChainEntry(**r.to_entry_dict()) for r in free]
                 self._attach_to_step(msg.step_id, merged)
