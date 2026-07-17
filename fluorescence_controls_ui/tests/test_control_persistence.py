@@ -35,19 +35,17 @@ def test_every_persisted_trait_exists_on_model_and_preferences():
 def test_control_edits_restore_into_a_fresh_model():
     helper = _prefs()
     first = FluorescenceStatusModel(preferences=helper)
-    first.mode = "dual"                        # pushed to preferences live
-    first.fl_gain = 123
+    first.gain = 123                               # pushed to preferences live
 
     model = FluorescenceStatusModel(preferences=helper)   # "next session"
-    assert model.mode == "dual"
-    assert model.fl_gain == 123
+    assert model.gain == 123
 
 
 def test_preference_edits_pull_into_a_live_control_model():
     helper = _prefs()
     model = FluorescenceStatusModel(preferences=helper)
-    helper.mode = "fl"
-    assert model.mode == "fl"
+    helper.frequency = 12345
+    assert model.frequency == 12345
 
 
 def test_viewer_window_round_trip():

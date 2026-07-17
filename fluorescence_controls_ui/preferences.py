@@ -23,10 +23,8 @@ from .cameras.consts import (
 )
 from .consts import (
     LED_WAVELENGTHS,
-    BR_INTENSITY_DEFAULT, BR_FREQUENCY_DEFAULT,
-    BR_EXPOSURE_DEFAULT, BR_GAIN_DEFAULT,
-    FL_INTENSITY_DEFAULT, FL_FREQUENCY_DEFAULT,
-    FL_EXPOSURE_DEFAULT, FL_GAIN_DEFAULT,
+    INTENSITY_DEFAULT, FREQUENCY_DEFAULT,
+    EXPOSURE_DEFAULT, GAIN_DEFAULT,
 )
 
 logger = get_logger(__name__)
@@ -74,28 +72,18 @@ class FluorescencePreferences(PreferencesHelper):
 
     # Control-pane values (see consts.PERSISTED_CONTROL_TRAITS). Edited from
     # the fluorescence controls dock pane — deliberately NOT on the
-    # preferences tab. Defaults match the model's.
-    mode = Str("br", desc="Imaging mode: br / fl / dual")
-    br_wavelength = Str(
-        LED_WAVELENGTHS[0], desc="Brightfield LED wavelength")
-    br_intensity = Int(
-        BR_INTENSITY_DEFAULT, desc="Brightfield LED duty (%)")
-    br_frequency = Int(
-        BR_FREQUENCY_DEFAULT, desc="Brightfield LED PWM frequency (Hz)")
-    br_exposure = Float(
-        BR_EXPOSURE_DEFAULT, desc="Brightfield camera exposure (ms)")
-    br_gain = Int(
-        BR_GAIN_DEFAULT, desc="Brightfield camera gain")
-    fl_wavelength = Str(
-        LED_WAVELENGTHS[0], desc="Fluorescence LED wavelength")
-    fl_intensity = Int(
-        FL_INTENSITY_DEFAULT, desc="Fluorescence LED duty (%)")
-    fl_frequency = Int(
-        FL_FREQUENCY_DEFAULT, desc="Fluorescence LED PWM frequency (Hz)")
-    fl_exposure = Float(
-        FL_EXPOSURE_DEFAULT, desc="Fluorescence camera exposure (ms)")
-    fl_gain = Int(
-        FL_GAIN_DEFAULT, desc="Fluorescence camera gain")
+    # preferences tab. Defaults match the model's. `label` is NOT
+    # persisted — it defaults from the wavelength at Add time.
+    wavelength = Str(
+        LED_WAVELENGTHS[0], desc="LED wavelength")
+    intensity = Int(
+        INTENSITY_DEFAULT, desc="LED duty (%)")
+    frequency = Int(
+        FREQUENCY_DEFAULT, desc="LED PWM frequency (Hz)")
+    exposure = Float(
+        EXPOSURE_DEFAULT, desc="camera exposure (ms)")
+    gain = Int(
+        GAIN_DEFAULT, desc="camera gain")
     device_viewer_stream = Bool(
         True, desc="Render the live ASI feed in the device viewer")
     auto_exposure = Bool(
