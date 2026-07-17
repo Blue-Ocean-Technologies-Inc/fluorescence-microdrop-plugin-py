@@ -23,6 +23,9 @@ from pyface.gui import GUI
 from pyface.qt.QtCore import QTimer
 
 from fluorescence_controller.consts import ALL_LEDS_OFF, FLUORESCENCE_APPLIED
+from fluorescence_controller.datamodels import (
+    protocol_set_fluorescence_publisher,
+)
 from fluorescence_controls_ui.live_state import fluorescence_live_state
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
@@ -30,7 +33,7 @@ from pluggable_protocol_tree.models.column import (
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
 from ..capture_chain import parse_chain, ticked
-from ..consts import FLUORESCENCE_CHAIN_COLUMN_ID
+from ..consts import FLUORESCENCE_CHAIN_COLUMN_ID, LED_STABILIZATION_S
 
 logger = get_logger(__name__)
 
@@ -120,8 +123,37 @@ class FluorescenceChainHandler(BaseColumnHandler):
     default_ack_time_s = 5.0
 
     def on_pre_step(self, row, ctx):
-        # The per-entry burst execution loop lands in Task 7.
-        pass
+        """Fire this step's ticked capture-chain entries, in order, into
+        one folder: apply camera settings, publish the LED state, block
+        on the EXECUTOR's own applied-ack mailbox (`ctx.wait_for` — not
+        capture_service's Event, which is for pane-driven bursts only),
+        then save the frame. Any raise (TimeoutError from the wait,
+        RuntimeError from the save) propagates uncaught: the step fails
+        and its ack is withheld (existing backend error contract,
+        `fluorescence_command_setter_service.py:57`, unchanged).
+
+        `capture_service` is imported lazily here (mirrors
+        `controller.run_capture`'s pattern) so this column stays
+        importable without the camera stack, and stays mockable in
+        tests."""
+        if getattr(ctx, "preview_mode", False):
+            return
+        entries = ticked(parse_chain(
+            getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID, None)))
+        if not entries:
+            return
+
+        from fluorescence_controls_ui import capture_service
+
+        folder = capture_service.burst_folder(
+            step_desc=row.name, dotted_id=row.dotted_path())
+        for entry in entries:
+            capture_service.apply_camera_settings(entry)
+            protocol_set_fluorescence_publisher.publish(
+                light_on=True, led=entry.led_index, duty=entry.intensity,
+                frequency=entry.frequency, settle_s=LED_STABILIZATION_S)
+            ctx.wait_for(FLUORESCENCE_APPLIED, timeout=self.ack_time_s)
+            capture_service.save_entry_capture(entry, folder)
 
     def on_post_protocol_end(self, ctx):
         """Lights out at the end of every run — unconditional, because the
