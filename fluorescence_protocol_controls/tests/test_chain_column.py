@@ -220,6 +220,18 @@ def test_run_end_preview_mode_publishes_nothing(published):
     assert published == []
 
 
-def test_on_pre_step_is_currently_a_noop():
-    # Filled in by Task 7; for now it must not raise or publish anything.
-    FluorescenceChainHandler().on_pre_step(object(), object())
+def test_on_pre_step_bare_row_is_a_noop():
+    # A row without the chain trait (here a bare `object()`) hits the
+    # empty-chain guard: `getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID,
+    # None)` is None, so on_pre_step returns before it ever fires
+    # anything. `ctx` still needs the real StepContext shape (a
+    # `.protocol` back-reference carrying `preview_mode`) since that is
+    # checked first. Execution behavior (chain firing, preview-mode
+    # gating, etc.) is covered in test_chain_execution.py.
+    class _Protocol:
+        preview_mode = False
+
+    class _Ctx:
+        protocol = _Protocol()
+
+    FluorescenceChainHandler().on_pre_step(object(), _Ctx())

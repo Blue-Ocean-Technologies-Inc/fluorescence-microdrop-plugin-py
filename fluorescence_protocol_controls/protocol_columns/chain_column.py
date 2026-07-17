@@ -136,7 +136,7 @@ class FluorescenceChainHandler(BaseColumnHandler):
         `controller.run_capture`'s pattern) so this column stays
         importable without the camera stack, and stays mockable in
         tests."""
-        if getattr(ctx, "preview_mode", False):
+        if getattr(ctx.protocol, "preview_mode", False):
             return
         entries = ticked(parse_chain(
             getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID, None)))

@@ -44,12 +44,23 @@ def row_type():
     return build_row_type([col], base=BaseRow), col
 
 
+class _Protocol:
+    """Fake ProtocolContext: the real `preview_mode` lives here, not on
+    the StepContext (see `_Ctx`)."""
+
+    def __init__(self, preview_mode=False):
+        self.preview_mode = preview_mode
+
+
 class _Ctx:
-    """Fake executor context: records `wait_for` calls, raises whatever
-    `next_error` is queued for the current call (or nothing)."""
+    """Fake executor context, shaped like the real `StepContext`: it has
+    NO `preview_mode` of its own (that lives on `ctx.protocol` — a
+    `ProtocolContext`), only `wait_for` and a `.protocol` back-reference.
+    Records `wait_for` calls, raises whatever `next_error` is queued for
+    the current call (or nothing)."""
 
     def __init__(self, preview_mode=False, errors=None):
-        self.preview_mode = preview_mode
+        self.protocol = _Protocol(preview_mode=preview_mode)
         self.wait_for_calls = []
         self._errors = list(errors or [])
 
@@ -133,7 +144,8 @@ def test_fake_capture_service_actually_intercepts_the_lazy_import(
     # Proves the monkeypatch mechanism works BEFORE relying on it below:
     # exactly what on_pre_step's lazy import statement would resolve to.
     from fluorescence_controls_ui import capture_service
-    assert capture_service is fake_capture_service is not None or True
+    assert capture_service is sys.modules[
+        "fluorescence_controls_ui.capture_service"]
     assert capture_service.burst_folder() == FAKE_FOLDER
 
 
@@ -177,6 +189,40 @@ def test_preview_mode_is_a_noop(row_type, fake_capture_service,
     col.model.set_value(row, [e.model_dump() for e in [_entry("a")]])
 
     ctx = _Ctx(preview_mode=True)
+    FluorescenceChainHandler().on_pre_step(row, ctx)
+
+    assert fake_capture_service["burst_folder"] == []
+    assert fake_capture_service["apply"] == []
+    assert publisher_calls == []
+    assert ctx.wait_for_calls == []
+
+
+def test_preview_mode_reads_from_ctx_protocol_not_ctx_itself(
+        row_type, fake_capture_service, publisher_calls):
+    """Regression pin: `on_pre_step` receives a `StepContext`, which has
+    NO `preview_mode` of its own — the real flag lives on
+    `ctx.protocol` (a `ProtocolContext`). A ctx object that lacks its
+    own `preview_mode` attribute but carries `protocol.preview_mode =
+    True` must still be treated as a preview no-op. Before the fix,
+    `getattr(ctx, "preview_mode", False)` silently fell through to
+    `False` here, and a preview run would fire real LED commands and
+    captures."""
+    Row, col = row_type
+    row = Row()
+    col.model.set_value(row, [e.model_dump() for e in [_entry("a")]])
+
+    class _StepCtxNoOwnPreviewMode:
+        def __init__(self, protocol):
+            self.protocol = protocol
+            self.wait_for_calls = []
+
+        def wait_for(self, topic, timeout):
+            self.wait_for_calls.append((topic, timeout))
+
+    assert not hasattr(_StepCtxNoOwnPreviewMode, "preview_mode")
+    ctx = _StepCtxNoOwnPreviewMode(_Protocol(preview_mode=True))
+    assert not hasattr(ctx, "preview_mode")
+
     FluorescenceChainHandler().on_pre_step(row, ctx)
 
     assert fake_capture_service["burst_folder"] == []
