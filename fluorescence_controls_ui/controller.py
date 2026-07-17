@@ -294,6 +294,18 @@ class FluorescenceControlsController(BaseStatusController):
                 self._relabeling = False
         self._push_chain_to_step()
 
+    @observe("model:chain_rows:items:run")
+    def _push_chain_on_run_toggle(self, event):
+        """A Run-column tick/untick (panel or direct table edit) persists
+        immediately, same as a label edit — otherwise an attached step's
+        stored cell goes stale (ticked/total display, the capture lock,
+        and the executed-entry set all read the stale cell). Guarded like
+        the row-load binding: a row load never mutates `run`, but stay
+        consistent with the panel<->row observers above."""
+        if self._loading_row:
+            return
+        self._push_chain_to_step()
+
     def _push_chain_to_step(self):
         """Persist `chain_rows` to wherever it currently lives: an
         attached step's cell (tree write-back, blanking the cell when the
@@ -417,8 +429,17 @@ class FluorescenceControlsController(BaseStatusController):
         step/group until the operator resolves the attach dialog — safe
         to be modal here since this observer runs on the GUI thread,
         never inside a table commit."""
+        # Mid-run, the free chain is treated as empty: no dialog fires and
+        # nothing clears it. A run-time click / nav button still delivers
+        # this message; Microdrop silently drops the mid-run set_cell/
+        # add_step publish an Append/Replace/New-step would fire, which
+        # would otherwise clear free_chain while the write never lands.
+        # The pane simply mirrors the selection passively until the run
+        # ends, and the stash survives (neither `_load_step_chain` nor
+        # `_enter_free_mode` touch `free_chain`).
         free = (list(self.model.free_chain)
-                if self.model.attached_step_id == "" else [])
+                if self.model.attached_step_id == ""
+                and not self.model.protocol_running else [])
         msg = event.new
         if msg.step_id:
             if free:

@@ -310,3 +310,67 @@ def test_dialog_only_shown_when_free_mode_currently_active(monkeypatch):
     controller._on_tree_row_selected(_event(msg))
 
     assert model.attached_step_id == "step-1"
+
+
+# --- F1: run-checkbox toggle persists ---------------------------------------------------
+
+def test_run_toggle_on_attached_step_pushes_set_cell(monkeypatch):
+    """Ticking/unticking the Run column on an ATTACHED step's chain must
+    persist via set_cell, exactly like a label edit does — otherwise the
+    stored cell goes stale (ticked/total display, #541 capture lock,
+    executed-entry set all wrong)."""
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    row0 = FluorescenceChainRow(label="A", run=True)
+    row1 = FluorescenceChainRow(label="B", run=True)
+    model.chain_rows = [row0, row1]
+    set_cell.clear()          # drop any publish from the assignment above
+
+    model.chain_rows[1].run = False
+
+    assert len(set_cell) == 1
+    assert set_cell[-1]["step_id"] == "step-1"
+    assert set_cell[-1]["value"][0]["run"] is True
+    assert set_cell[-1]["value"][1]["run"] is False
+
+
+def test_run_toggle_in_free_mode_does_not_publish_set_cell(monkeypatch):
+    """In free mode there is no tree cell to write back to — the toggle
+    still needs to sync into `free_chain` (via `_push_chain_to_step`'s
+    free-mode branch), but must not fire a set_cell publish."""
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    row0 = FluorescenceChainRow(label="A", run=True)
+    model.chain_rows = [row0]
+    set_cell.clear()
+
+    model.chain_rows[0].run = False
+
+    assert set_cell == []
+    assert model.attached_step_id == ""
+    assert model.free_chain[0].run is False
+
+
+# --- F2: mid-run attach dialog must not clear the free-mode chain -----------------------
+
+def test_mid_run_selection_does_not_show_dialog_or_clear_free_chain(monkeypatch):
+    """A row-selected message arriving while `protocol_running` is True
+    (a user click or nav button during a run) must not pop the attach
+    dialog or trigger Append/Replace/New-step (which would clear
+    free_chain while Microdrop silently drops the mid-run publish)."""
+    monkeypatch.setattr(controller_mod, "choose", _dialog_should_not_be_called)
+    set_cell = _set_cell_recorder(monkeypatch)
+    add_step = _add_step_recorder(monkeypatch)
+    controller, model = _controller()
+    model.free_chain = [FluorescenceChainRow(label="A")]
+    model.chain_rows = list(model.free_chain)
+    model.protocol_running = True
+
+    msg = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={FLUORESCENCE_CHAIN_COLUMN_ID: []})
+    controller._on_tree_row_selected(_event(msg))
+
+    assert [r.label for r in model.free_chain] == ["A"]
+    assert set_cell == []
+    assert add_step == []
