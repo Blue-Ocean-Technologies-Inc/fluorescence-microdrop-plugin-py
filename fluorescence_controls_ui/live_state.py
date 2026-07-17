@@ -42,6 +42,14 @@ class FluorescenceLiveState(HasTraits):
     #: end fires {"light_on": False}.
     protocol_step_settings_applied = Event()
 
+    #: Parsed `ProtocolTreeRowSelectedMessage` ferried from the
+    #: worker-thread PROTOCOL_TREE_ROW_SELECTED listener (message_handler
+    #: .py) to the GUI thread: the controller observes this with
+    #: dispatch="ui" to run the capture-chain free-mode attach flow, whose
+    #: `choose()` dialogs are safely modal there (never inside a table
+    #: commit).
+    tree_row_selected = Event()
+
 
 #: Module-level singleton shared inside the fluorescence plugin.
 fluorescence_live_state = FluorescenceLiveState()

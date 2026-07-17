@@ -1,18 +1,30 @@
 """Hardware-free tests for the LED controls (frontend side).
 
-Mirrors the standalone app's slots: the light toggle drives the active
-mode's LED set, live edits publish only while lit in the matching mode, and
-wavelength switches are ONE exclusive set_led request (the backend runs the
-legacy off->on sequence atomically). `publish_message` is monkeypatched at
-the controller module.
+Reworked for the single param set (issue #6, no more br/fl/dual mode
+split): the light toggle drives ONE LED set, live edits publish only
+while the stream is on, the light is on, and idle, and wavelength
+switches are ONE exclusive set_led request (the backend runs the legacy
+off->on sequence atomically). `publish_message` is monkeypatched at the
+controller module.
+
+Also covers the panel<->chain-row live binding (row click loads the row
+into the panel and drives the LED; a panel edit re-saves into the
+selected row and pushes the chain), Add, label re-uniquify on collision,
+and Run Capture's lazy `capture_service` import (Task 6's module, which
+does not exist yet).
 """
 import json
+import sys
+import types
 
 import pytest
+from apptools.preferences.api import Preferences
 
 import fluorescence_controls_ui.controller as controller_mod
 from fluorescence_controls_ui.controller import FluorescenceControlsController
+from fluorescence_controls_ui.chain_model import FluorescenceChainRow
 from fluorescence_controls_ui.model import FluorescenceStatusModel
+from fluorescence_controls_ui.preferences import FluorescencePreferences
 from fluorescence_controller.consts import (
     SET_LED, SET_LED_FREQUENCY, ALL_LEDS_OFF, LED_WAVELENGTHS,
 )
@@ -29,117 +41,120 @@ def published(monkeypatch):
 
 
 def _controller():
-    model = FluorescenceStatusModel()
+    # In-memory preferences (test_control_persistence.py's convention):
+    # the model's preferences default to the process-wide "microdrop.
+    # peripheral_settings" node, which would otherwise leak wavelength/
+    # intensity/etc. edits across tests (and even across pytest runs).
+    model = FluorescenceStatusModel(
+        preferences=FluorescencePreferences(preferences=Preferences()))
     return FluorescenceControlsController(model=model), model
 
 
-# --- defaults (the standalone config.yml values) --------------------------------
+def _live_controller():
+    """A controller/model pair with the stream already on (the master
+    gate live edits need to publish)."""
+    controller, model = _controller()
+    model.stream_active = True
+    return controller, model
+
+
+# --- defaults ---------------------------------------------------------------------
 
 def test_defaults_match_standalone_config():
-    model = FluorescenceStatusModel()
-    assert model.mode == "br" and model.light_on is False
-    assert (model.br_intensity, model.br_frequency) == (38, 315)
-    assert (model.fl_intensity, model.fl_frequency) == (15, 40000)
-    assert model.br_led_index == 0 and model.fl_led_index == 0
+    _, model = _controller()
+    assert not hasattr(model, "mode")
+    assert model.light_on is False
+    assert model.wavelength == LED_WAVELENGTHS[0]
+    assert (model.intensity, model.frequency) == (50, 40000)
+    assert model.led_index == 0
 
 
-# --- master light toggle ---------------------------------------------------------
+# --- master light toggle ------------------------------------------------------------
 
-def test_light_on_drives_brightfield_in_br_mode(published):
-    controller, model = _controller()
+def test_light_on_drives_the_led(published):
+    controller, model = _live_controller()
+    published.clear()          # drop the stream-start SET_LED_FREQUENCY
     model.light_on = True
-    assert published == [(SET_LED, {"led": 0, "duty": 38})]
-
-
-def test_light_on_drives_brightfield_in_dual_mode(published):
-    # The original's abs/double branch: dual lights the brightfield set.
-    controller, model = _controller()
-    model.mode = "dual"
-    model.light_on = True
-    assert published == [(SET_LED, {"led": 0, "duty": 38})]
-
-
-def test_light_on_drives_fluorescence_in_fl_mode(published):
-    controller, model = _controller()
-    model.mode = "fl"
-    model.fl_wavelength = LED_WAVELENGTHS[2]
-    model.light_on = True
-    assert published == [(SET_LED, {"led": 2, "duty": 15})]
+    assert published == [(SET_LED, {"led": 0, "duty": 50})]
 
 
 def test_light_off_is_all_leds_off(published):
-    controller, model = _controller()
+    controller, model = _live_controller()
     model.light_on = True
     published.clear()
     model.light_on = False
     assert published == [(ALL_LEDS_OFF, {})]
 
 
-# --- live edits gate on light + matching mode ------------------------------------
+def test_light_on_stages_while_stream_off(published):
+    controller, model = _controller()
+    warned = []
+    model.observe(lambda event: warned.append(True), "stream_off_edit_warning")
+    model.light_on = True
+    assert published == []
+    assert warned          # user warned the edit is staged
+
+
+# --- live edits gate on stream + light + idle ----------------------------------------
 
 def test_intensity_edit_publishes_live_when_lit(published):
-    controller, model = _controller()
+    controller, model = _live_controller()
     model.light_on = True
     published.clear()
-    model.br_intensity = 55
+    model.intensity = 55
     assert published == [(SET_LED, {"led": 0, "duty": 55})]
 
 
 def test_intensity_edit_staged_while_light_off(published):
-    controller, model = _controller()
-    model.br_intensity = 55
+    controller, model = _live_controller()
+    published.clear()          # drop the stream-start SET_LED_FREQUENCY
+    model.intensity = 55
     assert published == []
 
 
-def test_br_edit_staged_in_fl_mode(published):
-    # update_br_intensity requires mode == "br" in the original — even dual
-    # stages brightfield edits.
+def test_intensity_edit_staged_while_stream_off(published):
     controller, model = _controller()
-    model.mode = "fl"
-    model.light_on = True
-    published.clear()
-    model.br_intensity = 55
-    model.br_frequency = 400
+    model.intensity = 55
     assert published == []
 
 
 def test_frequency_edit_publishes_live(published):
-    controller, model = _controller()
+    controller, model = _live_controller()
     model.light_on = True
     published.clear()
-    model.br_frequency = 500
+    model.frequency = 500
     assert published == [(SET_LED_FREQUENCY, {"led": 0, "frequency": 500})]
 
 
-# --- wavelength switch = ONE exclusive request ------------------------------------
+def test_live_edits_gated_off_during_protocol_run(published):
+    controller, model = _live_controller()
+    model.light_on = True
+    model.protocol_running = True
+    published.clear()
+    model.intensity = 60
+    model.frequency = 700
+    assert published == []
+
+
+# --- wavelength switch = ONE exclusive request ----------------------------------------
 
 def test_wavelength_switch_is_single_exclusive_request(published):
-    controller, model = _controller()
+    controller, model = _live_controller()
     model.light_on = True
     published.clear()
-    model.br_wavelength = LED_WAVELENGTHS[4]      # Red (630 nm)
-    assert published == [(SET_LED, {"led": 4, "duty": 38, "exclusive": True})]
-
-
-def test_fl_wavelength_switch_in_fl_mode(published):
-    controller, model = _controller()
-    model.mode = "fl"
-    model.light_on = True
-    published.clear()
-    model.fl_wavelength = LED_WAVELENGTHS[5]      # Deep Red (660 nm)
-    assert published == [(SET_LED, {"led": 5, "duty": 15, "exclusive": True})]
+    model.wavelength = LED_WAVELENGTHS[4]      # Red (630 nm)
+    assert published == [(SET_LED, {"led": 4, "duty": 50, "exclusive": True})]
 
 
 def test_wavelength_switch_staged_while_off(published):
     controller, model = _controller()
-    model.br_wavelength = LED_WAVELENGTHS[1]
+    model.wavelength = LED_WAVELENGTHS[1]
     assert published == []
 
 
-# --- board identity + section auto-collapse ---------------------------------------
+# --- board identity -----------------------------------------------------------------
 
 def test_board_id_signal_fills_board_readout():
-    # whoami identity (device_id first, heater-pane parity)
     from fluorescence_controls_ui.message_handler import FluorescenceMessageHandler
     model = FluorescenceStatusModel()
     handler = FluorescenceMessageHandler(model=model, name="fluorescence_controls_ui_listener")
@@ -148,12 +163,176 @@ def test_board_id_signal_fills_board_readout():
     assert model.board_id_text == "fluo_board"
 
 
-def test_mode_auto_collapses_unused_sections():
-    model = FluorescenceStatusModel()
-    assert (model.show_brightfield, model.show_fluorescence) == (True, False)
-    model.mode = "fl"
-    assert (model.show_brightfield, model.show_fluorescence) == (False, True)
-    model.mode = "dual"
-    assert (model.show_brightfield, model.show_fluorescence) == (True, True)
-    model.mode = "br"
-    assert (model.show_brightfield, model.show_fluorescence) == (True, False)
+# --- chain ops: Add -----------------------------------------------------------------
+
+def test_add_capture_appends_row_from_panel_values():
+    controller, model = _controller()
+    model.label = "GFP"
+    model.wavelength = LED_WAVELENGTHS[2]
+    model.intensity = 75
+    controller.add_capture()
+    assert len(model.chain_rows) == 1
+    row = model.chain_rows[0]
+    assert row.label == "GFP"
+    assert row.wavelength == LED_WAVELENGTHS[2]
+    assert row.intensity == 75
+    assert model.chain_selection is row
+
+
+def test_add_capture_defaults_label_from_wavelength():
+    controller, model = _controller()
+    controller.add_capture()
+    assert model.chain_rows[0].label == "Blue_460_nm"
+
+
+def test_add_capture_uniquifies_colliding_labels():
+    controller, model = _controller()
+    model.label = "GFP"
+    controller.add_capture()
+    controller.add_capture()
+    assert [r.label for r in model.chain_rows] == ["GFP", "GFP_2"]
+
+
+def test_add_capture_in_free_mode_stashes_into_free_chain():
+    controller, model = _controller()
+    controller.add_capture()
+    assert model.attached_step_id == ""
+    assert [r.label for r in model.free_chain] == [
+        r.label for r in model.chain_rows]
+
+
+def test_add_capture_while_attached_pushes_set_cell(monkeypatch):
+    from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
+    calls = []
+    monkeypatch.setattr(
+        controller_mod, "protocol_tree_set_cell_publisher",
+        types.SimpleNamespace(publish=lambda **kw: calls.append(kw)))
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    controller.add_capture()
+    assert len(calls) == 1
+    assert calls[0]["step_id"] == "step-1"
+    assert calls[0]["col_id"] == FLUORESCENCE_CHAIN_COLUMN_ID
+    assert len(calls[0]["value"]) == 1
+    assert calls[0]["value"][0]["label"] == model.chain_rows[0].label
+
+
+# --- chain ops: label re-uniquify on direct rename -------------------------------------
+
+def test_direct_label_rename_collision_gets_suffixed():
+    controller, model = _controller()
+    model.label = "GFP"
+    controller.add_capture()
+    model.chain_selection = None       # deselect: next edit isn't a row write-back
+    model.label = "DAPI"
+    controller.add_capture()
+    model.chain_rows[1].label = "GFP"          # direct table-style rename
+    assert [r.label for r in model.chain_rows] == ["GFP", "GFP_2"]
+
+
+# --- panel <-> chain-row live binding ---------------------------------------------------
+
+def test_row_selection_loads_panel_and_drives_led(published):
+    controller, model = _live_controller()
+    row = FluorescenceChainRow(
+        label="Cy5", wavelength=LED_WAVELENGTHS[3], intensity=80,
+        frequency=1234, exposure=5.0, gain=10)
+    model.chain_rows = [row]
+    model.light_on = True
+    published.clear()
+
+    model.chain_selection = row
+
+    assert model.label == "Cy5"
+    assert model.wavelength == LED_WAVELENGTHS[3]
+    assert model.intensity == 80
+    # The row's already-updated duty rides the exclusive wavelength publish.
+    assert (SET_LED, {"led": 3, "duty": 80, "exclusive": True}) in published
+
+
+def test_panel_edit_writes_back_into_selected_row_and_pushes(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        controller_mod, "protocol_tree_set_cell_publisher",
+        types.SimpleNamespace(publish=lambda **kw: calls.append(kw)))
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    row = FluorescenceChainRow(label="A")
+    model.chain_rows = [row]
+    model.chain_selection = row
+    calls.clear()
+
+    model.intensity = 42
+
+    assert row.intensity == 42
+    assert len(calls) == 1
+
+
+def test_panel_edit_without_selection_does_not_touch_any_row():
+    controller, model = _controller()
+    row = FluorescenceChainRow(label="A", intensity=10)
+    model.chain_rows = [row]
+    model.intensity = 99
+    assert row.intensity == 10
+
+
+# --- Run Capture: lazy capture_service import --------------------------------------------
+
+class _SyncThread:
+    """Runs the target synchronously — keeps the Run Capture tests
+    deterministic without real threading."""
+
+    def __init__(self, target=None, daemon=None):
+        self._target = target
+
+    def start(self):
+        self._target()
+
+
+@pytest.fixture
+def sync_thread(monkeypatch):
+    monkeypatch.setattr(
+        controller_mod, "threading",
+        types.SimpleNamespace(Thread=_SyncThread))
+
+
+@pytest.fixture
+def fake_capture_service(monkeypatch):
+    module = types.ModuleType("fluorescence_controls_ui.capture_service")
+    calls = []
+
+    def run_burst(entries, *, step_desc=None, step_id=None):
+        calls.append({"entries": entries, "step_desc": step_desc, "step_id": step_id})
+
+    module.run_burst = run_burst
+    monkeypatch.setitem(
+        sys.modules, "fluorescence_controls_ui.capture_service", module)
+    return calls
+
+
+def test_run_capture_calls_run_burst_on_ticked_entries(sync_thread, fake_capture_service):
+    controller, model = _controller()
+    model.chain_rows = [
+        FluorescenceChainRow(label="A", run=True),
+        FluorescenceChainRow(label="B", run=False),
+    ]
+    controller.run_capture()
+    assert len(fake_capture_service) == 1
+    assert [e.label for e in fake_capture_service[0]["entries"]] == ["A"]
+    assert fake_capture_service[0]["step_id"] == ""
+    assert fake_capture_service[0]["step_desc"] is None
+
+
+def test_run_capture_noop_when_no_ticked_entries(fake_capture_service):
+    controller, model = _controller()
+    model.chain_rows = [FluorescenceChainRow(label="A", run=False)]
+    controller.run_capture()
+    assert fake_capture_service == []
+
+
+def test_run_capture_disabled_during_protocol_run(fake_capture_service):
+    controller, model = _controller()
+    model.chain_rows = [FluorescenceChainRow(label="A", run=True)]
+    model.protocol_running = True
+    controller.run_capture()
+    assert fake_capture_service == []
