@@ -13,7 +13,7 @@ from pyface.api import DirectoryDialog, OK
 from logger.logger_service import get_logger
 from microdrop_application.preferences import MicrodropPreferences
 
-from .discovery import current_raw_captures_directory, discover_captures
+from .discovery import current_captures_directory, discover_captures
 from .display import load_image_array
 from .model import FluorescenceImageViewerModel
 
@@ -149,7 +149,7 @@ class FluorescenceImageViewerController(Controller):
     def _scan_directory(self):
         if self.model.directory:
             return Path(self.model.directory)
-        return current_raw_captures_directory()
+        return current_captures_directory()
 
     def rescan(self):
         """Sync with the browsed folder; a newly landed image is shown

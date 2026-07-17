@@ -91,7 +91,10 @@ def test_viewer_model_navigation_wraps_and_positions():
 def test_discover_captures_oldest_first_by_save_time(tmp_path):
     assert discovery.discover_captures(None) == []
     assert discovery.discover_captures(tmp_path / "absent") == []
-    older, newer = tmp_path / "b_older.png", tmp_path / "a_newer.png"
+    # Discovery is raws-only now: files live under a 16bit_raw parent.
+    raw_dir = tmp_path / "16bit_raw"
+    raw_dir.mkdir()
+    older, newer = raw_dir / "b_older.png", raw_dir / "a_newer.png"
     older.write_bytes(b"")
     newer.write_bytes(b"")
     os.utime(older, (1_000, 1_000))
@@ -99,18 +102,78 @@ def test_discover_captures_oldest_first_by_save_time(tmp_path):
     assert discovery.discover_captures(tmp_path) == [older, newer]
 
 
-def test_raw_captures_directory_matches_device_viewer_layout(tmp_path,
-                                                             monkeypatch):
-    # The on-disk contract with the device viewer's capture routine.
+def test_current_captures_directory_returns_captures_folder(tmp_path,
+                                                               monkeypatch):
+    # The renamed function returns <exp>/captures (not <exp>/captures/16bit_raw).
     monkeypatch.setattr(discovery, "get_current_experiment_directory",
                         lambda: tmp_path)
-    assert (discovery.current_raw_captures_directory()
-            == tmp_path / "captures" / "16bit_raw")
+    assert discovery.current_captures_directory() == tmp_path / "captures"
 
 
-def test_raw_captures_directory_tolerates_no_experiment(monkeypatch):
+def test_current_captures_directory_tolerates_no_experiment(monkeypatch):
     def unavailable():
         raise RuntimeError("no redis")
     monkeypatch.setattr(discovery, "get_current_experiment_directory",
                         unavailable)
-    assert discovery.current_raw_captures_directory() is None
+    assert discovery.current_captures_directory() is None
+
+
+def test_discover_captures_finds_nested_burst_raw_captures(tmp_path,
+                                                           monkeypatch):
+    # Nested burst raw captures: captures/Mix_1.2_x/16bit_raw/GFP_raw.png
+    monkeypatch.setattr(discovery, "get_current_experiment_directory",
+                        lambda: tmp_path)
+
+    captures_dir = tmp_path / "captures"
+    burst_dir = captures_dir / "Mix_1.2_x" / "16bit_raw"
+    burst_dir.mkdir(parents=True, exist_ok=True)
+
+    burst_raw = burst_dir / "GFP_raw.png"
+    burst_raw.write_bytes(b"")
+
+    discovered = discovery.discover_captures(captures_dir)
+    assert burst_raw in discovered
+
+
+def test_discover_captures_finds_old_flat_layout(tmp_path, monkeypatch):
+    # Old flat layout: captures/16bit_raw/old_raw.png
+    monkeypatch.setattr(discovery, "get_current_experiment_directory",
+                        lambda: tmp_path)
+
+    captures_dir = tmp_path / "captures"
+    flat_dir = captures_dir / "16bit_raw"
+    flat_dir.mkdir(parents=True, exist_ok=True)
+
+    flat_raw = flat_dir / "old_raw.png"
+    flat_raw.write_bytes(b"")
+
+    discovered = discovery.discover_captures(captures_dir)
+    assert flat_raw in discovered
+
+
+def test_discover_captures_excludes_display_pngs_at_burst_root(tmp_path,
+                                                               monkeypatch):
+    # Display PNGs at burst root should NOT be returned.
+    # captures/Mix_1.2_x/GFP.png should be excluded,
+    # but captures/Mix_1.2_x/16bit_raw/GFP_raw.png should be included.
+    monkeypatch.setattr(discovery, "get_current_experiment_directory",
+                        lambda: tmp_path)
+
+    captures_dir = tmp_path / "captures"
+    burst_dir = captures_dir / "Mix_1.2_x"
+    burst_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_subdir = burst_dir / "16bit_raw"
+    raw_subdir.mkdir(parents=True, exist_ok=True)
+
+    # Display PNG at burst root - should be excluded
+    display_png = burst_dir / "GFP.png"
+    display_png.write_bytes(b"")
+
+    # Raw PNG in 16bit_raw - should be included
+    raw_png = raw_subdir / "GFP_raw.png"
+    raw_png.write_bytes(b"")
+
+    discovered = discovery.discover_captures(captures_dir)
+    assert raw_png in discovered
+    assert display_png not in discovered
