@@ -190,26 +190,12 @@ def published(monkeypatch):
 
     monkeypatch.setattr(column_module, "publish_message", record)
     monkeypatch.setattr(dramatiq_pub_sub_helpers, "publish_message", record)
-    monkeypatch.setattr(column_module.GUI, "invoke_later",
-                        lambda func, *args, **kw: func(*args, **kw))
     return calls
 
 
-def test_run_end_always_turns_lights_off_and_mirrors_pane(published):
-    from fluorescence_controls_ui.live_state import fluorescence_live_state
-    reflected = []
-
-    def capture(event):
-        reflected.append(event.new)
-
-    fluorescence_live_state.observe(capture, "protocol_step_settings_applied")
-    try:
-        FluorescenceChainHandler().on_post_protocol_end(object())
-        assert [topic for topic, _ in published] == [ALL_LEDS_OFF]
-        assert reflected == [{"light_on": False}]
-    finally:
-        fluorescence_live_state.observe(
-            capture, "protocol_step_settings_applied", remove=True)
+def test_run_end_always_turns_lights_off(published):
+    FluorescenceChainHandler().on_post_protocol_end(object())
+    assert [topic for topic, _ in published] == [ALL_LEDS_OFF]
 
 
 def test_run_end_preview_mode_publishes_nothing(published):

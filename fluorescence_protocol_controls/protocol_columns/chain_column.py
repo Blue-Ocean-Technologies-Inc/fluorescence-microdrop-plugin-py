@@ -1,7 +1,8 @@
 """Fluorescence capture-chain column — per-step list of named LED/camera
-captures (issue #6). Replaces the old br/fl compound column
-(fluorescence_on / fluorescence_settings): a plain Column, not a
-compound, whose stored value is a list of `ChainEntry` dicts (or None).
+captures (issue #6). Replaces the old br/fl compound column (the
+on/off checkbox + settings-snapshot pair, retired in v1.0.0): a plain
+Column, not a compound, whose stored value is a list of `ChainEntry`
+dicts (or None).
 
 The pane (fluorescence_controls_ui) owns authoring the chain and writes
 it to the row's cell via PROTOCOL_TREE_SET_CELL; this column is display
@@ -19,14 +20,12 @@ from traits.api import Any, List, Str
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from logger.logger_service import get_logger
 from microdrop_application.dialogs import pyface_wrapper
-from pyface.gui import GUI
 from pyface.qt.QtCore import QTimer
 
 from fluorescence_controller.consts import ALL_LEDS_OFF, FLUORESCENCE_APPLIED
 from fluorescence_controller.datamodels import (
     protocol_set_fluorescence_publisher,
 )
-from fluorescence_controls_ui.live_state import fluorescence_live_state
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler, BaseColumnModel, Column,
 )
@@ -165,10 +164,6 @@ class FluorescenceChainHandler(BaseColumnHandler):
         if getattr(ctx, "preview_mode", False):
             return
         publish_message(topic=ALL_LEDS_OFF, message="")
-        # Partial snapshot: the pane's light toggle mirrors the off.
-        GUI.invoke_later(setattr, fluorescence_live_state,
-                         "protocol_step_settings_applied",
-                         {"light_on": False})
 
 
 def make_fluorescence_chain_column():
