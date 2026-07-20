@@ -602,3 +602,84 @@ def test_replace_attach_stores_display_context(monkeypatch):
         step_id="s1", cells={"name": "Image Step", "id": (1, 0)})))
     assert model.attached_step_desc == "Image Step"
     assert model.attached_step_dotted == "2.1"
+
+
+# --- stale-echo suppression (the "slider only half-applies" race) ---------------------
+
+def test_stale_echo_within_window_does_not_clobber_local_edits(monkeypatch):
+    """Rapid local edits (a slider drag) push per tick while the tree's
+    rebroadcasts trail behind; a DIFFERING echo arriving right after a
+    local push is a stale self-echo and must not reload (it would revert
+    the newer value and drop the row selection)."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id="s1", cells={
+            "name": "Mix", "id": (0,),
+            FLUORESCENCE_CHAIN_COLUMN_ID: [_entry_dict("A")]})))
+    rows = model.chain_rows
+    model.chain_selection = rows[0]
+    model.intensity = 22                      # local edit -> push (now)
+
+    stale = dict(rows[0].to_entry_dict(), intensity=30)   # older mid-drag echo
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id="s1", cells={"name": "Mix", "id": (0,),
+                             FLUORESCENCE_CHAIN_COLUMN_ID: [stale]})))
+
+    assert model.chain_rows is rows                       # not reloaded
+    assert model.chain_selection is rows[0]               # selection kept
+    assert rows[0].intensity == 22                        # local value wins
+
+
+def test_differing_echo_after_window_reloads(monkeypatch):
+    """Outside the self-edit window a differing broadcast is a genuine
+    external change (e.g. a protocol file reload) and must reload."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id="s1", cells={
+            "name": "Mix", "id": (0,),
+            FLUORESCENCE_CHAIN_COLUMN_ID: [_entry_dict("A")]})))
+    rows = model.chain_rows
+    controller._last_local_push = 0.0                     # long ago
+    changed = dict(rows[0].to_entry_dict(), intensity=77)
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id="s1", cells={"name": "Mix", "id": (0,),
+                             FLUORESCENCE_CHAIN_COLUMN_ID: [changed]})))
+    assert model.chain_rows is not rows                   # reloaded
+    assert model.chain_rows[0].intensity == 77
+
+
+# --- move up/down ----------------------------------------------------------------------
+
+def test_move_capture_swaps_and_relabels_by_position(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.attached_step_id = "s1"
+    a = FluorescenceChainRow(wavelength="Blue (460 nm)")
+    b = FluorescenceChainRow(wavelength="Green (540 nm)")
+    model.chain_rows = [a, b]
+    model.chain_selection = b
+    set_cell.clear()
+
+    controller.move_capture(-1)
+
+    assert model.chain_rows == [b, a]
+    assert model.chain_selection is b
+    assert [r.label for r in model.chain_rows] == [
+        "Green_540_nm_1", "Blue_460_nm_2"]
+    assert set_cell and [e["label"] for e in set_cell[-1]["value"]] == [
+        "Green_540_nm_1", "Blue_460_nm_2"]
+
+
+def test_move_capture_boundary_and_no_selection_are_noops(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    a = FluorescenceChainRow(wavelength="Blue (460 nm)")
+    model.chain_rows = [a]
+    model.chain_selection = a
+    controller.move_capture(-1)               # already first
+    assert model.chain_rows == [a]
+    model.chain_selection = None
+    controller.move_capture(1)                # nothing selected
+    assert model.chain_rows == [a]

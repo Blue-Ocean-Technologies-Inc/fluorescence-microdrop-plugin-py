@@ -348,3 +348,29 @@ def test_run_capture_on_attached_step_passes_desc_and_dotted(
     controller.run_capture()
     assert fake_capture_service[0]["step_desc"] == "Mix"
     assert fake_capture_service[0]["dotted_id"] == "1.2"
+
+
+def test_capture_selected_bursts_only_that_row_run_forced(
+        sync_thread, fake_capture_service):
+    controller, model = _controller()
+    a = FluorescenceChainRow(label="A", run=False)
+    b = FluorescenceChainRow(label="B", run=True)
+    model.chain_rows = [a, b]
+    model.chain_selection = a                 # unticked on purpose
+    controller.capture_selected()
+    assert len(fake_capture_service) == 1
+    [entry] = fake_capture_service[0]["entries"]
+    assert entry.label == "A" and entry.run is True
+    assert a.run is False                     # stored tick untouched
+
+
+def test_capture_selected_noops_without_selection_or_mid_run(
+        fake_capture_service):
+    controller, model = _controller()
+    model.chain_rows = [FluorescenceChainRow(label="A")]
+    model.chain_selection = None
+    controller.capture_selected()
+    model.chain_selection = model.chain_rows[0]
+    model.protocol_running = True
+    controller.capture_selected()
+    assert fake_capture_service == []

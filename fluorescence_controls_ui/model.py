@@ -151,6 +151,13 @@ class FluorescenceStatusModel(BaseStatusModel):
     add_capture_button = Button("add")
     run_capture_button = Button("play_circle")
     delete_capture_button = Button("delete")
+    #: Capture ONLY the selected row now (Run Capture bursts all ticked).
+    capture_selected_button = Button("photo_camera")
+    #: Reposition the selected row (drag-reorder is disabled: TableEditor
+    #: drops fire remove+insert as separate list events, which raced the
+    #: per-mutation persistence into losing rows).
+    move_up_button = Button("arrow_upward")
+    move_down_button = Button("arrow_downward")
 
     @observe(f"[{','.join(PERSISTED_CONTROL_TRAITS)}]", post_init=True)
     def _push_preferences(self, event):

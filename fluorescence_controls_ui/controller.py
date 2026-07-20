@@ -1,7 +1,8 @@
 import json
 import threading
+import time
 
-from traits.api import Bool, observe
+from traits.api import Any, Bool, observe
 
 from template_status_and_controls.base_controller import BaseStatusController
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -37,6 +38,18 @@ CHAIN_ROW_PARAM_TRAITS = (
     "image_tag", "wavelength", "intensity", "frequency", "exposure", "gain",
     "auto_exposure", "auto_gain")
 CHAIN_ROW_PARAM_TRAITS_EXPRESSION = f"[{','.join(CHAIN_ROW_PARAM_TRAITS)}]"
+
+#: How long after a local chain push a DIFFERING row_selected echo for the
+#: attached step is still treated as our own stale edit echo (and skipped)
+#: rather than a genuine external change. Rapid edits — a slider drag —
+#: push per tick while the tree's rebroadcasts trail asynchronously; a
+#: stale echo reloading the chain would clobber the newer local value AND
+#: drop the row selection (the "slider only half-applies" bug). Genuine
+#: external rewrites of an attached chain barely exist (the pane is its
+#: one writer — the capture lock's point); the realistic case is a
+#: protocol file (re)load, which is never within this window of a local
+#: edit.
+SELF_EDIT_ECHO_WINDOW_S = 2.0
 
 
 class FluorescenceControlsController(BaseStatusController):
@@ -76,6 +89,10 @@ class FluorescenceControlsController(BaseStatusController):
     #: Guards the panel<->row live binding against write-back loops while
     #: a row selection is loading its values into the panel traits.
     _loading_row = Bool(False)
+
+    #: monotonic() of the last attached-chain push — the reference point
+    #: for SELF_EDIT_ECHO_WINDOW_S.
+    _last_local_push = Any(0.0)
 
     # ------------------------------------------------------------------ #
     # UI build hook                                                        #
@@ -325,6 +342,7 @@ class FluorescenceControlsController(BaseStatusController):
         if self.model.attached_step_id:
             entries = [ChainEntry(**r.to_entry_dict())
                        for r in self.model.chain_rows]
+            self._last_local_push = time.monotonic()
             protocol_tree_set_cell_publisher.publish(
                 step_id=self.model.attached_step_id,
                 col_id=FLUORESCENCE_CHAIN_COLUMN_ID,
@@ -348,6 +366,18 @@ class FluorescenceControlsController(BaseStatusController):
     @observe("model:delete_capture_button")
     def _delete_capture_button_clicked(self, event):
         self.delete_capture()
+
+    @observe("model:capture_selected_button")
+    def _capture_selected_button_clicked(self, event):
+        self.capture_selected()
+
+    @observe("model:move_up_button")
+    def _move_up_button_clicked(self, event):
+        self.move_capture(-1)
+
+    @observe("model:move_down_button")
+    def _move_down_button_clicked(self, event):
+        self.move_capture(1)
 
     # ------------------------------------------------------------------ #
     # Delete — three routes into _remove_chain_row (route-table parity):   #
@@ -443,10 +473,17 @@ class FluorescenceControlsController(BaseStatusController):
         (self.model.attached_step_desc,
          self.model.attached_step_dotted) = self._step_display_context(cells)
         entries = parse_chain(cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
-        if step_id == self.model.attached_step_id and [
-                e.model_dump() for e in entries] == [
-                r.to_entry_dict() for r in self.model.chain_rows]:
-            return
+        if step_id == self.model.attached_step_id:
+            same = ([e.model_dump() for e in entries]
+                    == [r.to_entry_dict() for r in self.model.chain_rows])
+            # A DIFFERING echo right after our own push is a STALE echo
+            # of a superseded local edit (rapid edits — slider drags —
+            # outrun the tree's async rebroadcasts); reloading from it
+            # would clobber the newer value and drop the row selection.
+            recently_pushed = (time.monotonic() - self._last_local_push
+                               < SELF_EDIT_ECHO_WINDOW_S)
+            if same or recently_pushed:
+                return
         self.model.attached_step_id = step_id
         self.model.attached_group_id = ""
         self.model.chain_selection = None
@@ -553,24 +590,16 @@ class FluorescenceControlsController(BaseStatusController):
     # ------------------------------------------------------------------ #
     # Run Capture                                                          #
     # ------------------------------------------------------------------ #
-    def run_capture(self):
-        """Fire the current chain's ticked entries as a burst off the GUI
-        thread. `capture_service` is Task 6's module and does not exist
-        yet in this task, so the import is lazily deferred inside this
-        method — it must never be imported at module load time."""
-        if self.model.protocol_running:
-            return
-        entries = ticked(
-            [ChainEntry(**r.to_entry_dict()) for r in self.model.chain_rows])
-        if not entries:
-            return
-
+    def _start_burst(self, entries):
+        """Fire ``entries`` as a burst off the GUI thread, folder-named
+        for the attached step (description + dotted id, from the
+        row_selected name/id cells) or free mode when unattached; "step"
+        backstops an attached step whose broadcast lacked those cells.
+        ``capture_service`` needs the camera stack, so the import stays
+        lazily deferred inside this method — never at module load time
+        (also what keeps it mockable via sys.modules in tests)."""
         from fluorescence_controls_ui import capture_service
 
-        # Attached bursts are named like protocol-run bursts, from the
-        # step's description + dotted id (row_selected's name/id cells);
-        # both empty means free mode. "step" backstops an attached step
-        # whose broadcast somehow lacked those cells.
         step_desc = self.model.attached_step_desc or None
         dotted_id = self.model.attached_step_dotted or None
         if self.model.attached_step_id and not (step_desc or dotted_id):
@@ -584,3 +613,44 @@ class FluorescenceControlsController(BaseStatusController):
                 logger.error(f"Capture burst failed: {e}")
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def run_capture(self):
+        """Burst the current chain's TICKED entries."""
+        if self.model.protocol_running:
+            return
+        entries = ticked(
+            [ChainEntry(**r.to_entry_dict()) for r in self.model.chain_rows])
+        if not entries:
+            return
+        self._start_burst(entries)
+
+    def capture_selected(self):
+        """Capture ONLY the selected row, now, ticked or not (`run` is
+        forced on for this one-shot; the row's stored tick is untouched)."""
+        row = self.model.chain_selection
+        if self.model.protocol_running or row is None:
+            return
+        self._start_burst(
+            [ChainEntry(**{**row.to_entry_dict(), "run": True})])
+
+    # ------------------------------------------------------------------ #
+    # Reposition — drag-reorder is disabled (TableEditor drops fire        #
+    # remove+insert as separate list events, racing the per-mutation       #
+    # persistence into losing rows); a whole-list swap has no such         #
+    # intermediate state.                                                  #
+    # ------------------------------------------------------------------ #
+    def move_capture(self, offset):
+        """Swap the selected row ``offset`` positions (list-boundary
+        no-op); labels re-derive from the new positions on push."""
+        rows = list(self.model.chain_rows)
+        row = self.model.chain_selection
+        if row is None or row not in rows:
+            return
+        i = rows.index(row)
+        j = i + offset
+        if not 0 <= j < len(rows):
+            return
+        rows[i], rows[j] = rows[j], rows[i]
+        self.model.chain_rows = rows          # reassignment: no items event
+        self.model.chain_selection = row      # keep the moved row selected
+        self._push_chain_to_step()

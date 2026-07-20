@@ -107,7 +107,11 @@ chain_table_editor = TableEditor(
     show_lines=False,
     selected="chain_selection",
     sortable=False,
-    reorderable=True,
+    # Drag-reorder is deliberately OFF: TableEditor drops fire
+    # remove+insert as separate list events, which raced the
+    # per-mutation persistence into losing rows — the up/down buttons
+    # reposition via a single whole-list swap instead.
+    reorderable=False,
     show_column_labels=True,
     show_row_labels=True,
 )
@@ -122,6 +126,15 @@ chain_group = VGroup(
     HGroup(
         UItem("add_capture_button", editor=IconButtonEditor(
             glyph="add", tooltip="Add a capture from the panel's params")),
+        UItem("move_up_button", editor=IconButtonEditor(
+            glyph="arrow_upward", tooltip="Move the selected capture up")),
+        UItem("move_down_button", editor=IconButtonEditor(
+            glyph="arrow_downward",
+            tooltip="Move the selected capture down")),
+        UItem("capture_selected_button", editor=IconButtonEditor(
+            glyph="photo_camera",
+            tooltip="Capture the selected row now (ticked or not)"),
+              enabled_when="connected and not protocol_running"),
         UItem("run_capture_button", editor=IconButtonEditor(
             glyph="play_circle", tooltip="Run the ticked captures now"),
               enabled_when="connected and not protocol_running"),
