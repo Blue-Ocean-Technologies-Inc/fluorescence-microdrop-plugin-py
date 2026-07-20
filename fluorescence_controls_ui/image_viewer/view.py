@@ -8,7 +8,8 @@ from PySide6.QtWidgets import (
     QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QSizePolicy,
 )
 from traitsui.api import (
-    BasicEditorFactory, HGroup, Item, RangeEditor, UItem, VGroup, View,
+    BasicEditorFactory, HGroup, Item, Label, RangeEditor, UItem, VGroup,
+    View,
 )
 from traitsui.qt.editor import Editor as QtEditor
 
@@ -153,38 +154,74 @@ buttons_group = HGroup(
 )
 
 
+# Collapsible sections (fluorescence controls pane parity): an arrow glyph
+# header toggles each bordered group's `show_*` trait.
+def _collapse_header(trait, label):
+    return HGroup(
+        UItem(trait, editor=IconToggleEditor()),
+        Label(label),
+    )
+
+
+# Burst layer: captures land one folder per burst, so navigation is
+# two-level — pick the burst, then the image within it.
+bursts_group = VGroup(
+    Item("selected_burst", label="Burst",
+         editor=HoverScrollEnumEditor(values_name="burst_names"),
+         tooltip="Pick a capture burst (one folder per burst; "
+                 "'ungrouped' holds legacy flat captures)"),
+    Item("burst_number", label="Burst Seek",
+         editor=RangeEditor(low=1, high_name="object.max_burst_number",
+                            mode="slider"),
+         tooltip="Drag through the bursts, oldest to newest"),
+    visible_when="show_bursts",
+    show_border=True,
+)
+
+images_group = VGroup(
+    Item("selected_wavelength", label="Wavelength",
+         editor=HoverScrollEnumEditor(values_name="wavelength_names"),
+         tooltip="Show only captures of one LED wavelength "
+                 "(detected from the filenames)"),
+    Item("selected_image", label="Image",
+         editor=HoverScrollEnumEditor(values_name="image_names"),
+         tooltip="Pick an image from the selected burst"),
+    Item("image_number", label="Seek",
+         editor=RangeEditor(low=1, high_name="object.max_image_number",
+                            mode="slider"),
+         tooltip="Drag through the burst's images"),
+    visible_when="show_images",
+    show_border=True,
+)
+
+contrast_group = VGroup(
+    Item("auto_contrast", label="Auto contrast",
+         tooltip="Window the displayed intensities to the 0.1–99.9 "
+                 "percentile range (raw 16-bit frames are nearly "
+                 "black without it); uncheck to set the window "
+                 "manually"),
+    Item("window_min", label="Min", enabled_when="not auto_contrast",
+         tooltip="Intensity displayed as black"),
+    Item("window_max", label="Max", enabled_when="not auto_contrast",
+         tooltip="Intensity displayed as white"),
+    visible_when="show_contrast",
+    show_border=True,
+)
+
+
 ImageViewerView = View(
     VGroup(
         buttons_group,
-        # Burst layer: captures land one folder per burst, so navigation
-        # is two-level — pick the burst, then the image within it.
-        Item("selected_burst", label="Burst",
-             editor=HoverScrollEnumEditor(values_name="burst_names"),
-             tooltip="Pick a capture burst (one folder per burst; "
-                     "'ungrouped' holds legacy flat captures)"),
-        Item("burst_number", label="Burst Seek",
-             editor=RangeEditor(low=1, high_name="object.max_burst_number",
-                                mode="slider"),
-             tooltip="Drag through the bursts, oldest to newest"),
-        Item("selected_wavelength", label="Wavelength",
-             editor=HoverScrollEnumEditor(values_name="wavelength_names"),
-             tooltip="Show only captures of one LED wavelength "
-                     "(detected from the filenames)"),
-        Item("selected_image", label="Image",
-             editor=HoverScrollEnumEditor(values_name="image_names"),
-             tooltip="Pick an image from the selected burst"),
-        Item("image_number", label="Seek",
-             editor=RangeEditor(low=1, high_name="object.max_image_number",
-                                mode="slider"),
-             tooltip="Drag through the burst's images"),
 
-        Item("auto_contrast", label="Auto contrast",
-             tooltip="Window the displayed intensities to the 0.1–99.9 "
-                     "percentile range (raw 16-bit frames are nearly "
-                     "black without it); uncheck to set the window "
-                     "manually"),
-        Item("window_min", label="Min", enabled_when="not auto_contrast", tooltip="Intensity displayed as black"),
-        Item("window_max", label="Max", enabled_when="not auto_contrast", tooltip="Intensity displayed as white"),
+        _collapse_header("show_bursts", "Bursts"),
+        bursts_group,
+
+        _collapse_header("show_images", "Images"),
+        images_group,
+
+        _collapse_header("show_contrast", "Contrast"),
+        contrast_group,
+
         UItem("array", editor=ImageCanvasEditor(), springy=True, resizable=True),
         UItem("pixel_text", style="readonly"),
     ),

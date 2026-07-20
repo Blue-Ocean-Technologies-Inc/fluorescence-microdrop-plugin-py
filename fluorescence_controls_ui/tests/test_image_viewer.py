@@ -326,3 +326,22 @@ def test_seek_sliders_are_one_based_twins(monkeypatch, tmp_path):
     model.image_number = 2
     assert model.image_index == 1
     assert model.current_path == str(paths["old_green"])
+
+
+def test_rescan_records_the_browsed_directory(monkeypatch, tmp_path):
+    ctrl, model, paths = _viewer(monkeypatch, tmp_path)
+    ctrl.rescan()
+    assert model.browsed_directory == str(tmp_path / "captures")
+
+
+def test_dock_pane_title_names_the_browsed_folder():
+    from pathlib import Path
+
+    from fluorescence_controls_ui.image_viewer.dock_pane import _title_for
+    assert _title_for("") == "Fluorescence Images"
+    # Default (experiment) captures dir: the experiment folder names it.
+    assert _title_for(str(Path("Experiments/2026_07_20-17_41_31/captures"))) \
+        == "Fluorescence Images\t\t-\t\t2026_07_20-17_41_31"
+    # A user-picked folder shows its own name.
+    assert _title_for(str(Path("D:/some/album"))) \
+        == "Fluorescence Images\t\t-\t\talbum"

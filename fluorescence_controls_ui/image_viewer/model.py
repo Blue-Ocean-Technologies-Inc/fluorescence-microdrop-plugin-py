@@ -25,6 +25,16 @@ class FluorescenceImageViewerModel(HasTraits):
     #: folder; the folder button points it elsewhere.
     directory = Directory()
 
+    #: The RESOLVED folder the last rescan looked at (the experiment's
+    #: captures dir when ``directory`` is ''); display-only — drives the
+    #: dock pane's "Name - folder" title.
+    browsed_directory = Str()
+
+    #: Section collapse toggles (controls-pane parity; not persisted).
+    show_bursts = Bool(True)
+    show_images = Bool(True)
+    show_contrast = Bool(True)
+
     #: Discovered bursts: ``[(burst_name, [paths...]), ...]``, oldest
     #: first (discovery.discover_bursts). The VISIBLE image list below is
     #: the selected burst's paths through the wavelength filter.

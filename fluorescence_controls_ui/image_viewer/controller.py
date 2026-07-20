@@ -231,7 +231,9 @@ class FluorescenceImageViewerController(Controller):
         image is followed automatically unless the user is parked on an
         older one. Also refreshes the wavelength-filter choices from
         what the filenames embed."""
-        bursts = discover_bursts(self._scan_directory())
+        directory = self._scan_directory()
+        self.model.browsed_directory = str(directory) if directory else ""
+        bursts = discover_bursts(directory)
         if bursts == self.model.bursts:
             return
         # "Following newest" = showing the newest visible image of the
