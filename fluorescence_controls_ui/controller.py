@@ -652,5 +652,10 @@ class FluorescenceControlsController(BaseStatusController):
             return
         rows[i], rows[j] = rows[j], rows[i]
         self.model.chain_rows = rows          # reassignment: no items event
-        self.model.chain_selection = row      # keep the moved row selected
+        # The table rebuilt from the reassignment and dropped its visual
+        # highlight while the trait still holds `row` — a plain re-assign
+        # would be a no-change event the editor never sees. Force a real
+        # change cycle so the editor re-selects the moved row.
+        self.model.chain_selection = None
+        self.model.chain_selection = row
         self._push_chain_to_step()

@@ -683,3 +683,22 @@ def test_move_capture_boundary_and_no_selection_are_noops(monkeypatch):
     model.chain_selection = None
     controller.move_capture(1)                # nothing selected
     assert model.chain_rows == [a]
+
+
+def test_move_capture_refires_selection_for_the_table_highlight(monkeypatch):
+    """The moved row must end on a REAL chain_selection change event —
+    the TableEditor re-highlights only on a notification, and a same-
+    object reassign is a silent no-change."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    a = FluorescenceChainRow(wavelength="Blue (460 nm)")
+    b = FluorescenceChainRow(wavelength="Green (540 nm)")
+    model.chain_rows = [a, b]
+    model.chain_selection = b
+    events = []
+    model.observe(lambda e: events.append(e.new), "chain_selection")
+
+    controller.move_capture(-1)
+
+    assert events and events[-1] is b     # a genuine change ended on b
+    assert model.chain_selection is b
