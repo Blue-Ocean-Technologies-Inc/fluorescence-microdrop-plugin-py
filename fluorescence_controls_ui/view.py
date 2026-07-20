@@ -26,7 +26,7 @@ status_group = VGroup(
 # Master light toggle + device-viewer stream checkbox. The mode selector
 # (br/fl/dual) is gone (issue #6): a single LED/camera param set now drives
 # whichever chain row is being edited.
-control_group = VGroup(
+control_group = HGroup(
     HGroup(
         UItem("light_on", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
              enabled_when="connected"),
