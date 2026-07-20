@@ -130,6 +130,11 @@ class FluorescenceStatusModel(BaseStatusModel):
     attached_step_id = Str("")
     #: uuid of the protocol step-group `chain_rows` is attached to.
     attached_group_id = Str("")
+    #: Display context of the attached step, read from the row_selected
+    #: broadcast's `name`/`id` cells — names a pane-initiated burst folder
+    #: exactly like a protocol-run burst (`<desc>_<dotted>_<utc>`).
+    attached_step_desc = Str("")
+    attached_step_dotted = Str("")
     #: The unattached stash, shown whenever `attached_step_id == ""`.
     free_chain = List(Instance(FluorescenceChainRow))
 

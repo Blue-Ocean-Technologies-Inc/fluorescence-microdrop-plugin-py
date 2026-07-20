@@ -297,8 +297,9 @@ def fake_capture_service(monkeypatch):
     module = types.ModuleType("fluorescence_controls_ui.capture_service")
     calls = []
 
-    def run_burst(entries, *, step_desc=None, step_id=None):
-        calls.append({"entries": entries, "step_desc": step_desc, "step_id": step_id})
+    def run_burst(entries, *, step_desc=None, dotted_id=None):
+        calls.append({"entries": entries, "step_desc": step_desc,
+                      "dotted_id": dotted_id})
 
     module.run_burst = run_burst
     monkeypatch.setitem(
@@ -315,8 +316,8 @@ def test_run_capture_calls_run_burst_on_ticked_entries(sync_thread, fake_capture
     controller.run_capture()
     assert len(fake_capture_service) == 1
     assert [e.label for e in fake_capture_service[0]["entries"]] == ["A"]
-    assert fake_capture_service[0]["step_id"] == ""
-    assert fake_capture_service[0]["step_desc"] is None
+    assert fake_capture_service[0]["step_desc"] is None      # free mode
+    assert fake_capture_service[0]["dotted_id"] is None
 
 
 def test_run_capture_noop_when_no_ticked_entries(fake_capture_service):
@@ -332,3 +333,18 @@ def test_run_capture_disabled_during_protocol_run(fake_capture_service):
     model.protocol_running = True
     controller.run_capture()
     assert fake_capture_service == []
+
+
+def test_run_capture_on_attached_step_passes_desc_and_dotted(
+        sync_thread, fake_capture_service):
+    """Attached bursts are named like protocol-run bursts: the step's
+    description + 1-indexed dotted id (from row_selected's name/id
+    cells), never the uuid."""
+    controller, model = _controller()
+    model.attached_step_id = "some-uuid"
+    model.attached_step_desc = "Mix"
+    model.attached_step_dotted = "1.2"
+    model.chain_rows = [FluorescenceChainRow(label="A", run=True)]
+    controller.run_capture()
+    assert fake_capture_service[0]["step_desc"] == "Mix"
+    assert fake_capture_service[0]["dotted_id"] == "1.2"

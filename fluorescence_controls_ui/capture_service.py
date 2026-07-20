@@ -62,21 +62,24 @@ def wait_applied(timeout: float) -> bool:
     return _APPLIED.wait(timeout)
 
 
-def burst_folder(step_desc: str | None, dotted_id: str | None,
-                 step_id: str | None = None) -> Path:
-    """The per-burst capture directory: named from the step's description
-    + dotted position when both are known, else the step's uuid prefix,
-    else "free_mode" for the pane's untethered chain. Creates the folder
-    and its 16-bit raw subdirectory."""
-    if step_desc and dotted_id:
-        name = f"{sanitize_label(step_desc)}_{dotted_id}"
-    elif step_id:
-        name = f"step_{step_id[:8]}"
-    else:
-        name = "free_mode"
-    utc = time.strftime("%Y_%m_%d-%H_%M_%S", time.gmtime())
+def utc_stamp() -> str:
+    """UTC timestamp in the shared capture-filename format."""
+    return time.strftime("%Y_%m_%d-%H_%M_%S", time.gmtime())
+
+
+def burst_folder(step_desc: str | None, dotted_id: str | None) -> Path:
+    """The per-burst capture directory: `<description>_<dotted>_<utc>`
+    from whatever of the step's description and dotted position are
+    known; "free_mode" for the pane's untethered chain. Creates the
+    folder and its 16-bit raw subdirectory."""
+    parts = []
+    if step_desc:
+        parts.append(sanitize_label(step_desc))
+    if dotted_id:
+        parts.append(dotted_id)
+    name = "_".join(parts) or "free_mode"
     folder = (get_current_experiment_directory() / CAPTURES_DIR_NAME
-             / f"{name}_{utc}")
+             / f"{name}_{utc_stamp()}")
     (folder / RAW_CAPTURES_SUBDIR).mkdir(parents=True, exist_ok=True)
     return folder
 
@@ -113,7 +116,10 @@ def save_entry_capture(entry, folder: Path) -> Path:
         raise TimeoutError(
             f"No new frame for {entry.label!r} within {timeout}s")
     raw = feed._last_raw
-    label = sanitize_label(entry.label)
+    # Per-capture timestamp in every filename — the regular capture
+    # pipeline's naming convention, so a file is traceable to its moment
+    # even outside its burst folder.
+    label = f"{sanitize_label(entry.label)}_{utc_stamp()}"
 
     raw_path = folder / RAW_CAPTURES_SUBDIR / f"{label}_raw.png"
     raw_to_qimage(raw).save(str(raw_path))
@@ -124,13 +130,13 @@ def save_entry_capture(entry, folder: Path) -> Path:
     return display_path
 
 
-def run_burst(entries, *, step_desc=None, dotted_id=None, step_id=None,
+def run_burst(entries, *, step_desc=None, dotted_id=None,
               applied_timeout: float = 5.0) -> Path:
     """Fire the chain's ticked entries in order: apply camera settings,
     publish the LED state, wait for the backend's applied ack, capture.
     ALL_LEDS_OFF always fires on the way out — even on error/timeout — so
     a failed burst can never leave a light on."""
-    folder = burst_folder(step_desc, dotted_id, step_id)
+    folder = burst_folder(step_desc, dotted_id)
     try:
         for entry in ticked(entries):
             apply_camera_settings(entry)

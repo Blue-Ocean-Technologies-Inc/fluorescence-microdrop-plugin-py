@@ -560,3 +560,45 @@ def test_image_tag_edit_updates_derived_label_and_pushes(monkeypatch):
     assert row0.image_tag == "gfp"
     assert set_cell
     assert set_cell[-1]["value"][0]["label"] == "gfp_Blue_460_nm_1"
+
+
+# --- attached-step display context (burst-folder naming) ------------------------------
+
+def test_step_selection_stores_display_context(monkeypatch):
+    """The name/id cells of the row_selected broadcast become the pane's
+    burst-naming context: description + 1-indexed dotted id (the id cell
+    carries the 0-indexed path — tuple in-process, list off the wire)."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id="s1", cells={"name": "Mix", "id": (0, 1)})))
+    assert model.attached_step_desc == "Mix"
+    assert model.attached_step_dotted == "1.2"
+
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id="s2", cells={"name": "Rinse", "id": [2]})))   # wire form
+    assert model.attached_step_desc == "Rinse"
+    assert model.attached_step_dotted == "3"
+
+
+def test_free_mode_clears_display_context(monkeypatch):
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id="s1", cells={"name": "Mix", "id": (0,)})))
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id=None, cells={})))
+    assert model.attached_step_desc == ""
+    assert model.attached_step_dotted == ""
+
+
+def test_replace_attach_stores_display_context(monkeypatch):
+    _set_cell_recorder(monkeypatch)
+    monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Replace")
+    controller, model = _controller()
+    model.chain_rows = [FluorescenceChainRow(label="A")]
+    model.free_chain = list(model.chain_rows)
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage(
+        step_id="s1", cells={"name": "Image Step", "id": (1, 0)})))
+    assert model.attached_step_desc == "Image Step"
+    assert model.attached_step_dotted == "2.1"

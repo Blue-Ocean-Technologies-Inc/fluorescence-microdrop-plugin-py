@@ -211,10 +211,10 @@ def test_burst_folder_uses_step_desc_and_dotted_id_when_both_given(
     assert (folder / "16bit_raw").is_dir()
 
 
-def test_burst_folder_uses_step_id_prefix_when_only_uuid_given(
+def test_burst_folder_dotted_id_alone_names_the_folder(
         experiment_dir, frozen_time):
-    folder = capture_service.burst_folder(None, None, step_id="abcdefgh-1234")
-    expected = experiment_dir / "captures" / "step_abcdefgh_2026_07_16-12_30_45"
+    folder = capture_service.burst_folder(None, "1.2")
+    expected = experiment_dir / "captures" / "1.2_2026_07_16-12_30_45"
     assert folder == expected
 
 
@@ -224,11 +224,10 @@ def test_burst_folder_falls_back_to_free_mode(experiment_dir, frozen_time):
     assert folder == expected
 
 
-def test_burst_folder_prefers_step_desc_over_step_id(
+def test_burst_folder_desc_alone_names_the_folder(
         experiment_dir, frozen_time):
-    folder = capture_service.burst_folder(
-        "Desc", "2.1", step_id="ffffffff-0000")
-    expected = experiment_dir / "captures" / "Desc_2.1_2026_07_16-12_30_45"
+    folder = capture_service.burst_folder("Desc", None)
+    expected = experiment_dir / "captures" / "Desc_2026_07_16-12_30_45"
     assert folder == expected
 
 
@@ -304,10 +303,11 @@ def test_run_burst_happy_path_saves_only_ticked_entries(
     assert publish_recorder[0]["duty"] == entries[0].intensity
     assert publish_recorder[0]["frequency"] == entries[0].frequency
 
-    assert (folder / "A.png").exists()
-    assert (folder / "16bit_raw" / "A_raw.png").exists()
-    assert not (folder / "B.png").exists()
-    assert not (folder / "16bit_raw" / "B_raw.png").exists()
+    # Per-capture timestamps in every filename (regular-capture parity).
+    assert (folder / "A_2026_07_16-12_30_45.png").exists()
+    assert (folder / "16bit_raw" / "A_2026_07_16-12_30_45_raw.png").exists()
+    assert not list(folder.glob("B_*.png"))
+    assert not list((folder / "16bit_raw").glob("B_*_raw.png"))
 
     assert off_calls == [(ALL_LEDS_OFF, "")]
 
@@ -316,7 +316,7 @@ def test_run_burst_empty_ticked_chain_still_turns_leds_off(
         experiment_dir, frozen_time, run_feed, publish_recorder, off_calls,
         sync_gui):
     entries = [_entry("A", run=False)]
-    capture_service.run_burst(entries, step_desc=None, step_id=None)
+    capture_service.run_burst(entries, step_desc=None, dotted_id=None)
     assert publish_recorder == []
     assert off_calls == [(ALL_LEDS_OFF, "")]
 
@@ -334,7 +334,7 @@ def test_run_burst_timeout_raises_and_still_turns_leds_off(
     entries = [_entry("SlowOne")]
     with pytest.raises(TimeoutError, match="SlowOne"):
         capture_service.run_burst(
-            entries, step_desc=None, step_id=None, applied_timeout=0.05)
+            entries, step_desc=None, dotted_id=None, applied_timeout=0.05)
 
     assert len(calls) == 1
     assert off_calls == [(ALL_LEDS_OFF, "")]

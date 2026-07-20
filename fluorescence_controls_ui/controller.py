@@ -406,9 +406,21 @@ class FluorescenceControlsController(BaseStatusController):
     # ------------------------------------------------------------------ #
     # Free-mode attach flow                                                #
     # ------------------------------------------------------------------ #
-    def _attach_to_step(self, step_id, entries):
+    @staticmethod
+    def _step_display_context(cells):
+        """The selected step's description + 1-indexed dotted id, from
+        the broadcast's `name`/`id` cells (`id` carries the 0-indexed
+        path — a tuple in-process, a list off the wire)."""
+        name = cells.get("name")
+        path = cells.get("id") or ()
+        return (name if isinstance(name, str) else "",
+                ".".join(str(i + 1) for i in path))
+
+    def _attach_to_step(self, step_id, entries, cells):
         """Adopt `entries` (a list[ChainEntry]) as the pane's chain,
         attached to `step_id`, and push the write-back."""
+        (self.model.attached_step_desc,
+         self.model.attached_step_dotted) = self._step_display_context(cells)
         self.model.attached_step_id = step_id
         self.model.attached_group_id = ""
         self.model.chain_selection = None
@@ -426,6 +438,10 @@ class FluorescenceControlsController(BaseStatusController):
         the incoming chain matches what `chain_rows` already holds, this
         is that echo (not a genuine external change): skip the reload so
         `chain_selection` survives it."""
+        # Display context first — idempotent for the echo case below, and
+        # it keeps the burst-folder naming fresh across rebroadcasts.
+        (self.model.attached_step_desc,
+         self.model.attached_step_dotted) = self._step_display_context(cells)
         entries = parse_chain(cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
         if step_id == self.model.attached_step_id and [
                 e.model_dump() for e in entries] == [
@@ -442,6 +458,8 @@ class FluorescenceControlsController(BaseStatusController):
         stash into the visible chain."""
         self.model.attached_step_id = ""
         self.model.attached_group_id = ""
+        self.model.attached_step_desc = ""
+        self.model.attached_step_dotted = ""
         self.model.chain_selection = None
         self.model.chain_rows = list(self.model.free_chain)
 
@@ -505,7 +523,7 @@ class FluorescenceControlsController(BaseStatusController):
                                          for r in free]
                 else:                            # Replace
                     merged = [ChainEntry(**r.to_entry_dict()) for r in free]
-                self._attach_to_step(msg.step_id, merged)
+                self._attach_to_step(msg.step_id, merged, msg.cells)
                 self._clear_free_chain()
                 return
             self._load_step_chain(msg.step_id, msg.cells)   # plain selection
@@ -549,12 +567,19 @@ class FluorescenceControlsController(BaseStatusController):
 
         from fluorescence_controls_ui import capture_service
 
-        step_id = self.model.attached_step_id
+        # Attached bursts are named like protocol-run bursts, from the
+        # step's description + dotted id (row_selected's name/id cells);
+        # both empty means free mode. "step" backstops an attached step
+        # whose broadcast somehow lacked those cells.
+        step_desc = self.model.attached_step_desc or None
+        dotted_id = self.model.attached_step_dotted or None
+        if self.model.attached_step_id and not (step_desc or dotted_id):
+            step_desc = "step"
 
         def _run():
             try:
                 capture_service.run_burst(
-                    entries, step_desc=None, step_id=step_id)
+                    entries, step_desc=step_desc, dotted_id=dotted_id)
             except Exception as e:
                 logger.error(f"Capture burst failed: {e}")
 
