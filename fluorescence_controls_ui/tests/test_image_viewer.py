@@ -311,3 +311,18 @@ def test_parked_user_stays_parked_when_new_burst_lands(
     assert model.selected_burst == "Mix_1.2_a"            # still parked
     assert "Zap_4_c" in model.burst_names                 # but discovered
     assert "Red (630 nm)" in model.wavelength_names
+
+
+def test_seek_sliders_are_one_based_twins(monkeypatch, tmp_path):
+    """The sliders bind to 1-based `*_number` twins; setting a number
+    drives the 0-based index and vice versa."""
+    ctrl, model, paths = _viewer(monkeypatch, tmp_path)
+    ctrl.rescan()
+    assert model.burst_number == model.burst_index + 1 == 2
+    assert model.max_burst_number == 2
+    model.burst_number = 1
+    assert model.burst_index == 0 and model.selected_burst == "Mix_1.2_a"
+    assert model.max_image_number == len(model.paths) == 2
+    model.image_number = 2
+    assert model.image_index == 1
+    assert model.current_path == str(paths["old_green"])

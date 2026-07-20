@@ -162,8 +162,8 @@ ImageViewerView = View(
              editor=HoverScrollEnumEditor(values_name="burst_names"),
              tooltip="Pick a capture burst (one folder per burst; "
                      "'ungrouped' holds legacy flat captures)"),
-        Item("burst_index", label="Burst Seek",
-             editor=RangeEditor(low=0, high_name="object.max_burst_index",
+        Item("burst_number", label="Burst Seek",
+             editor=RangeEditor(low=1, high_name="object.max_burst_number",
                                 mode="slider"),
              tooltip="Drag through the bursts, oldest to newest"),
         Item("selected_wavelength", label="Wavelength",
@@ -173,8 +173,8 @@ ImageViewerView = View(
         Item("selected_image", label="Image",
              editor=HoverScrollEnumEditor(values_name="image_names"),
              tooltip="Pick an image from the selected burst"),
-        Item("image_index", label="Seek",
-             editor=RangeEditor(low=0, high_name="object.max_image_index",
+        Item("image_number", label="Seek",
+             editor=RangeEditor(low=1, high_name="object.max_image_number",
                                 mode="slider"),
              tooltip="Drag through the burst's images"),
 

@@ -72,6 +72,13 @@ class FluorescenceImageViewerModel(HasTraits):
     image_index = Int(0)
     max_image_index = Property(Int, observe="paths.items")
 
+    #: 1-based twins of the seek indices — what the sliders BIND to, so
+    #: the view counts 1..N while every internal index stays 0-based.
+    image_number = Property(Int, observe="image_index")
+    max_image_number = Property(Int, observe="paths.items")
+    burst_number = Property(Int, observe="burst_index")
+    max_burst_number = Property(Int, observe="bursts.items")
+
     # Display window: percentile auto-contrast, or the manual min/max pair.
     auto_contrast = Bool(True, desc="Window the displayed intensities to "
                                     "the 0.1–99.9 percentile range")
@@ -155,6 +162,24 @@ class FluorescenceImageViewerModel(HasTraits):
 
     def _get_max_burst_index(self):
         return max(len(self.bursts) - 1, 0)
+
+    def _get_image_number(self):
+        return self.image_index + 1
+
+    def _set_image_number(self, value):
+        self.image_index = value - 1
+
+    def _get_max_image_number(self):
+        return max(len(self.paths), 1)
+
+    def _get_burst_number(self):
+        return self.burst_index + 1
+
+    def _set_burst_number(self, value):
+        self.burst_index = value - 1
+
+    def _get_max_burst_number(self):
+        return max(len(self.bursts), 1)
 
     def burst_paths(self, burst_name):
         """The named burst's images, or [] for an unknown name."""
