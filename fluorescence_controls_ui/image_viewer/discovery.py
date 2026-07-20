@@ -5,6 +5,8 @@ list of those files. Pure path logic so it stays hardware/Qt-free testable.
 from pathlib import Path
 
 from device_viewer.consts import CAPTURES_DIR_NAME, RAW_CAPTURES_SUBDIR
+from fluorescence_controller.consts import LED_WAVELENGTHS
+from fluorescence_protocol_controls.capture_chain import sanitize_label
 from microdrop_application.helpers import get_current_experiment_directory
 from logger.logger_service import get_logger
 
@@ -40,3 +42,42 @@ def discover_captures(directory) -> list:
              for path in Path(directory).rglob(pattern)
              if path.parent.name == RAW_CAPTURES_SUBDIR}
     return sorted(paths, key=lambda path: (path.stat().st_mtime, path.name))
+
+
+#: The legacy flat layout (captures/16bit_raw/*.png, pre-burst) shows up
+#: as one pseudo-burst under this name.
+UNGROUPED_BURST = "ungrouped"
+
+
+def discover_bursts(directory) -> list:
+    """The captures under ``directory`` grouped per burst folder:
+    ``[(burst_name, [paths...]), ...]``, oldest burst first (by its first
+    image's save time), images within a burst oldest first. A burst is a
+    ``<name>_<utc>`` subfolder holding a ``16bit_raw`` dir; images from
+    the legacy flat ``captures/16bit_raw`` layout appear as the single
+    ``UNGROUPED_BURST`` entry. [] when the directory is unset/missing."""
+    groups: dict = {}
+    root = Path(directory) if directory is not None else None
+    for path in discover_captures(directory):
+        burst_dir = path.parent.parent   # <burst>/16bit_raw/<file>
+        name = UNGROUPED_BURST if burst_dir == root else burst_dir.name
+        groups.setdefault(name, []).append(path)
+    return sorted(groups.items(),
+                  key=lambda item: (item[1][0].stat().st_mtime, item[0]))
+
+
+#: sanitized-token -> display name for the six LED wavelengths; derived
+#: labels embed the sanitized form (e.g. "Green_540_nm"), which is how a
+#: file's wavelength is detected.
+WAVELENGTH_TOKENS = {sanitize_label(name): name for name in LED_WAVELENGTHS}
+
+
+def detect_wavelength(path) -> str:
+    """The display wavelength a capture filename embeds, or '' when none
+    of the known LED wavelengths appears in it (e.g. legacy screen
+    captures)."""
+    name = Path(path).name
+    for token, display in WAVELENGTH_TOKENS.items():
+        if token in name:
+            return display
+    return ""

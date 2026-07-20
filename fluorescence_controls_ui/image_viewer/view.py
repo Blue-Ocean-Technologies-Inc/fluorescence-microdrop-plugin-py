@@ -156,13 +156,27 @@ buttons_group = HGroup(
 ImageViewerView = View(
     VGroup(
         buttons_group,
+        # Burst layer: captures land one folder per burst, so navigation
+        # is two-level — pick the burst, then the image within it.
+        Item("selected_burst", label="Burst",
+             editor=HoverScrollEnumEditor(values_name="burst_names"),
+             tooltip="Pick a capture burst (one folder per burst; "
+                     "'ungrouped' holds legacy flat captures)"),
+        Item("burst_index", label="Burst Seek",
+             editor=RangeEditor(low=0, high_name="object.max_burst_index",
+                                mode="slider"),
+             tooltip="Drag through the bursts, oldest to newest"),
+        Item("selected_wavelength", label="Wavelength",
+             editor=HoverScrollEnumEditor(values_name="wavelength_names"),
+             tooltip="Show only captures of one LED wavelength "
+                     "(detected from the filenames)"),
         Item("selected_image", label="Image",
              editor=HoverScrollEnumEditor(values_name="image_names"),
-             tooltip="Pick an image from the browsed folder"),
+             tooltip="Pick an image from the selected burst"),
         Item("image_index", label="Seek",
              editor=RangeEditor(low=0, high_name="object.max_image_index",
                                 mode="slider"),
-             tooltip="Drag through the folder's images"),
+             tooltip="Drag through the burst's images"),
 
         Item("auto_contrast", label="Auto contrast",
              tooltip="Window the displayed intensities to the 0.1–99.9 "

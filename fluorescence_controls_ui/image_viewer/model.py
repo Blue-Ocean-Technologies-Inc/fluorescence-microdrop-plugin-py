@@ -14,6 +14,9 @@ from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 from ..consts import PERSISTED_VIEWER_TRAITS
 from ..preferences import FluorescencePreferences
 
+#: The wavelength filter's no-filter choice.
+WAVELENGTH_FILTER_ALL = "All"
+
 
 class FluorescenceImageViewerModel(HasTraits):
     """State for the 16-bit capture viewer."""
@@ -22,7 +25,26 @@ class FluorescenceImageViewerModel(HasTraits):
     #: folder; the folder button points it elsewhere.
     directory = Directory()
 
-    #: Discovered images in the browsed folder (Path objects), oldest first.
+    #: Discovered bursts: ``[(burst_name, [paths...]), ...]``, oldest
+    #: first (discovery.discover_bursts). The VISIBLE image list below is
+    #: the selected burst's paths through the wavelength filter.
+    bursts = List()
+
+    #: Burst dropdown choices (mirrors ``bursts``) and its selection.
+    burst_names = Property(List(Str), observe="bursts.items")
+    selected_burst = Str()
+
+    #: Burst seek-slider position within ``bursts``.
+    burst_index = Int(0)
+    max_burst_index = Property(Int, observe="bursts.items")
+
+    #: Wavelength filter: "All" plus every wavelength detected across the
+    #: discovered files (discovery.detect_wavelength).
+    wavelength_names = List(Str, value=[WAVELENGTH_FILTER_ALL])
+    selected_wavelength = Str(WAVELENGTH_FILTER_ALL)
+
+    #: Images shown for the current burst + filter (Path objects), oldest
+    #: first. The dropdown / seek slider / position readout follow this.
     paths = List()
 
     #: Path of the displayed image ('' before the first load). Setting it
@@ -127,6 +149,19 @@ class FluorescenceImageViewerModel(HasTraits):
 
     def _get_max_image_index(self):
         return max(len(self.paths) - 1, 0)
+
+    def _get_burst_names(self):
+        return [name for name, _paths in self.bursts]
+
+    def _get_max_burst_index(self):
+        return max(len(self.bursts) - 1, 0)
+
+    def burst_paths(self, burst_name):
+        """The named burst's images, or [] for an unknown name."""
+        for name, paths in self.bursts:
+            if name == burst_name:
+                return list(paths)
+        return []
 
     def _get_position_text(self):
         index = self.path_index()
