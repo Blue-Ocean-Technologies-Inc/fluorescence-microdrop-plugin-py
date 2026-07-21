@@ -96,3 +96,34 @@ def test_chains_saved_before_auto_flags_load_with_auto_off():
            "frequency": 40000, "exposure_ms": 10.0, "gain": 0, "run": True}
     [entry] = parse_chain([old])
     assert entry.auto_exposure is False and entry.auto_gain is False
+
+
+# --- capture_start / capture_end phase fields ---------------------------
+
+def test_phase_fields_default_to_step_start_only():
+    entry = _entry()
+    assert entry.capture_start is True
+    assert entry.capture_end is False
+
+
+def test_legacy_dict_without_phase_keys_parses_to_step_start_only():
+    raw = _entry().model_dump()
+    del raw["capture_start"], raw["capture_end"]
+    [restored] = parse_chain([raw])
+    assert restored.capture_start is True
+    assert restored.capture_end is False
+
+
+def test_phase_fields_round_trip():
+    entries = [_entry(label="both", capture_start=True, capture_end=True),
+               _entry(label="end_only", capture_start=False,
+                      capture_end=True)]
+    restored = parse_chain(dump_chain(entries))
+    assert [(e.capture_start, e.capture_end) for e in restored] \
+        == [(True, True), (False, True)]
+
+
+def test_both_phases_false_is_coerced_to_step_start():
+    entry = _entry(capture_start=False, capture_end=False)
+    assert entry.capture_start is True
+    assert entry.capture_end is False

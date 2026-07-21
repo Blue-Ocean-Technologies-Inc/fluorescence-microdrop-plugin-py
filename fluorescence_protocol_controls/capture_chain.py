@@ -7,7 +7,9 @@ an older chain shape (or hand-edited) must never crash a load. Entries
 that fail validation are skipped and logged; their valid siblings still
 load.
 """
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel, ConfigDict, Field, field_validator, model_validator,
+)
 
 from logger.logger_service import get_logger
 
@@ -43,12 +45,26 @@ class ChainEntry(BaseModel):
     # (image_tag_wavelength_index) and is read-only in the UI.
     image_tag: str = ""
 
+    # Protocol phase(s) this entry fires in (the executor's on_pre_step /
+    # on_post_step — the same hooks the regular capture column picks
+    # between; this entry may fire in both). At least one is always on:
+    # both-False input is coerced to the step-start default rather than
+    # rejected, so a hand-edited protocol file still loads.
+    capture_start: bool = True
+    capture_end: bool = False
+
     @field_validator("wavelength")
     @classmethod
     def _wavelength_is_known(cls, value):
         if value not in LED_WAVELENGTHS:
             raise ValueError(f"Unknown LED wavelength: {value!r}")
         return value
+
+    @model_validator(mode="after")
+    def _at_least_one_phase(self):
+        if not (self.capture_start or self.capture_end):
+            self.capture_start = True
+        return self
 
     @property
     def led_index(self) -> int:
