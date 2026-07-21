@@ -131,17 +131,20 @@ class FluorescenceChainHandler(BaseColumnHandler):
     def on_post_step(self, row, ctx):
         """Step-end phase: fire the ticked entries with
         `capture_end=True`. An entry may fire in both phases."""
-        self._run_phase(row, ctx, lambda e: e.capture_end)
+        self._run_phase(row, ctx, lambda e: e.capture_end, folder_suffix="_end")
 
-    def _run_phase(self, row, ctx, phase_filter):
+    def _run_phase(self, row, ctx, phase_filter, folder_suffix=""):
         """Fire this step's ticked entries passing ``phase_filter``, in
         order, into one folder per phase: apply camera settings, publish
         the LED state, block on the EXECUTOR's own applied-ack mailbox
         (`ctx.wait_for` — not capture_service's Event, which is for
-        pane-driven bursts only), then save the frame. Any raise
-        (TimeoutError from the wait, RuntimeError from the save)
-        propagates uncaught: the step fails and its ack is withheld
-        (existing backend error contract,
+        pane-driven bursts only), then save the frame. The end phase's
+        folder carries an `_end` marker (via ``folder_suffix``) so a
+        sub-second both-phases step can never overwrite its start
+        captures — `burst_folder`'s timestamp alone is only
+        1-second-granular. Any raise (TimeoutError from the wait,
+        RuntimeError from the save) propagates uncaught: the step fails
+        and its ack is withheld (existing backend error contract,
         `fluorescence_command_setter_service.py:57`, unchanged).
 
         `capture_service` is imported lazily here (mirrors
@@ -159,7 +162,7 @@ class FluorescenceChainHandler(BaseColumnHandler):
         from fluorescence_controls_ui import capture_service
 
         folder = capture_service.burst_folder(
-            step_desc=row.name, dotted_id=row.dotted_path())
+            step_desc=row.name + folder_suffix, dotted_id=row.dotted_path())
         for entry in entries:
             capture_service.apply_camera_settings(entry)
             protocol_set_fluorescence_publisher.publish(

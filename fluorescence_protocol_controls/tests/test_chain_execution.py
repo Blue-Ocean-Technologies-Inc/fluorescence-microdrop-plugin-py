@@ -1,9 +1,11 @@
-"""Hardware-free tests for `FluorescenceChainHandler.on_pre_step` (issue
-#6, Task 7): the per-entry burst execution loop — apply camera settings,
-publish the LED state, wait for the executor's own applied ack, save the
-capture — for each ticked entry in chain order, inside one folder built
-once per step. No real camera/backend anywhere: `capture_service` is
-faked wholesale (it is imported lazily inside `on_pre_step`, mirroring
+"""Hardware-free tests for `FluorescenceChainHandler.on_pre_step` and
+`on_post_step` (issue #6, Task 7): the per-entry burst execution loop —
+apply camera settings, publish the LED state, wait for the executor's
+own applied ack, save the capture — for each ticked entry in chain
+order, inside one folder built per phase (the end phase's folder carries
+an `_end` suffix, so a sub-second both-phases step cannot overwrite its
+start captures). No real camera/backend anywhere: `capture_service` is
+faked wholesale (it is imported lazily inside `_run_phase`, mirroring
 `controller.run_capture`'s pattern), and the publisher + `ctx.wait_for`
 are recorded fakes.
 """
@@ -350,3 +352,23 @@ def test_post_step_preview_mode_is_a_noop(row_type, fake_capture_service,
     assert fake_capture_service["burst_folder"] == []
     assert publisher_calls == []
     assert ctx.wait_for_calls == []
+
+
+def test_post_step_burst_folder_is_phase_disambiguated(
+        row_type, fake_capture_service, publisher_calls):
+    """A both-phases entry in a sub-second step must not overwrite its
+    step-start capture: the end phase bursts into an `_end`-suffixed
+    folder, the start phase keeps the legacy folder name."""
+    Row, col = row_type
+    row = Row()
+    row.name = "Step A"
+    col.model.set_value(row, [
+        _entry("both", capture_start=True, capture_end=True).model_dump()])
+
+    handler = FluorescenceChainHandler()
+    ctx = _Ctx()
+    handler.on_pre_step(row, ctx)
+    handler.on_post_step(row, ctx)
+
+    assert [c["step_desc"] for c in fake_capture_service["burst_folder"]] \
+        == ["Step A", "Step A_end"]

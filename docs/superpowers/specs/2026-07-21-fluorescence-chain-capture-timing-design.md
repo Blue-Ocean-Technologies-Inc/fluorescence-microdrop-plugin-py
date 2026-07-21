@@ -72,7 +72,10 @@ Protocol Step Time of Capture:   [ Start ]  [ End ]
 Unchanged: handler priority 5, `wait_for_topics=[FLUORESCENCE_APPLIED]`,
 per-column ack timeout, the #541 capture-cell mutual-exclusion lock,
 `on_post_protocol_end` → `ALL_LEDS_OFF`, burst internals (`capture_service`),
-and capture filenames.
+and capture filenames. The end phase's burst folder does carry an `_end`
+suffix on its `step_desc` (`capture_service` itself is unchanged), so a
+both-phases step that completes within one wall-clock second cannot have
+its end-phase captures overwrite its start-phase captures.
 
 ## Out of scope
 
