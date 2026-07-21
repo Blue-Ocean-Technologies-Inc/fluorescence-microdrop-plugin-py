@@ -91,3 +91,31 @@ def test_chain_table_has_right_click_delete_menu():
                for group in chain_table_editor.menu.groups
                for item in group.items]
     assert "delete_chain_row" in actions
+
+
+def test_capture_phase_toggles_present_with_last_one_on_guards():
+    names = _all_item_names()
+    assert "capture_start" in names
+    assert "capture_end" in names
+
+
+def test_capture_phase_toggles_cannot_switch_off_the_last_phase():
+    """Each toggle disables exactly when it is the sole phase on, so it
+    can always be turned on but never switched off last."""
+    from fluorescence_controls_ui.view import params_group
+
+    def _find(node, name):
+        from traitsui.api import Group, Item
+        if isinstance(node, Item) and node.name == name:
+            return node
+        if isinstance(node, Group):
+            for child in node.content:
+                found = _find(child, name)
+                if found is not None:
+                    return found
+        return None
+
+    start = _find(params_group, "capture_start")
+    end = _find(params_group, "capture_end")
+    assert start.enabled_when == "capture_end or not capture_start"
+    assert end.enabled_when == "capture_start or not capture_end"

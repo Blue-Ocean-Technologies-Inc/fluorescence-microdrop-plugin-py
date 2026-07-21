@@ -71,6 +71,19 @@ params_group = VGroup(
         Item("gain", label="Gain", enabled_when="not auto_gain"),
         Item("auto_gain", label="Auto"),
     ),
+    # Protocol phase(s) the selected/added chain row captures in. Both may
+    # be on (capture twice per step); each toggle disables while it is the
+    # sole phase on, so at least one is always on. Timing only governs
+    # protocol runs — the manual Run Capture buttons ignore it.
+    HGroup(
+        Label("Protocol Step Time of Capture:"),
+        UItem("capture_start",
+              editor=InPlaceToggleEditor(on_label="Start", off_label="Start"),
+              enabled_when="capture_end or not capture_start"),
+        UItem("capture_end",
+              editor=InPlaceToggleEditor(on_label="End", off_label="End"),
+              enabled_when="capture_start or not capture_end"),
+    ),
     visible_when="show_params",
     show_border=True,
 )
