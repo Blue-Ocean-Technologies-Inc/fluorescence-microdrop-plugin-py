@@ -34,8 +34,8 @@ ENTRY_KW = dict(wavelength="Blue (460 nm)", intensity=50, frequency=40000,
 FAKE_FOLDER = "FAKE_FOLDER"
 
 
-def _entry(label, run=True):
-    return ChainEntry(label=label, run=run, **ENTRY_KW)
+def _entry(label, run=True, **overrides):
+    return ChainEntry(label=label, run=run, **{**ENTRY_KW, **overrides})
 
 
 @pytest.fixture
@@ -276,3 +276,77 @@ def test_wait_for_timeout_propagates_and_aborts_the_loop(
     assert len(publisher_calls) == 1
     assert fake_capture_service["save"] == []
     assert ctx.wait_for_calls == [(FLUORESCENCE_APPLIED, 5.0)]
+
+
+# --- capture_start / capture_end phase routing --------------------------
+
+def test_pre_step_runs_only_start_entries_post_step_only_end_entries(
+        row_type, fake_capture_service, publisher_calls):
+    Row, col = row_type
+    row = Row()
+    row.name = "Step A"
+    entries = [
+        _entry("start_only"),
+        _entry("end_only", capture_start=False, capture_end=True),
+        _entry("both", capture_start=True, capture_end=True),
+        _entry("parked", run=False, capture_start=True, capture_end=True),
+    ]
+    col.model.set_value(row, [e.model_dump() for e in entries])
+
+    handler = FluorescenceChainHandler()
+
+    ctx = _Ctx()
+    handler.on_pre_step(row, ctx)
+    assert [e.label for e in fake_capture_service["apply"]] \
+        == ["start_only", "both"]
+
+    handler.on_post_step(row, ctx)
+    assert [e.label for e in fake_capture_service["apply"]] \
+        == ["start_only", "both", "end_only", "both"]
+
+
+def test_post_step_with_no_end_entries_is_a_noop(
+        row_type, fake_capture_service, publisher_calls):
+    Row, col = row_type
+    row = Row()
+    col.model.set_value(row, [_entry("start_only").model_dump()])
+
+    ctx = _Ctx()
+    FluorescenceChainHandler().on_post_step(row, ctx)
+
+    assert fake_capture_service["burst_folder"] == []
+    assert publisher_calls == []
+    assert ctx.wait_for_calls == []
+
+
+def test_legacy_entries_without_phase_keys_run_at_pre_step_only(
+        row_type, fake_capture_service, publisher_calls):
+    Row, col = row_type
+    row = Row()
+    raw = _entry("legacy").model_dump()
+    del raw["capture_start"], raw["capture_end"]
+    col.model.set_value(row, [raw])
+
+    handler = FluorescenceChainHandler()
+    ctx = _Ctx()
+    handler.on_pre_step(row, ctx)
+    handler.on_post_step(row, ctx)
+
+    assert [e.label for e in fake_capture_service["apply"]] == ["legacy"]
+    assert len(fake_capture_service["burst_folder"]) == 1
+
+
+def test_post_step_preview_mode_is_a_noop(row_type, fake_capture_service,
+                                          publisher_calls):
+    Row, col = row_type
+    row = Row()
+    col.model.set_value(row, [
+        _entry("end_only", capture_start=False, capture_end=True)
+        .model_dump()])
+
+    ctx = _Ctx(preview_mode=True)
+    FluorescenceChainHandler().on_post_step(row, ctx)
+
+    assert fake_capture_service["burst_folder"] == []
+    assert publisher_calls == []
+    assert ctx.wait_for_calls == []

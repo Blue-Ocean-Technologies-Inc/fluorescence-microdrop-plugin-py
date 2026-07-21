@@ -114,21 +114,34 @@ class FluorescenceChainColumnView(BaseColumnView):
 class FluorescenceChainHandler(BaseColumnHandler):
     """Priority 5 — one bucket EARLIER than capture/record/video (10),
     so the LED + camera state is applied and settled before a Step
-    Start capture fires. See the old FluorescenceStepHandler
-    (fluorescence_column.py, deleted) for the ack-wait rationale this
-    mirrors."""
+    Start capture fires; the same ordering holds in the step-end
+    bucket. Each ticked entry declares its phase(s) via
+    `capture_start` / `capture_end` and may fire in both. See the old
+    FluorescenceStepHandler (fluorescence_column.py, deleted) for the
+    ack-wait rationale this mirrors."""
     priority = 5
     wait_for_topics = [FLUORESCENCE_APPLIED]
     default_ack_time_s = 5.0
 
     def on_pre_step(self, row, ctx):
-        """Fire this step's ticked capture-chain entries, in order, into
-        one folder: apply camera settings, publish the LED state, block
-        on the EXECUTOR's own applied-ack mailbox (`ctx.wait_for` — not
-        capture_service's Event, which is for pane-driven bursts only),
-        then save the frame. Any raise (TimeoutError from the wait,
-        RuntimeError from the save) propagates uncaught: the step fails
-        and its ack is withheld (existing backend error contract,
+        """Step-start phase: fire the ticked entries with
+        `capture_start=True` (every legacy entry — the field defaults on)."""
+        self._run_phase(row, ctx, lambda e: e.capture_start)
+
+    def on_post_step(self, row, ctx):
+        """Step-end phase: fire the ticked entries with
+        `capture_end=True`. An entry may fire in both phases."""
+        self._run_phase(row, ctx, lambda e: e.capture_end)
+
+    def _run_phase(self, row, ctx, phase_filter):
+        """Fire this step's ticked entries passing ``phase_filter``, in
+        order, into one folder per phase: apply camera settings, publish
+        the LED state, block on the EXECUTOR's own applied-ack mailbox
+        (`ctx.wait_for` — not capture_service's Event, which is for
+        pane-driven bursts only), then save the frame. Any raise
+        (TimeoutError from the wait, RuntimeError from the save)
+        propagates uncaught: the step fails and its ack is withheld
+        (existing backend error contract,
         `fluorescence_command_setter_service.py:57`, unchanged).
 
         `capture_service` is imported lazily here (mirrors
@@ -137,8 +150,9 @@ class FluorescenceChainHandler(BaseColumnHandler):
         tests."""
         if getattr(ctx.protocol, "preview_mode", False):
             return
-        entries = ticked(parse_chain(
+        entries = [e for e in ticked(parse_chain(
             getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID, None)))
+            if phase_filter(e)]
         if not entries:
             return
 
