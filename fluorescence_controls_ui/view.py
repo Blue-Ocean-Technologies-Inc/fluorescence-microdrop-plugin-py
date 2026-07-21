@@ -1,5 +1,5 @@
 from traitsui.api import (
-    View, VGroup, HGroup, Item, UItem, Readonly, TableEditor, Label,
+    View, VGroup, HGroup, Item, UItem, Readonly, TableEditor, Label
 )
 from traitsui.key_bindings import KeyBindings, KeyBinding
 from traitsui.menu import Menu, Action
@@ -26,23 +26,24 @@ status_group = VGroup(
 # Master light toggle + device-viewer stream checkbox. The mode selector
 # (br/fl/dual) is gone (issue #6): a single LED/camera param set now drives
 # whichever chain row is being edited.
-control_group = HGroup(
+control_group = VGroup(
+
     HGroup(
         UItem("light_on", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
-             enabled_when="connected"),
-    ),
-    HGroup(
+              enabled_when="connected"),
+
         # Master gate for the pane's LED board commands (heater stream
         # toggle parity): while off, lighting edits are staged.
         UItem("stream_active",
               editor=InPlaceToggleEditor(on_label="Stream On",
                                          off_label="Stream Off"),
               enabled_when="connected"),
-        # Live ASI preview in the device viewer — independent of the LED
-        # board connection (it only needs the camera), hence no
-        # enabled_when.
-        Item("device_viewer_stream", label="Device View Camera Feed"),
     ),
+    # Live ASI preview in the device viewer — independent of the LED
+    # board connection (it only needs the camera), hence no
+    # enabled_when.
+    Item("device_viewer_stream", label="Device View Camera Feed"),
+
     visible_when="show_control",
     show_border=True,
 )
@@ -73,6 +74,7 @@ params_group = VGroup(
     visible_when="show_params",
     show_border=True,
 )
+
 
 # Capture-chain table (issue #6), copied from the device viewer's route
 # table (route_selection_view.py): the Run column is a glyph, not a Qt
@@ -122,26 +124,43 @@ chain_table_editor = TableEditor(
 # panel's params (controller.add_capture — no inline row factory, Add owns
 # creation); Run Capture bursts the ticked rows; Delete removes the
 # selected row, or the last one when nothing is selected.
+_spacing = 16
 chain_group = VGroup(
+
     HGroup(
-        UItem("add_capture_button", editor=IconButtonEditor(
-            glyph="add", tooltip="Add a capture from the panel's params")),
-        UItem("move_up_button", editor=IconButtonEditor(
-            glyph="arrow_upward", tooltip="Move the selected capture up")),
-        UItem("move_down_button", editor=IconButtonEditor(
-            glyph="arrow_downward",
-            tooltip="Move the selected capture down")),
-        UItem("capture_selected_button", editor=IconButtonEditor(
-            glyph="photo_camera",
-            tooltip="Capture the selected row now (ticked or not)"),
-              enabled_when="connected and not protocol_running"),
-        UItem("run_capture_button", editor=IconButtonEditor(
-            glyph="play_circle", tooltip="Run the ticked captures now"),
-              enabled_when="connected and not protocol_running"),
-        UItem("delete_capture_button", editor=IconButtonEditor(
-            glyph=ICON_DELETE,
-            tooltip="Delete the selected capture (the last one when "
-                    "nothing is selected)")),
+        HGroup(
+            UItem("add_capture_button", editor=IconButtonEditor(
+            glyph="add", tooltip="Add a capture from the panel's params")
+                  ),
+            UItem("delete_capture_button", editor=IconButtonEditor(
+                   glyph="remove",
+                   tooltip="Delete the selected capture (the last one when "
+                           "nothing is selected)"))
+        ),
+
+        Item(str(_spacing)),
+
+        HGroup(
+            UItem("move_up_button", editor=IconButtonEditor(
+                glyph="arrow_upward", tooltip="Move the selected capture up")
+                  ),
+            UItem("move_down_button", editor=IconButtonEditor(
+                glyph="arrow_downward",
+                tooltip="Move the selected capture down")
+                  ),
+        ),
+
+        Item(str(_spacing)),
+
+        HGroup(
+            UItem("capture_selected_button", editor=IconButtonEditor(
+                glyph="photo_camera", tooltip="Capture the selected row now (ticked or not)"),
+                  enabled_when="connected and not protocol_running"),
+            UItem("run_capture_button", editor=IconButtonEditor(
+                glyph="play_circle", tooltip="Run the ticked captures now"),
+                  enabled_when="connected and not protocol_running")
+        ),
+
     ),
     UItem("chain_rows", editor=chain_table_editor),
     show_border=True,
