@@ -157,3 +157,19 @@ def test_auto_flags_round_trip_between_row_and_entry():
 def test_auto_flags_default_off():
     d = FluorescenceChainRow(label="A").to_entry_dict()
     assert d["auto_exposure"] is False and d["auto_gain"] is False
+
+
+def test_row_phase_defaults_and_entry_round_trip():
+    row = FluorescenceChainRow()
+    assert row.capture_start is True
+    assert row.capture_end is False
+
+    d = row.to_entry_dict()
+    assert d["capture_start"] is True
+    assert d["capture_end"] is False
+
+    entry = ChainEntry(**{**d, "label": "x",
+                          "capture_start": False, "capture_end": True})
+    back = FluorescenceChainRow.from_entry(entry)
+    assert back.capture_start is False
+    assert back.capture_end is True

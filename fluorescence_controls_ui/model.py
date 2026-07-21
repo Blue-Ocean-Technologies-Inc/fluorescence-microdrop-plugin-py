@@ -76,6 +76,11 @@ class FluorescenceStatusModel(BaseStatusModel):
     # Chain-row labels are DERIVED (image_tag_wavelength_index, read-only
     # in the table); the panel edits only this optional tag.
     image_tag = Str("")
+    # Protocol phase(s) a capture fires in (per-row, edited via the panel
+    # like every other param): step start, step end, or both. The view's
+    # enabled_when guards keep at least one on.
+    capture_start = Bool(True)
+    capture_end = Bool(False)
     wavelength = Enum(*LED_WAVELENGTHS)
     intensity = Range(
         LED_DUTY_MIN, LED_DUTY_MAX, value=INTENSITY_DEFAULT, mode="slider",

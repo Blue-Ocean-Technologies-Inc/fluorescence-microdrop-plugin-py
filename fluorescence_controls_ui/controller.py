@@ -36,7 +36,7 @@ logger = get_logger(__name__)
 #: the selected row.
 CHAIN_ROW_PARAM_TRAITS = (
     "image_tag", "wavelength", "intensity", "frequency", "exposure", "gain",
-    "auto_exposure", "auto_gain")
+    "auto_exposure", "auto_gain", "capture_start", "capture_end")
 CHAIN_ROW_PARAM_TRAITS_EXPRESSION = f"[{','.join(CHAIN_ROW_PARAM_TRAITS)}]"
 
 #: How long after a local chain push a DIFFERING row_selected echo for the
@@ -274,6 +274,8 @@ class FluorescenceControlsController(BaseStatusController):
         self._loading_row = True
         try:
             self.model.image_tag = row.image_tag
+            self.model.capture_start = row.capture_start
+            self.model.capture_end = row.capture_end
             # Auto flags FIRST: an auto OFF-transition adopts the camera's
             # current values into model.exposure/gain (_adopt_auto_value),
             # and the row's stored numbers below must win that write.
@@ -428,7 +430,9 @@ class FluorescenceControlsController(BaseStatusController):
             intensity=self.model.intensity, frequency=self.model.frequency,
             exposure=self.model.exposure, gain=self.model.gain,
             auto_exposure=self.model.auto_exposure,
-            auto_gain=self.model.auto_gain)
+            auto_gain=self.model.auto_gain,
+            capture_start=self.model.capture_start,
+            capture_end=self.model.capture_end)
         self.model.chain_rows = self.model.chain_rows + [row]
         self.model.chain_selection = row
         self._push_chain_to_step()

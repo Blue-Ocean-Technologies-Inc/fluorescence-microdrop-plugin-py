@@ -35,6 +35,10 @@ class FluorescenceChainRow(HasTraits):
     # Optional user tag; `label` above is derived from it (see
     # capture_chain.chain_label) and never edited directly.
     image_tag = Str("")
+    # Protocol phase(s) this row fires in (mirrors ChainEntry; the panel's
+    # Start/End toggles edit these via the live binding).
+    capture_start = Bool(True)
+    capture_end = Bool(False)
 
     def to_entry_dict(self) -> dict:
         """This row's params as a `ChainEntry`-shaped dict (`exposure` ->
@@ -50,6 +54,8 @@ class FluorescenceChainRow(HasTraits):
             "auto_exposure": self.auto_exposure,
             "auto_gain": self.auto_gain,
             "image_tag": self.image_tag,
+            "capture_start": self.capture_start,
+            "capture_end": self.capture_end,
         }
 
     @classmethod
@@ -66,4 +72,6 @@ class FluorescenceChainRow(HasTraits):
             auto_exposure=entry.auto_exposure,
             auto_gain=entry.auto_gain,
             image_tag=entry.image_tag,
+            capture_start=entry.capture_start,
+            capture_end=entry.capture_end,
         )
