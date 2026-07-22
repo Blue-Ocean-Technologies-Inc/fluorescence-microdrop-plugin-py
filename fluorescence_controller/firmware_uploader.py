@@ -86,6 +86,40 @@ def run_mpremote(cmd, log, retries=3):
     return False
 
 
+def _wipe_filesystem(port, log):
+    """Wipe the board's filesystem contents WITHOUT touching the root itself.
+
+    ``rm -rv :/`` removes every child but then tries to rmdir the root,
+    which the board refuses (EPERM) — mpremote reports ``rm -r: cannot
+    remove :/ Operation not permitted`` and exits non-zero on every retry
+    even though the wipe actually happened (the standalone upload script
+    had the same noise, its format step's result was just never checked).
+    Removing each top-level entry instead ends clean.
+    """
+    try:
+        listing = _run_mpremote_subprocess(["connect", port, "fs", "ls", ":/"])
+    except Exception as e:
+        listing = None
+        logger.debug(f"Filesystem listing raised: {e}")
+    if listing is None or listing.returncode != 0:
+        log("WARNING: could not list the filesystem before the wipe; "
+            "falling back to rm -r :/")
+        run_mpremote(["connect", port, "rm", "-rv", ":/"], log)
+        return
+    # `fs ls :/` lines are "<size> <name>" (directories keep a trailing /),
+    # preceded by an "ls :/" header — keep only the size-prefixed entries.
+    entries = []
+    for line in listing.stdout.splitlines():
+        parts = line.split(None, 1)
+        if len(parts) == 2 and parts[0].isdigit():
+            entries.append(parts[1].strip().rstrip("/"))
+    if not entries:
+        log("Filesystem already empty.")
+        return
+    for entry in entries:
+        run_mpremote(["connect", port, "rm", "-rv", f":/{entry}"], log)
+
+
 def _pull_device_config(port):
     """Best-effort single-attempt pull of the device's current config.json to
     a local temp file. Returns the temp Path on success, or None if the
@@ -460,7 +494,7 @@ def upload_firmware(
                     device_config_backup.unlink(missing_ok=True)
                 return False
             log("Formatting device filesystem...")
-            run_mpremote(["connect", port, "rm", "-rv", ":/"], log)
+            _wipe_filesystem(port, log)
         elif no_format:
             log("Skipping filesystem format")
 
