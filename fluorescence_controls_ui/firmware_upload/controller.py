@@ -94,9 +94,9 @@ class FirmwareUploadDialogController(HasTraits):
 
         # Reflect the connected board's identity into the read-only device id,
         # and point the port combo at its auto-detected port (a board may have
-        # connected before the dialog was opened).
-        if self.live_state.board_device_id:
-            self.model.device_id = self.live_state.board_device_id
+        # connected before the dialog was opened). device_id stays blank until
+        # a whoami has actually been received.
+        self.model.device_id = self.live_state.board_device_id
         self.model.sync_selected_port(self.live_state.board_port)
 
         self.dialog.finished.connect(self._on_dialog_closed)
@@ -132,10 +132,10 @@ class FirmwareUploadDialogController(HasTraits):
 
     @observe("live_state:board_device_id", dispatch="ui")
     def _on_board_device_id_changed(self, event):
-        """A board identified (or re-identified) — mirror its whoami id into
-        the read-only Device ID field (GUI thread)."""
-        if event.new:
-            self.model.device_id = event.new
+        """The board's whoami id arrived (or cleared on disconnect) — mirror
+        it into the read-only Device ID field, so the field is blank unless a
+        whoami is currently backing it (GUI thread)."""
+        self.model.device_id = event.new
 
     @observe("live_state:board_port", dispatch="ui")
     def _on_board_port_changed(self, event):

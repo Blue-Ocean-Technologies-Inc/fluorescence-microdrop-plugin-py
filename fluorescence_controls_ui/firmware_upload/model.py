@@ -35,8 +35,11 @@ class FirmwareUploadModel(HasTraits):
     refresh_ports = Button()
 
     #: The connected board's whoami device_id, mirrored from live_state by the
-    #: controller and shown read-only — the upload flashes exactly this board.
-    device_id = Str(FLUORESCENCE_BOARD_DEVICE_ID)
+    #: controller and shown read-only. Blank by default — a value here proves
+    #: the board's whoami signal was actually received. When blank, the upload
+    #: still targets FLUORESCENCE_BOARD_DEVICE_ID (see upload_request_kwargs)
+    #: so an empty match can't grab the heater on the shared VID:PID.
+    device_id = Str()
 
     update_config = Bool(False)
     skip_filesystem_format = Bool(False)
@@ -139,7 +142,7 @@ class FirmwareUploadModel(HasTraits):
             firmware_source=self.firmware_source,
             single_file=self.single_file,
             port="" if self.auto_port else self.selected_port_device(),
-            device_id=self.device_id,
+            device_id=self.device_id or FLUORESCENCE_BOARD_DEVICE_ID,
             update_config=self.update_config,
             skip_filesystem_format=self.skip_filesystem_format,
             reset_after_upload=self.reset_after_upload,

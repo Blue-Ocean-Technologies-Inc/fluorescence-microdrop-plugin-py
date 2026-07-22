@@ -70,9 +70,12 @@ class FluorescenceMessageHandler(BaseMessageHandler):
 
     def _on_disconnected_triggered(self, body):
         """Base handler clears the connected flag; also clear the ferried
-        port so consumers see no auto-detected port while disconnected."""
+        port and device id so the firmware-upload dialog shows no
+        auto-detected port and a blank board id while disconnected (a value
+        there again only after the next whoami)."""
         super()._on_disconnected_triggered(body)
         fluorescence_live_state.board_port = ""
+        fluorescence_live_state.board_device_id = ""
 
     def _on_firmware_upload_started_triggered(self, body):
         """Backend accepted an upload — ferry to the GUI thread via
