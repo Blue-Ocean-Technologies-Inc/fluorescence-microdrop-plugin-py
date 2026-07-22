@@ -6,16 +6,19 @@ seek slider / path selection in sync, and rescans the browsed folder
 from pathlib import Path
 
 import numpy as np
-from traits.api import Instance, observe
+from traits.api import Any, Instance, observe
 from traitsui.api import Controller
 from pyface.api import DirectoryDialog, OK
 
 from logger.logger_service import get_logger
 from microdrop_application.preferences import MicrodropPreferences
 
-from .discovery import current_raw_captures_directory, discover_captures
+from .discovery import (
+    current_captures_directory, detect_wavelength, discover_bursts,
+    discover_experiments,
+)
 from .display import load_image_array
-from .model import FluorescenceImageViewerModel
+from .model import FluorescenceImageViewerModel, WAVELENGTH_FILTER_ALL
 
 logger = get_logger(__name__)
 
@@ -27,6 +30,11 @@ class FluorescenceImageViewerController(Controller):
     on real changes, so the cross-sync naturally terminates)."""
 
     model = Instance(FluorescenceImageViewerModel)
+
+    #: One-shot "what to show" hint consumed by the burst-selection
+    #: observer ("first"/"last"/"keep"); set by rescan / home / folder
+    #: handlers before they change ``selected_burst``.
+    _pending_show = Any(None)
 
     # ------------------------------------------------------------------ #
     # UI build hook                                                        #
@@ -61,23 +69,56 @@ class FluorescenceImageViewerController(Controller):
 
     @observe("model:directory")
     def _browse_directory(self, event):
-        """A newly chosen folder: discover its images and start at the
-        first one. A cleared directory is the home button's reset — it
-        drives the rescan itself (and lands on the newest instead)."""
+        """A newly chosen folder: discover its bursts and start at the
+        first burst's first image. A cleared directory is the home
+        button's reset — it drives the rescan itself (and lands on the
+        newest instead)."""
         if not event.new:
             return
         self.rescan()
-        if self.model.paths:
-            self.model.current_path = str(self.model.paths[0])
+        self._jump_to_burst(0, "first")
 
     @observe("model:home_button")
     def _return_to_experiment_captures(self, event):
-        """Back to the ongoing experiment: follow its raw-captures folder
-        again and show the newest image (so new captures auto-follow)."""
+        """Back to the ongoing experiment: follow its captures folder
+        again and show the newest burst's newest image (so new captures
+        auto-follow)."""
         self.model.directory = ""
         self.rescan()
-        if self.model.paths:
-            self.model.current_path = str(self.model.paths[-1])
+        self._jump_to_burst(-1, "last")
+
+    def _jump_to_burst(self, index, show):
+        """Land on ``bursts[index]`` showing its first/last image."""
+        names = self.model.burst_names
+        if not names:
+            return
+        target = names[index]
+        if self.model.selected_burst != target:
+            self._pending_show = show
+            self.model.selected_burst = target
+        else:
+            self._refresh_visible(show)
+
+    # ------------------------------------------------------------------ #
+    # Experiment dropdown / experiment slider                              #
+    # ------------------------------------------------------------------ #
+    @observe("model:selected_experiment")
+    def _experiment_selected(self, event):
+        """Experiment picked (dropdown or slider): sync the slider and
+        repoint the viewer at that experiment's captures — the
+        ``directory`` observer then rescans and jumps to the first burst."""
+        names = self.model.experiment_names
+        if event.new in names:
+            self.model.experiment_index = names.index(event.new)
+        captures = self.model.experiment_captures(event.new)
+        if captures is not None:
+            self.model.directory = str(captures)
+
+    @observe("model:experiment_index")
+    def _experiment_seek(self, event):
+        names = self.model.experiment_names
+        if 0 <= event.new < len(names):
+            self.model.selected_experiment = names[event.new]
 
     @observe("model:fit_button")
     def _fit(self, event):
@@ -92,11 +133,92 @@ class FluorescenceImageViewerController(Controller):
         self.step(1)
 
     def step(self, step):
-        """Show the discovered image ``step`` away (wrapping); also the
-        slideshow tick."""
-        path = self.model.relative_path(step)
-        if path is not None:
-            self.model.current_path = str(path)
+        """Show the adjacent image, traversing the WHOLE experiment: within
+        the current image group normally, and across group boundaries when
+        the group's images are exhausted — next past the last image enters
+        the next group's first image, previous before the first enters the
+        previous group's last. Wraps around the experiment's groups. Also
+        the slideshow tick."""
+        paths = self.model.paths
+        if not paths:
+            return
+        index = self.model.path_index()
+        if index is None:
+            # Displaying an image from outside the list: enter it at the
+            # near end.
+            self.model.current_path = str(paths[0] if step > 0 else paths[-1])
+            return
+        new_index = index + step
+        if 0 <= new_index < len(paths):
+            self.model.current_path = str(paths[new_index])
+        elif new_index >= len(paths):
+            self._step_to_adjacent_group(1, "first")
+        else:
+            self._step_to_adjacent_group(-1, "last")
+
+    def _step_to_adjacent_group(self, direction, show):
+        """Move to the next/previous image group (wrapping) and show its
+        first/last image. With a single group, wrap within it instead."""
+        names = self.model.burst_names
+        if len(names) <= 1:
+            paths = self.model.paths
+            self.model.current_path = str(paths[0] if direction > 0
+                                          else paths[-1])
+            return
+        self._jump_to_burst(
+            (self.model.burst_index + direction) % len(names), show)
+
+    # ------------------------------------------------------------------ #
+    # Burst dropdown / burst slider / wavelength filter                    #
+    # ------------------------------------------------------------------ #
+    @observe("model:selected_burst")
+    def _burst_selected(self, event):
+        """Burst picked (dropdown, slider, or a programmatic jump):
+        sync the slider and rebuild the visible image list. A plain user
+        pick starts at the burst's first image; rescan/home hand a
+        different intent through ``_pending_show``."""
+        show = self._pending_show or "first"
+        self._pending_show = None
+        names = self.model.burst_names
+        if event.new in names:
+            self.model.burst_index = names.index(event.new)
+        self._refresh_visible(show)
+
+    @observe("model:burst_index")
+    def _burst_seek(self, event):
+        names = self.model.burst_names
+        if 0 <= event.new < len(names):
+            self.model.selected_burst = names[event.new]
+
+    @observe("model:selected_wavelength")
+    def _wavelength_filtered(self, event):
+        """Filter change: keep the displayed image when it survives the
+        filter, else fall to the first surviving one."""
+        self._refresh_visible("keep")
+
+    def _visible_paths(self):
+        """The selected burst's images through the wavelength filter."""
+        return self.model.visible_of(
+            self.model.burst_paths(self.model.selected_burst))
+
+    def _refresh_visible(self, show):
+        """Rebuild ``model.paths`` and pick what to display: "first" /
+        "last" of the visible list, or "keep" (stay on the current image
+        when it is still visible, else fall to the first)."""
+        paths = self._visible_paths()
+        if paths != self.model.paths:
+            self.model.paths = paths
+        if not paths:
+            self.model.selected_image = ""
+            return
+        if show == "keep" and self.model.path_index() is not None:
+            self._sync_selection()
+            return
+        target = paths[-1] if show == "last" else paths[0]
+        if self.model.current_path != str(target):
+            self.model.current_path = str(target)
+        else:
+            self._sync_selection()
 
     # ------------------------------------------------------------------ #
     # Dropdown / seek-slider selection                                     #
@@ -149,20 +271,52 @@ class FluorescenceImageViewerController(Controller):
     def _scan_directory(self):
         if self.model.directory:
             return Path(self.model.directory)
-        return current_raw_captures_directory()
+        return current_captures_directory()
 
     def rescan(self):
-        """Sync with the browsed folder; a newly landed image is shown
-        automatically unless the user is parked on an older one."""
-        paths = discover_captures(self._scan_directory())
-        if paths == self.model.paths:
+        """Sync with the browsed folder's bursts; a newly landed burst /
+        image is followed automatically unless the user is parked on an
+        older one. Also refreshes the wavelength-filter choices from
+        what the filenames embed."""
+        # Refresh the experiment list (cheap dir listing) so the Experiments
+        # dropdown tracks newly created experiments; the user's selection is
+        # left untouched.
+        experiments = discover_experiments()
+        if experiments != self.model.experiments:
+            self.model.experiments = experiments
+
+        directory = self._scan_directory()
+        self.model.browsed_directory = str(directory) if directory else ""
+        bursts = discover_bursts(directory)
+        if bursts == self.model.bursts:
             return
+        # "Following newest" = showing the newest visible image of the
+        # newest burst (or nothing yet) — those users ride along as new
+        # captures land; anyone parked elsewhere stays parked.
         following_newest = (
             not self.model.current_path or not self.model.paths
-            or self.model.current_path == str(self.model.paths[-1]))
-        self.model.paths = paths
-        if paths and following_newest \
-                and self.model.current_path != str(paths[-1]):
-            self.model.current_path = str(paths[-1])
+            or (self.model.burst_names
+                and self.model.selected_burst == self.model.burst_names[-1]
+                and self.model.current_path == str(self.model.paths[-1])))
+        self.model.bursts = bursts
+
+        detected = sorted({wavelength
+                           for _name, paths in bursts
+                           for wavelength in map(detect_wavelength, paths)
+                           if wavelength})
+        self.model.wavelength_names = [WAVELENGTH_FILTER_ALL] + detected
+        if self.model.selected_wavelength not in self.model.wavelength_names:
+            self.model.selected_wavelength = WAVELENGTH_FILTER_ALL
+
+        names = self.model.burst_names
+        if not names:
+            self.model.paths = []
+            self.model.selected_image = ""
+            return
+        if following_newest:
+            self._jump_to_burst(-1, "last")
+        elif self.model.selected_burst not in names:
+            # The parked burst vanished (folder pruned): fall to newest.
+            self._jump_to_burst(-1, "first")
         else:
-            self._sync_selection()   # indices may have shifted
+            self._refresh_visible("keep")

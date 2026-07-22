@@ -3,14 +3,11 @@
 The pane mirrors every persisted control into FluorescencePreferences as it
 changes (PERSISTED_CONTROL_TRAITS) and the camera state into the shared
 ``asi_camera_settings`` — but the master light toggle is deliberately never
-persisted (the light always starts OFF). The protocol column's
-snapshot-on-toggle still needs the CURRENT light state, so the controls
-controller mirrors it here.
+persisted (the light always starts OFF).
 
-This singleton also carries the pane <-> protocol-step live-tracking state
-(device-viewer semantics): which selected step the pane re-snapshots into,
-and the GUI-thread events through which step/protocol-origin snapshots
-load INTO the pane.
+This singleton also carries the pane <-> protocol-tree live-tracking state
+(device-viewer semantics): the GUI-thread event through which a tree row
+selection reaches the controller's free-mode capture-chain attach flow.
 """
 from traits.api import Bool, Event, HasTraits, Str
 
@@ -21,26 +18,45 @@ class FluorescenceLiveState(HasTraits):
     #: The pane's master light toggle, mirrored live by the controller.
     light_on = Bool(False)
 
-    #: uuid of the protocol step the pane live-tracks: the tree's selected
-    #: step whose fluorescence cell holds a snapshot. Pane edits re-snapshot
-    #: into that step; "" = free mode / group / unchecked step selected.
-    tracked_step_uuid = Str()
+    #: Parsed `ProtocolTreeRowSelectedMessage` ferried from the
+    #: worker-thread PROTOCOL_TREE_ROW_SELECTED listener (message_handler
+    #: .py) to the GUI thread: the controller observes this with
+    #: dispatch="ui" to run the capture-chain free-mode attach flow, whose
+    #: `choose()` dialogs are safely modal there (never inside a table
+    #: commit).
+    tree_row_selected = Event()
 
-    #: True while step/protocol-origin settings are being loaded INTO the
-    #: pane, so the controller's push-back-to-step observer does not echo
-    #: the load as a fresh pane edit.
-    loading_step_snapshot = Bool(False)
+    #: (topic, message) tuples of the backend's firmware-upload signals
+    #: (started / log line / finished), ferried from the worker-thread
+    #: listener to the GUI thread: the firmware-upload dialog controller
+    #: observes this with dispatch="ui". An Event trait fires on every write
+    #: — a plain trait's equality check would swallow consecutive identical
+    #: log lines.
+    firmware_upload_message = Event()
 
-    #: Snapshot dict fired (on the GUI thread) when the user selects a step
-    #: whose fluorescence cell is set — the pane loads it and, when idle,
-    #: drives the hardware exactly as if the settings were made manually.
-    step_snapshot_selected = Event()
+    #: The connected board's whoami device_id (BOARD_ID signal), ferried from
+    #: the worker-thread listener to the GUI thread. The firmware-upload
+    #: dialog shows it read-only and flashes exactly that board; empty until
+    #: a board identifies.
+    board_device_id = Str()
 
-    #: Snapshot dict fired (on the GUI thread) as a running protocol applies
-    #: a step's fluorescence settings — the pane mirrors it visually (its
-    #: hardware publishes are gated during a run). May be partial: the run's
-    #: end fires {"light_on": False}.
-    protocol_step_settings_applied = Event()
+    #: The connected board's serial port (CONNECTED signal), ferried from the
+    #: worker-thread listener to the GUI thread. The firmware-upload dialog
+    #: keeps its port combo in sync with this auto-detected port; empty while
+    #: disconnected.
+    board_port = Str()
+
+    #: The entry a running protocol is firing right now (dict payload of
+    #: PROTOCOL_STEP_FLUORESCENCE), ferried worker->GUI: the controller's
+    #: dispatch="ui" observer mirrors its params into the panel and
+    #: highlights the firing chain row while the run has the pane's own
+    #: publishes suppressed.
+    protocol_step_applied = Event()
+
+    #: A capture session's start (True) / end (False), from
+    #: PROTOCOL_FLUORESCENCE_SESSION. On end the controller drops the live
+    #: mirror (light off, nothing highlighted).
+    protocol_session_active = Event()
 
 
 #: Module-level singleton shared inside the fluorescence plugin.

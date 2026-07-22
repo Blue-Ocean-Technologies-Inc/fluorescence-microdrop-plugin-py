@@ -8,7 +8,8 @@ from PySide6.QtWidgets import (
     QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QSizePolicy,
 )
 from traitsui.api import (
-    BasicEditorFactory, HGroup, Item, RangeEditor, UItem, VGroup, View,
+    BasicEditorFactory, HGroup, Item, Label, RangeEditor, UItem, VGroup,
+    View,
 )
 from traitsui.qt.editor import Editor as QtEditor
 
@@ -153,24 +154,93 @@ buttons_group = HGroup(
 )
 
 
+# Collapsible sections (fluorescence controls pane parity): an arrow glyph
+# header toggles each bordered group's `show_*` trait.
+def _collapse_header(trait, label):
+    return HGroup(
+        UItem(trait, editor=IconToggleEditor()),
+        Label(label),
+    )
+
+
+# Experiment layer (collapsed by default): browse another experiment's
+# captures without hunting for its folder — pick it and the viewer repoints
+# there, then the image-group / image levels reload under it.
+experiments_group = VGroup(
+    Item("selected_experiment", label="Experiment",
+         editor=HoverScrollEnumEditor(values_name="experiment_names"),
+         tooltip="Browse another experiment's captures (repoints the viewer "
+                 "at that experiment; use Home to return to the ongoing one)"),
+    Item("experiment_number", label="Experiment Seek",
+         editor=RangeEditor(low=1, high_name="object.max_experiment_number",
+                            mode="slider"),
+         tooltip="Drag through the experiments, oldest to newest"),
+    visible_when="show_experiments",
+    show_border=True,
+)
+
+# Image-group layer: captures land one folder per group, so navigation is
+# two-level — pick the group, then the image within it.
+bursts_group = VGroup(
+    Item("selected_burst", label="Image Group",
+         editor=HoverScrollEnumEditor(values_name="burst_names"),
+         tooltip="Pick a capture image group (one folder per group; "
+                 "'ungrouped' holds legacy flat captures)"),
+    Item("burst_number", label="Image Group Seek",
+         editor=RangeEditor(low=1, high_name="object.max_burst_number",
+                            mode="slider"),
+         tooltip="Drag through the image groups, oldest to newest"),
+    visible_when="show_bursts",
+    show_border=True,
+)
+
+images_group = VGroup(
+    Item("selected_wavelength", label="Wavelength",
+         editor=HoverScrollEnumEditor(values_name="wavelength_names"),
+         tooltip="Show only captures of one LED wavelength "
+                 "(detected from the filenames)"),
+    Item("selected_image", label="Image",
+         editor=HoverScrollEnumEditor(values_name="image_names"),
+         tooltip="Pick an image from the selected image group"),
+    Item("image_number", label="Seek",
+         editor=RangeEditor(low=1, high_name="object.max_image_number",
+                            mode="slider"),
+         tooltip="Drag through the image group's images"),
+    visible_when="show_images",
+    show_border=True,
+)
+
+contrast_group = VGroup(
+    Item("auto_contrast", label="Auto contrast",
+         tooltip="Window the displayed intensities to the 0.1–99.9 "
+                 "percentile range (raw 16-bit frames are nearly "
+                 "black without it); uncheck to set the window "
+                 "manually"),
+    Item("window_min", label="Min", enabled_when="not auto_contrast",
+         tooltip="Intensity displayed as black"),
+    Item("window_max", label="Max", enabled_when="not auto_contrast",
+         tooltip="Intensity displayed as white"),
+    visible_when="show_contrast",
+    show_border=True,
+)
+
+
 ImageViewerView = View(
     VGroup(
         buttons_group,
-        Item("selected_image", label="Image",
-             editor=HoverScrollEnumEditor(values_name="image_names"),
-             tooltip="Pick an image from the browsed folder"),
-        Item("image_index", label="Seek",
-             editor=RangeEditor(low=0, high_name="object.max_image_index",
-                                mode="slider"),
-             tooltip="Drag through the folder's images"),
 
-        Item("auto_contrast", label="Auto contrast",
-             tooltip="Window the displayed intensities to the 0.1–99.9 "
-                     "percentile range (raw 16-bit frames are nearly "
-                     "black without it); uncheck to set the window "
-                     "manually"),
-        Item("window_min", label="Min", enabled_when="not auto_contrast", tooltip="Intensity displayed as black"),
-        Item("window_max", label="Max", enabled_when="not auto_contrast", tooltip="Intensity displayed as white"),
+        _collapse_header("show_experiments", "Experiments"),
+        experiments_group,
+
+        _collapse_header("show_bursts", "Image Groups"),
+        bursts_group,
+
+        _collapse_header("show_images", "Images"),
+        images_group,
+
+        _collapse_header("show_contrast", "Contrast"),
+        contrast_group,
+
         UItem("array", editor=ImageCanvasEditor(), springy=True, resizable=True),
         UItem("pixel_text", style="readonly"),
     ),

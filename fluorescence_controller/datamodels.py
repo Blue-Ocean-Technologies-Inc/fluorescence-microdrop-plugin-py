@@ -1,10 +1,14 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 from microdrop_utils.dramatiq_pub_sub_helpers import ValidatedTopicPublisher
+from peripheral_device_controller_base.firmware_upload_datamodels import (
+    UploadFirmwarePublisher,
+)
 
 from .consts import (
-    LED_WAVELENGTHS, LED_DUTY_MAX, LED_FREQUENCY_MIN, LED_FREQUENCY_MAX,
-    PROTOCOL_SET_FLUORESCENCE,
+    LED_WAVELENGTHS, LED_DUTY_MAX,
+    LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, PROTOCOL_SET_FLUORESCENCE,
+    UPLOAD_FIRMWARE,
 )
 
 
@@ -39,6 +43,13 @@ class ProtocolSetFluorescenceData(_LedCommand):
     duty: int = Field(ge=0, le=LED_DUTY_MAX)
     frequency: int = Field(ge=LED_FREQUENCY_MIN, le=LED_FREQUENCY_MAX)
     settle_s: float = Field(ge=0.0, le=60.0)
+
+
+# Firmware-upload payload + publisher are shared (peripheral base); this
+# plugin only binds a publisher to its own upload topic. The dialog fills the
+# board-specific default device id (FLUORESCENCE_BOARD_DEVICE_ID) before it
+# reaches the wire, so the payload itself carries no fluorescence default.
+upload_firmware_publisher = UploadFirmwarePublisher(topic=UPLOAD_FIRMWARE)
 
 
 class ProtocolSetFluorescencePublisher(ValidatedTopicPublisher):

@@ -1,3 +1,18 @@
+## v1.0.0 (2026-07-17)
+
+### BREAKING CHANGE
+
+- **controls**: the `mode` trait and the `br_*` / `fl_*` scalar traits (`br_wavelength`, `br_intensity`, `br_frequency`, `br_exposure`, `br_gain`, `fl_wavelength`, `fl_intensity`, `fl_frequency`, `fl_exposure`, `fl_gain`) are removed from the pane model and from `FluorescencePreferences`; the pane is authored per capture-chain entry instead of per persisted br/fl mode.
+- **protocol-controls**: the old `fluorescence` compound column (`fluorescence_on` / `fluorescence_settings` cell ids) is retired; existing protocols' per-step fluorescence settings are dropped on load and are not migrated — rebuild affected steps' chains against the new `fluorescence_chain` column.
+
+### Feat
+
+- **protocol-controls**: `fluorescence_chain` column — per-step ordered list of named LED/camera capture entries, replacing the single br/fl snapshot per step
+- **controls-ui**: free-mode chain authoring in the pane, plus an attach-to-step dialog driven by protocol-tree row selection
+- **protocol-controls**: capture-cell locking (#541) — a step with a ticked chain locks out the shared "capture" column so only one feature owns that step's imaging
+- **controls-ui**: one-folder-per-burst capture path for chain and manual bursts alike
+- **controls-ui**: recursive raw-capture discovery so burst folders nested under a run are found on review
+
 ## v0.4.1 (2026-07-15)
 
 ## v0.4.0 (2026-07-14)

@@ -1,4 +1,6 @@
-from traits.api import Bool, Enum, Event, Str, observe, Instance, Range
+from traits.api import (
+    Bool, Button, Enum, Event, Instance, List, Range, Str, observe,
+)
 from traits.observation.api import parse
 
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
@@ -6,14 +8,13 @@ from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 from template_status_and_controls.base_model import BaseStatusModel
 
 from .cameras.consts import ASI_GAIN_MIN, ASI_GAIN_MAX
+from .chain_model import FluorescenceChainRow
 from .consts import (
     disconnected_color, connected_color, halted_color,
     LED_WAVELENGTHS, LED_DUTY_MIN, LED_DUTY_MAX,
     LED_FREQUENCY_MIN, LED_FREQUENCY_MAX,
-    BR_INTENSITY_DEFAULT, BR_FREQUENCY_DEFAULT,
-    FL_INTENSITY_DEFAULT, FL_FREQUENCY_DEFAULT,
-    BR_EXPOSURE_DEFAULT, BR_GAIN_DEFAULT,
-    FL_EXPOSURE_DEFAULT, FL_GAIN_DEFAULT,
+    INTENSITY_DEFAULT, FREQUENCY_DEFAULT,
+    EXPOSURE_DEFAULT, GAIN_DEFAULT,
     EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, PERSISTED_CONTROL_TRAITS,
 )
 
@@ -27,10 +28,9 @@ class FluorescenceStatusModel(BaseStatusModel):
     """Model for fluorescence LED controls (port of the standalone app's
     per-mode brightfield/fluorescence LED state).
 
-    Mode gating mirrors the original: brightfield controls apply live in
-    "br" mode, fluorescence controls in "fl" mode; "dual" enables both
-    control groups but the light toggle drives the brightfield set (the
-    dual capture sequence alternates LEDs itself).
+    A single LED/camera param set now drives whichever chain row is being
+    edited (the mode/br_/fl_ split is gone — see the capture-chain design);
+    the master light toggle applies it directly, with no mode gating.
     """
 
     DISCONNECTED_COLOR = Str(disconnected_color)
@@ -40,9 +40,6 @@ class FluorescenceStatusModel(BaseStatusModel):
     CONNECTED_NO_DEVICE_COLOR = Str(connected_color)
     CONNECTED_COLOR = Str(connected_color)
     HALTED_COLOR = Str(halted_color)
-
-    # Imaging mode: brightfield / fluorescence / dual.
-    mode = Enum("br", "fl", "dual")
 
     # Board identity (from the led_help probe on connect).
     board_id_text = Str("-")
@@ -75,42 +72,31 @@ class FluorescenceStatusModel(BaseStatusModel):
     auto_exposure = Bool(True)
     auto_gain = Bool(True)
 
-    # Brightfield LED set.
-    br_wavelength = Enum(*LED_WAVELENGTHS)
-    br_intensity = Range(
-        LED_DUTY_MIN, LED_DUTY_MAX, value=BR_INTENSITY_DEFAULT, mode="slider",
-        desc="brightfield LED duty to apply (%)",
+    # Single LED/camera param set (defaults match the old brightfield row).
+    # Chain-row labels are DERIVED (image_tag_wavelength_index, read-only
+    # in the table); the panel edits only this optional tag.
+    image_tag = Str("")
+    # Protocol phase(s) a capture fires in (per-row, edited via the panel
+    # like every other param): step start, step end, or both. The view's
+    # enabled_when guards keep at least one on.
+    capture_start = Bool(True)
+    capture_end = Bool(False)
+    wavelength = Enum(*LED_WAVELENGTHS)
+    intensity = Range(
+        LED_DUTY_MIN, LED_DUTY_MAX, value=INTENSITY_DEFAULT, mode="slider",
+        desc="LED duty to apply (%)",
     )
-    br_frequency = Range(
-        LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=BR_FREQUENCY_DEFAULT, mode="xslider",
-        desc="brightfield LED PWM frequency (Hz)",
+    frequency = Range(
+        LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=FREQUENCY_DEFAULT, mode="xslider",
+        desc="LED PWM frequency (Hz)",
     )
-    br_exposure = RangeWithViewHints(
-        float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=float(BR_EXPOSURE_DEFAULT),
-        desc="brightfield camera exposure (milliseconds)",
+    exposure = RangeWithViewHints(
+        float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=float(EXPOSURE_DEFAULT),
+        desc="camera exposure (milliseconds)",
     )
-    br_gain = Range(
-        ASI_GAIN_MIN, ASI_GAIN_MAX, value=BR_GAIN_DEFAULT, mode="slider",
-        desc="brightfield camera gain",
-    )
-
-    # Fluorescence LED set.
-    fl_wavelength = Enum(*LED_WAVELENGTHS)
-    fl_intensity = Range(
-        LED_DUTY_MIN, LED_DUTY_MAX, value=FL_INTENSITY_DEFAULT, mode="slider",
-        desc="fluorescence LED duty to apply (%)",
-    )
-    fl_frequency = Range(
-        LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=FL_FREQUENCY_DEFAULT, mode="xslider",
-        desc="fluorescence LED PWM frequency (Hz)",
-    )
-    fl_exposure = RangeWithViewHints(
-        float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=float(FL_EXPOSURE_DEFAULT),
-        desc="fluorescence camera exposure (milliseconds)",
-    )
-    fl_gain = Range(
-        ASI_GAIN_MIN, ASI_GAIN_MAX, value=FL_GAIN_DEFAULT, mode="slider",
-        desc="fluorescence camera gain",
+    gain = Range(
+        ASI_GAIN_MIN, ASI_GAIN_MAX, value=GAIN_DEFAULT, mode="slider",
+        desc="camera gain",
     )
 
     preferences = Instance(FluorescencePreferences, FluorescencePreferences())
@@ -130,24 +116,53 @@ class FluorescenceStatusModel(BaseStatusModel):
     # ------------------------------------------------------------------ #
     show_status = Bool(True, desc="Expand the Status section")
     show_control = Bool(True, desc="Expand the Control section")
-    show_brightfield = Bool(True, desc="Expand the Brightfield section")
-    show_fluorescence = Bool(False, desc="Expand the Fluorescence section")
-
-    @observe("mode")
-    def _collapse_unused_mode_sections(self, event):
-        """Selecting a mode also collapses the set it disables: br/fl expand
-        only their own section, dual expands both. The user can still re-expand
-        anything by hand afterwards."""
-        self.show_brightfield = self.mode != "fl"
-        self.show_fluorescence = self.mode != "br"
+    show_params = Bool(True, desc="Expand the LED/camera params section")
 
     @property
-    def br_led_index(self) -> int:
-        return LED_WAVELENGTHS.index(self.br_wavelength)
+    def led_index(self) -> int:
+        return LED_WAVELENGTHS.index(self.wavelength)
 
-    @property
-    def fl_led_index(self) -> int:
-        return LED_WAVELENGTHS.index(self.fl_wavelength)
+    # ------------------------------------------------------------------ #
+    # Capture-chain state                                                  #
+    # ------------------------------------------------------------------ #
+    #: The chain currently shown in the table: either a step/group's
+    #: attached chain, or `free_chain` while `attached_step_id == ""`.
+    chain_rows = List(Instance(FluorescenceChainRow))
+    #: The selected row (the TableEditor's `selected=` binds an object,
+    #: not an index).
+    chain_selection = Instance(FluorescenceChainRow)
+    #: uuid of the protocol step `chain_rows` is attached to; "" = free mode.
+    attached_step_id = Str("")
+    #: uuid of the protocol step-group `chain_rows` is attached to.
+    attached_group_id = Str("")
+    #: Display context of the attached step, read from the row_selected
+    #: broadcast's `name`/`id` cells — names a pane-initiated burst folder
+    #: exactly like a protocol-run burst (`<desc>_<dotted>_<utc>`).
+    attached_step_desc = Str("")
+    attached_step_dotted = Str("")
+    #: The unattached stash, shown whenever `attached_step_id == ""`.
+    free_chain = List(Instance(FluorescenceChainRow))
+
+    # Chain-table buttons (Qt-free `Button` traits, same convention as the
+    # advanced-camera pane's "Defaults" buttons): the view fires these on
+    # click, the controller observes them and runs the actual add/run
+    # logic (`FluorescenceControlsController.add_capture`/`run_capture`) —
+    # that logic needs controller-level access (chain write-back,
+    # threading), so it stays out of the model.
+    # Button labels are Material Symbols glyph names: the app-wide
+    # BASE_BUTTON_STYLE puts the icon font on every QPushButton, so a
+    # Button("play_circle") renders as a glyph — same scheme as the route
+    # view's run_controls (device_viewer/models/route.py:203-208).
+    add_capture_button = Button("add")
+    run_capture_button = Button("play_circle")
+    delete_capture_button = Button("delete")
+    #: Capture ONLY the selected row now (Run Capture bursts all ticked).
+    capture_selected_button = Button("photo_camera")
+    #: Reposition the selected row (drag-reorder is disabled: TableEditor
+    #: drops fire remove+insert as separate list events, which raced the
+    #: per-mutation persistence into losing rows).
+    move_up_button = Button("arrow_upward")
+    move_down_button = Button("arrow_downward")
 
     @observe(f"[{','.join(PERSISTED_CONTROL_TRAITS)}]", post_init=True)
     def _push_preferences(self, event):
