@@ -38,7 +38,7 @@ INTENSITY_DEFAULT, FREQUENCY_DEFAULT = 50, 40000
 
 # Camera defaults (the standalone config values, shown in ms — the camera
 # itself takes microseconds; the controller converts).
-EXPOSURE_MS_MIN, EXPOSURE_MS_MAX = 1, 60_000
+EXPOSURE_MS_MIN, EXPOSURE_MS_MAX = 0.032, 60_000
 EXPOSURE_DEFAULT, GAIN_DEFAULT = 10, 0
 
 # Control-pane values persisted across sessions: model trait ->
