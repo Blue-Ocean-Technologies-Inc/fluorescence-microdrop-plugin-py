@@ -6,7 +6,7 @@ from pathlib import Path
 import serial.tools.list_ports
 
 from traits.api import (
-    Bool, Button, Directory, File, HasTraits, Int, List, Str, observe,
+    Bool, Button, Directory, File, HasTraits, List, Str, observe, Range
 )
 
 from fluorescence_controller.consts import (
@@ -19,7 +19,12 @@ from .consts import DEFAULT_FIRMWARE_DIR, PORT_ENTRY_SEPARATOR
 class FirmwareUploadModel(HasTraits):
     """Options for one firmware-upload request, plus the live log."""
 
-    firmware_dir = Directory()
+    #: Firmware source: a folder tree OR a .zip bundle (the backend unzips a
+    #: zip to a temp dir, uploads it, then deletes it). Kept a Directory trait
+    #: for the native folder-browse; the zip-browse button writes a .zip path
+    #: into the same field.
+    firmware_source = Directory()
+    browse_firmware_zip = Button()
     single_file = File()
 
     #: True: the backend resolves the port (a connected proxy's stored port,
@@ -29,6 +34,8 @@ class FirmwareUploadModel(HasTraits):
     selected_port_entry = Str()
     refresh_ports = Button()
 
+    #: The connected board's whoami device_id, mirrored from live_state by the
+    #: controller and shown read-only — the upload flashes exactly this board.
     device_id = Str(FLUORESCENCE_BOARD_DEVICE_ID)
 
     update_config = Bool(False)
@@ -38,7 +45,7 @@ class FirmwareUploadModel(HasTraits):
 
     #: Kill the upload if it runs longer than this many seconds (0 = never);
     #: enforced by the backend service, sent along in the request.
-    upload_timeout_s = Int(0)
+    upload_timeout_s = Range(0, 10000, 0)
 
     uploading = Bool(False)
     upload_log = Str()
@@ -50,7 +57,7 @@ class FirmwareUploadModel(HasTraits):
     show_port = Bool(True)
     show_options = Bool(True)
 
-    def _firmware_dir_default(self):
+    def _firmware_source_default(self):
         return str(DEFAULT_FIRMWARE_DIR)
 
     def _available_ports_default(self):
@@ -85,14 +92,22 @@ class FirmwareUploadModel(HasTraits):
     def selected_port_device(self):
         return self.selected_port_entry.split(PORT_ENTRY_SEPARATOR)[0]
 
+    def _firmware_source_is_zip(self):
+        return self.firmware_source.lower().endswith(".zip")
+
     def validation_problems(self):
         """Human-readable reasons the upload can't start (empty when OK)."""
         problems = []
         if self.single_file:
             if not Path(self.single_file).is_file():
                 problems.append(f"Single file not found: {self.single_file}")
-        elif not Path(self.firmware_dir).is_dir():
-            problems.append(f"Firmware folder not found: {self.firmware_dir}")
+        elif self._firmware_source_is_zip():
+            if not Path(self.firmware_source).is_file():
+                problems.append(
+                    f"Firmware zip not found: {self.firmware_source}")
+        elif not Path(self.firmware_source).is_dir():
+            problems.append(
+                f"Firmware folder not found: {self.firmware_source}")
         if not self.auto_port and not self.selected_port_entry:
             problems.append("Manual port mode is on but no port is selected.")
         return problems
@@ -101,7 +116,7 @@ class FirmwareUploadModel(HasTraits):
         """Keyword payload for upload_firmware_publisher.publish reflecting
         the current options (empty port = backend auto-resolution)."""
         return dict(
-            firmware_dir=self.firmware_dir,
+            firmware_source=self.firmware_source,
             single_file=self.single_file,
             port="" if self.auto_port else self.selected_port_device(),
             device_id=self.device_id,

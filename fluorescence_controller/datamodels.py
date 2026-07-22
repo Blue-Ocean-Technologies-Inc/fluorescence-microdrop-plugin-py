@@ -45,14 +45,16 @@ class ProtocolSetFluorescenceData(_LedCommand):
 class UploadFirmwareData(BaseModel):
     """One firmware-upload run: mirrors firmware_uploader.upload_firmware.
 
-    ``port`` empty means auto: the backend reuses a connected proxy's stored
-    port, else probes for the board (whoami / Pico VID). ``device_id`` empty
-    matches the first board that identifies at all. ``upload_timeout_s`` 0
-    means never kill the upload.
+    ``firmware_source`` is a folder tree OR a .zip bundle (the backend unzips
+    a zip to a temp dir, uploads it, then deletes it). ``port`` empty means
+    auto: the backend reuses a connected proxy's stored port, else probes for
+    the board (whoami / Pico VID). ``device_id`` empty matches the first
+    board that identifies at all. ``upload_timeout_s`` 0 means never kill the
+    upload.
     """
     model_config = ConfigDict(extra='forbid')
 
-    firmware_dir: str
+    firmware_source: str
     single_file: str = ""  # upload only this file (absolute or dir-relative)
     port: str = ""
     device_id: str = FLUORESCENCE_BOARD_DEVICE_ID
@@ -71,11 +73,11 @@ class UploadFirmwarePublisher(ValidatedTopicPublisher):
     """
     validator_class = UploadFirmwareData
 
-    def publish(self, *, firmware_dir, single_file, port, device_id,
+    def publish(self, *, firmware_source, single_file, port, device_id,
                 update_config, skip_filesystem_format, reset_after_upload,
                 dry_run, upload_timeout_s, **kw):
         super().publish({
-            "firmware_dir": firmware_dir,
+            "firmware_source": firmware_source,
             "single_file": single_file,
             "port": port,
             "device_id": device_id,

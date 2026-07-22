@@ -75,7 +75,7 @@ class FluorescenceFirmwareUploadService(HasTraits):
             self.upload_cancel_event = threading.Event()
             publish_message(
                 message=f"Starting firmware upload from "
-                        f"{data.single_file or data.firmware_dir} "
+                        f"{data.single_file or data.firmware_source} "
                         f"(port: {port or 'auto-detect'}"
                         f"{', dry run' if data.dry_run else ''})",
                 topic=FIRMWARE_UPLOAD_STARTED)
@@ -131,7 +131,7 @@ class FluorescenceFirmwareUploadService(HasTraits):
         re-request monitoring so the freshly flashed board reconnects."""
         try:
             success = upload_firmware(
-                firmware_path=data.firmware_dir,
+                firmware_path=data.firmware_source,
                 port=port or None,
                 reset_device=data.reset_after_upload,
                 single_file=data.single_file or None,
@@ -157,7 +157,10 @@ class FluorescenceFirmwareUploadService(HasTraits):
 
     @staticmethod
     def _publish_upload_log_line(line):
+        """Every uploader progress line goes to both the dialog's log console
+        (topic) and the regular logger, so a headless run is traceable too."""
         publish_message(message=line, topic=FIRMWARE_UPLOAD_LOG)
+        logger.info(line)
 
     @staticmethod
     def _cancel_timed_out_upload(cancel_event, upload_timeout_s):

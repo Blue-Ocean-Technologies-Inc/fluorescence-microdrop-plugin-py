@@ -9,7 +9,7 @@ This singleton also carries the pane <-> protocol-tree live-tracking state
 (device-viewer semantics): the GUI-thread event through which a tree row
 selection reaches the controller's free-mode capture-chain attach flow.
 """
-from traits.api import Bool, Event, HasTraits
+from traits.api import Bool, Event, HasTraits, Str
 
 
 class FluorescenceLiveState(HasTraits):
@@ -33,6 +33,12 @@ class FluorescenceLiveState(HasTraits):
     #: — a plain trait's equality check would swallow consecutive identical
     #: log lines.
     firmware_upload_message = Event()
+
+    #: The connected board's whoami device_id (BOARD_ID signal), ferried from
+    #: the worker-thread listener to the GUI thread. The firmware-upload
+    #: dialog shows it read-only and flashes exactly that board; empty until
+    #: a board identifies.
+    board_device_id = Str()
 
 
 #: Module-level singleton shared inside the fluorescence plugin.

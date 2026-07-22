@@ -7,14 +7,14 @@ from PySide6.QtWidgets import QPlainTextEdit
 
 from traits.api import Int
 from traitsui.api import (
-    BasicEditorFactory, HGroup, HSplit, Item, Label, UItem, VGroup, View,
-    spring,
+    BasicEditorFactory, HGroup, HSplit, Item, Label, RangeEditor, UItem,
+    VGroup, View, spring,
 )
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.colors import PRIMARY_COLOR, WHITE
 from microdrop_style.icons.icons import (
-    ICON_AUTOMATION, ICON_DELETE, ICON_REFRESH, ICON_USB,
+    ICON_ARCHIVE, ICON_AUTOMATION, ICON_DELETE, ICON_REFRESH, ICON_USB,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
@@ -138,11 +138,18 @@ firmware_upload_view = View(
         VGroup(
             _collapse_header("show_source", "Firmware source"),
             VGroup(
-                Item("firmware_dir", label="Firmware folder",
-                     tooltip="Directory tree pushed to the board"),
+                HGroup(
+                    Item("firmware_source", label="Firmware", springy=True,
+                         tooltip="Folder tree, or a .zip bundle, pushed to "
+                                 "the board (a zip is unzipped, uploaded, "
+                                 "then deleted)"),
+                    UItem("browse_firmware_zip", editor=IconButtonEditor(
+                        glyph=ICON_ARCHIVE,
+                        tooltip="Select a firmware .zip bundle")),
+                ),
                 Item("single_file", label="Single file",
                      tooltip="Optional: upload only this file instead of "
-                             "the whole firmware folder"),
+                             "the whole firmware source"),
                 visible_when="show_source",
                 show_border=True,
                 enabled_when="not uploading",
@@ -164,10 +171,10 @@ firmware_upload_view = View(
                     UItem("refresh_ports", editor=IconButtonEditor(
                         glyph=ICON_REFRESH, tooltip="Re-scan serial ports")),
                 ),
-                Item("device_id", label="Device ID",
-                     tooltip="Only flash the board whose whoami reply "
-                             "matches this id. Leave empty to flash the "
-                             "first board that identifies."),
+                Item("device_id", label="Device ID", style="readonly",
+                     tooltip="The connected board's whoami id — the upload "
+                             "flashes exactly this board (read from the "
+                             "board, not editable)."),
                 visible_when="show_port",
                 show_border=True,
                 enabled_when="not uploading",
@@ -185,6 +192,7 @@ firmware_upload_view = View(
                 Item("dry_run", label="Dry run",
                      tooltip="Only log what would happen"),
                 Item("upload_timeout_s", label="Timeout (s)",
+                     editor=RangeEditor(low=0, high=10000, mode="spinner"),
                      tooltip="Kill the upload if it runs longer than this many "
                              "seconds (0 = no timeout)"),
                 visible_when="show_options",
@@ -354,6 +362,37 @@ def build_panel_stylesheet(dialog):
             background-color: {dialog.DIALOG_BG_COLOR};
             selection-background-color: {dialog_color};
             selection-color: {WHITE};
+        }}
+        #firmwareUploadPanel QSpinBox {{
+            color: {dialog.TEXT_COLOR};
+            background-color: {dialog.DIALOG_BG_COLOR};
+            border: 1px solid {dialog.BORDER_COLOR};
+            border-radius: 4px;
+            padding: 2px 4px;
+            font-family: "{text_font}";
+            font-size: 12px;
+            selection-background-color: {dialog_color};
+            selection-color: {WHITE};
+        }}
+        /* Slim up/down buttons in the dialog's border color; the arrows keep
+           the native glyphs (no image needed). */
+        #firmwareUploadPanel QSpinBox::up-button,
+        #firmwareUploadPanel QSpinBox::down-button {{
+            width: 16px;
+            background-color: {accent_bg};
+            border-left: 1px solid {dialog.BORDER_COLOR};
+        }}
+        #firmwareUploadPanel QSpinBox::up-button {{
+            subcontrol-position: top right;
+            border-top-right-radius: 4px;
+        }}
+        #firmwareUploadPanel QSpinBox::down-button {{
+            subcontrol-position: bottom right;
+            border-bottom-right-radius: 4px;
+        }}
+        #firmwareUploadPanel QSpinBox::up-button:hover,
+        #firmwareUploadPanel QSpinBox::down-button:hover {{
+            background-color: {dialog._lighten_color(dialog_color, 0.7)};
         }}
         #firmwareUploadPanel QPushButton {{
             color: {dialog.EXIT_BUTTON_TEXT_COLOR};

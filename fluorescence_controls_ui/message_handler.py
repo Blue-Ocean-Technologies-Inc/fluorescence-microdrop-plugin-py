@@ -88,7 +88,8 @@ class FluorescenceMessageHandler(BaseMessageHandler):
 
     def _on_board_id_triggered(self, body):
         """Identity from the connect-time whoami probe -> the Board readout
-        (device_id first, like the heater pane)."""
+        (device_id first, like the heater pane). The exact device_id also
+        goes to live_state so the firmware-upload dialog flashes this board."""
         try:
             identity = json.loads(body)
         except Exception:
@@ -96,3 +97,5 @@ class FluorescenceMessageHandler(BaseMessageHandler):
             return
         self.model.board_id_text = str(
             identity.get("device_id") or identity.get("uid") or "unknown")
+        fluorescence_live_state.board_device_id = str(
+            identity.get("device_id") or "")

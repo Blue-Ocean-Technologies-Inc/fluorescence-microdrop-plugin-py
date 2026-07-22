@@ -11,7 +11,7 @@ only ever mutated there).
 import json
 
 from PySide6.QtCore import QSize, QTimer
-from PySide6.QtWidgets import QSizePolicy
+from PySide6.QtWidgets import QFileDialog, QSizePolicy
 
 from traits.api import Any, HasTraits, Instance, observe
 
@@ -92,6 +92,11 @@ class FirmwareUploadDialogController(HasTraits):
         stretch_group_layouts_horizontally(panel)
         self.dialog.add_content_widget(panel)
 
+        # Reflect the connected board's identity into the read-only device id
+        # (a board may have identified before the dialog was opened).
+        if self.live_state.board_device_id:
+            self.model.device_id = self.live_state.board_device_id
+
         self.dialog.finished.connect(self._on_dialog_closed)
         self.dialog.show()
         # The base dialog queues a fit-to-message adjustSize() at singleShot(0)
@@ -112,6 +117,23 @@ class FirmwareUploadDialogController(HasTraits):
         if self.traits_ui is not None:
             self.traits_ui.dispose()
             self.traits_ui = None
+
+    @observe("model:browse_firmware_zip")
+    def _on_browse_firmware_zip(self, event):
+        """Zip-browse button: pick a .zip and set it as the firmware source
+        (the Directory field's own Browse handles folders)."""
+        path, _ = QFileDialog.getOpenFileName(
+            self.dialog, "Select firmware zip bundle", "",
+            "Zip archives (*.zip);;All files (*)")
+        if path:
+            self.model.firmware_source = path
+
+    @observe("live_state:board_device_id", dispatch="ui")
+    def _on_board_device_id_changed(self, event):
+        """A board identified (or re-identified) — mirror its whoami id into
+        the read-only Device ID field (GUI thread)."""
+        if event.new:
+            self.model.device_id = event.new
 
     # ---- upload run ------------------------------------------------------
 
