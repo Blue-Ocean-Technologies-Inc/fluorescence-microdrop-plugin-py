@@ -15,6 +15,7 @@ from microdrop_application.preferences import MicrodropPreferences
 
 from .discovery import (
     current_captures_directory, detect_wavelength, discover_bursts,
+    discover_experiments,
 )
 from .display import load_image_array
 from .model import FluorescenceImageViewerModel, WAVELENGTH_FILTER_ALL
@@ -98,6 +99,27 @@ class FluorescenceImageViewerController(Controller):
         else:
             self._refresh_visible(show)
 
+    # ------------------------------------------------------------------ #
+    # Experiment dropdown / experiment slider                              #
+    # ------------------------------------------------------------------ #
+    @observe("model:selected_experiment")
+    def _experiment_selected(self, event):
+        """Experiment picked (dropdown or slider): sync the slider and
+        repoint the viewer at that experiment's captures — the
+        ``directory`` observer then rescans and jumps to the first burst."""
+        names = self.model.experiment_names
+        if event.new in names:
+            self.model.experiment_index = names.index(event.new)
+        captures = self.model.experiment_captures(event.new)
+        if captures is not None:
+            self.model.directory = str(captures)
+
+    @observe("model:experiment_index")
+    def _experiment_seek(self, event):
+        names = self.model.experiment_names
+        if 0 <= event.new < len(names):
+            self.model.selected_experiment = names[event.new]
+
     @observe("model:fit_button")
     def _fit(self, event):
         self.model.fit_request = True
@@ -111,11 +133,40 @@ class FluorescenceImageViewerController(Controller):
         self.step(1)
 
     def step(self, step):
-        """Show the discovered image ``step`` away (wrapping); also the
-        slideshow tick."""
-        path = self.model.relative_path(step)
-        if path is not None:
-            self.model.current_path = str(path)
+        """Show the adjacent image, traversing the WHOLE experiment: within
+        the current image group normally, and across group boundaries when
+        the group's images are exhausted — next past the last image enters
+        the next group's first image, previous before the first enters the
+        previous group's last. Wraps around the experiment's groups. Also
+        the slideshow tick."""
+        paths = self.model.paths
+        if not paths:
+            return
+        index = self.model.path_index()
+        if index is None:
+            # Displaying an image from outside the list: enter it at the
+            # near end.
+            self.model.current_path = str(paths[0] if step > 0 else paths[-1])
+            return
+        new_index = index + step
+        if 0 <= new_index < len(paths):
+            self.model.current_path = str(paths[new_index])
+        elif new_index >= len(paths):
+            self._step_to_adjacent_group(1, "first")
+        else:
+            self._step_to_adjacent_group(-1, "last")
+
+    def _step_to_adjacent_group(self, direction, show):
+        """Move to the next/previous image group (wrapping) and show its
+        first/last image. With a single group, wrap within it instead."""
+        names = self.model.burst_names
+        if len(names) <= 1:
+            paths = self.model.paths
+            self.model.current_path = str(paths[0] if direction > 0
+                                          else paths[-1])
+            return
+        self._jump_to_burst(
+            (self.model.burst_index + direction) % len(names), show)
 
     # ------------------------------------------------------------------ #
     # Burst dropdown / burst slider / wavelength filter                    #
@@ -147,12 +198,8 @@ class FluorescenceImageViewerController(Controller):
 
     def _visible_paths(self):
         """The selected burst's images through the wavelength filter."""
-        paths = self.model.burst_paths(self.model.selected_burst)
-        if self.model.selected_wavelength != WAVELENGTH_FILTER_ALL:
-            paths = [path for path in paths
-                     if detect_wavelength(path)
-                     == self.model.selected_wavelength]
-        return paths
+        return self.model.visible_of(
+            self.model.burst_paths(self.model.selected_burst))
 
     def _refresh_visible(self, show):
         """Rebuild ``model.paths`` and pick what to display: "first" /
@@ -231,6 +278,13 @@ class FluorescenceImageViewerController(Controller):
         image is followed automatically unless the user is parked on an
         older one. Also refreshes the wavelength-filter choices from
         what the filenames embed."""
+        # Refresh the experiment list (cheap dir listing) so the Experiments
+        # dropdown tracks newly created experiments; the user's selection is
+        # left untouched.
+        experiments = discover_experiments()
+        if experiments != self.model.experiments:
+            self.model.experiments = experiments
+
         directory = self._scan_directory()
         self.model.browsed_directory = str(directory) if directory else ""
         bursts = discover_bursts(directory)

@@ -26,6 +26,31 @@ def current_captures_directory():
         return None
 
 
+def discover_experiments() -> list:
+    """Every experiment folder alongside the current experiment:
+    ``[(name, captures_path), ...]``, oldest first (by the folder's mtime).
+
+    Rooted at the CURRENT experiment's parent (``get_current_experiment_
+    directory().parent``) rather than a bare ``MicrodropPreferences()`` read
+    — that instance returns the trait default, not the app's configured
+    root, so it points at an empty folder. The parent of the folder the
+    viewer already follows is exactly the Experiments root in use. Folders
+    with no captures yet are still listed (selecting one just shows nothing)
+    so the seek can walk them all. [] when the root is unavailable (no
+    Redis)."""
+    try:
+        root = get_current_experiment_directory().parent
+    except Exception as e:
+        logger.debug(f"Experiments root unavailable: {e}")
+        return []
+    if not root.is_dir():
+        return []
+    experiments = [(child.name, child / CAPTURES_DIR_NAME)
+                   for child in root.iterdir() if child.is_dir()]
+    return sorted(experiments,
+                  key=lambda item: (item[1].parent.stat().st_mtime, item[0]))
+
+
 def discover_captures(directory) -> list:
     """Every RAW image (IMAGE_PATTERNS) under ``directory``, recursively,
     oldest first (save time, with the filename — which embeds a capture's
