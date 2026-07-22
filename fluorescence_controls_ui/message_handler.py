@@ -9,6 +9,10 @@ from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedMessage,
 )
 
+from fluorescence_controller.consts import (
+    FIRMWARE_UPLOAD_FINISHED, FIRMWARE_UPLOAD_LOG, FIRMWARE_UPLOAD_STARTED,
+)
+
 from .live_state import fluorescence_live_state
 from .model import FluorescenceStatusModel
 
@@ -53,6 +57,43 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         from . import capture_service
         capture_service.notify_applied()
 
+    def _on_connected_triggered(self, body):
+        """Base handler flips the connected flag; also ferry the board's
+        serial port to live_state so the firmware-upload dialog keeps its
+        port combo in sync with the auto-detected port. The monitor
+        republishes a "<device>_connected" sentinel (not a port) when asked
+        to start monitoring an already-connected board — ignore that."""
+        super()._on_connected_triggered(body)
+        port = str(body)
+        if port and not port.endswith("_connected"):
+            fluorescence_live_state.board_port = port
+
+    def _on_disconnected_triggered(self, body):
+        """Base handler clears the connected flag; also clear the ferried
+        port and device id so the firmware-upload dialog shows no
+        auto-detected port and a blank board id while disconnected (a value
+        there again only after the next whoami)."""
+        super()._on_disconnected_triggered(body)
+        fluorescence_live_state.board_port = ""
+        fluorescence_live_state.board_device_id = ""
+
+    def _on_firmware_upload_started_triggered(self, body):
+        """Backend accepted an upload — ferry to the GUI thread via
+        live_state (the firmware-upload dialog's dispatch="ui" observer
+        applies it; never touch a model here)."""
+        fluorescence_live_state.firmware_upload_message = (
+            FIRMWARE_UPLOAD_STARTED, body)
+
+    def _on_firmware_upload_log_triggered(self, body):
+        """One uploader progress line — ferry to the GUI thread."""
+        fluorescence_live_state.firmware_upload_message = (
+            FIRMWARE_UPLOAD_LOG, body)
+
+    def _on_firmware_upload_finished_triggered(self, body):
+        """Upload outcome — ferry to the GUI thread."""
+        fluorescence_live_state.firmware_upload_message = (
+            FIRMWARE_UPLOAD_FINISHED, body)
+
     def _on_protocol_step_fluorescence_triggered(self, body):
         """The entry a running protocol is firing right now — ferry to the
         GUI thread via live_state (the controller's dispatch="ui" observer
@@ -94,7 +135,8 @@ class FluorescenceMessageHandler(BaseMessageHandler):
 
     def _on_board_id_triggered(self, body):
         """Identity from the connect-time whoami probe -> the Board readout
-        (device_id first, like the heater pane)."""
+        (device_id first, like the heater pane). The exact device_id also
+        goes to live_state so the firmware-upload dialog flashes this board."""
         try:
             identity = json.loads(body)
         except Exception:
@@ -102,3 +144,5 @@ class FluorescenceMessageHandler(BaseMessageHandler):
             return
         self.model.board_id_text = str(
             identity.get("device_id") or identity.get("uid") or "unknown")
+        fluorescence_live_state.board_device_id = str(
+            identity.get("device_id") or "")

@@ -28,6 +28,7 @@ class FluorescenceControllerPlugin(PeripheralDeviceControllerPlugin):
         return [
             ServiceOffer(protocol=IFluorescenceControlMixinService, factory=self._create_monitor_service),
             ServiceOffer(protocol=IFluorescenceControlMixinService, factory=self._create_command_setter_service),
+            ServiceOffer(protocol=IFluorescenceControlMixinService, factory=self._create_firmware_upload_service),
         ]
 
     def _create_monitor_service(self, *args, **kwargs):
@@ -39,3 +40,8 @@ class FluorescenceControllerPlugin(PeripheralDeviceControllerPlugin):
         """Returns the fluorescence command-setter mixin service."""
         from .services.fluorescence_command_setter_service import FluorescenceCommandSetterService
         return FluorescenceCommandSetterService
+
+    def _create_firmware_upload_service(self, *args, **kwargs):
+        """Returns the fluorescence firmware-upload mixin service."""
+        from .services.fluorescence_firmware_upload_service import FluorescenceFirmwareUploadService
+        return FluorescenceFirmwareUploadService

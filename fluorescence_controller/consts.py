@@ -1,4 +1,9 @@
-from peripheral_device_controller_base.consts import connected_topic, disconnected_topic, searching_topic
+from peripheral_device_controller_base.consts import (
+    connected_topic, disconnected_topic, searching_topic,
+    upload_firmware_topic, cancel_firmware_upload_topic,
+    firmware_upload_started_topic, firmware_upload_log_topic,
+    firmware_upload_finished_topic,
+)
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -11,6 +16,10 @@ DEVICE_NAME = "Fluorescence"
 # whoami device_id before claiming a port.
 FLUORESCENCE_HWID = "VID:PID=2E8A:0005"
 DEVICE_ID_FRAGMENT = "fluo"
+# Full whoami device_id in the board's config.json (DEVICE_ID_FRAGMENT is the
+# substring the monitor greps for; the firmware-upload dialog falls back to
+# this exact id when no whoami has been received yet).
+FLUORESCENCE_BOARD_DEVICE_ID = "fluo_board"
 BOARD_BAUDRATE = 115200
 
 # Serial timeouts + write-retry policy (heater proxy parity). A write that
@@ -57,6 +66,18 @@ ALL_LEDS_ON = f"{DEVICE_NAME}/requests/all_leds_on"
 # block until the light is truly capture-ready (magnet backend pattern).
 PROTOCOL_SET_FLUORESCENCE = f"{DEVICE_NAME}/requests/protocol_set_fluorescence"
 FLUORESCENCE_APPLIED = f"{DEVICE_NAME}/signals/fluorescence_applied"
+
+# Firmware upload: the shared PeripheralFirmwareUploadService owns the run and
+# the shared dialog renders the signals below. Topic strings come from the
+# peripheral base factories (identical wire names, one definition). Upload /
+# cancel are always-allowed subtopics (FluorescenceControllerBase): flashing
+# IS the recovery path for a board whose firmware can't connect, and the
+# service disconnects the proxy before flashing.
+UPLOAD_FIRMWARE = upload_firmware_topic(DEVICE_NAME)
+CANCEL_FIRMWARE_UPLOAD = cancel_firmware_upload_topic(DEVICE_NAME)
+FIRMWARE_UPLOAD_STARTED = firmware_upload_started_topic(DEVICE_NAME)
+FIRMWARE_UPLOAD_LOG = firmware_upload_log_topic(DEVICE_NAME)
+FIRMWARE_UPLOAD_FINISHED = firmware_upload_finished_topic(DEVICE_NAME)
 
 # Frontend protocol -> controls-pane signals (pane-facing, NOT board acks).
 # The capture-chain executor emits these so the controls pane can mirror a
