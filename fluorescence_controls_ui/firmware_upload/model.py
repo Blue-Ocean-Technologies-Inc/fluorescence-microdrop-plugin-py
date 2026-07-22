@@ -13,7 +13,9 @@ from fluorescence_controller.consts import (
     FLUORESCENCE_BOARD_DEVICE_ID, PICO_USB_VENDOR_ID,
 )
 
-from .consts import DEFAULT_FIRMWARE_DIR, PORT_ENTRY_SEPARATOR
+from .consts import (
+    DEFAULT_FIRMWARE_DIR, DEVICE_ID_PLACEHOLDER, PORT_ENTRY_SEPARATOR,
+)
 
 
 class FirmwareUploadModel(HasTraits):
@@ -35,11 +37,12 @@ class FirmwareUploadModel(HasTraits):
     refresh_ports = Button()
 
     #: The connected board's whoami device_id, mirrored from live_state by the
-    #: controller and shown read-only. Blank by default — a value here proves
-    #: the board's whoami signal was actually received. When blank, the upload
-    #: still targets FLUORESCENCE_BOARD_DEVICE_ID (see upload_request_kwargs)
-    #: so an empty match can't grab the heater on the shared VID:PID.
-    device_id = Str()
+    #: controller and shown read-only. Shows DEVICE_ID_PLACEHOLDER until a
+    #: whoami arrives, so a real id here proves the signal was received. When
+    #: no id is known the upload still targets FLUORESCENCE_BOARD_DEVICE_ID
+    #: (see upload_request_kwargs) so an empty match can't grab the heater on
+    #: the shared VID:PID.
+    device_id = Str(DEVICE_ID_PLACEHOLDER)
 
     update_config = Bool(False)
     skip_filesystem_format = Bool(False)
@@ -115,6 +118,14 @@ class FirmwareUploadModel(HasTraits):
         if entry is not None:
             self.selected_port_entry = entry
 
+    def _effective_device_id(self):
+        """The id to flash: the board's real whoami id when known, else the
+        fluorescence default — never the placeholder, since an empty / "-"
+        match could grab the heater on the shared 2E8A:0005 VID:PID."""
+        if self.device_id and self.device_id != DEVICE_ID_PLACEHOLDER:
+            return self.device_id
+        return FLUORESCENCE_BOARD_DEVICE_ID
+
     def _firmware_source_is_zip(self):
         return self.firmware_source.lower().endswith(".zip")
 
@@ -142,7 +153,7 @@ class FirmwareUploadModel(HasTraits):
             firmware_source=self.firmware_source,
             single_file=self.single_file,
             port="" if self.auto_port else self.selected_port_device(),
-            device_id=self.device_id or FLUORESCENCE_BOARD_DEVICE_ID,
+            device_id=self._effective_device_id(),
             update_config=self.update_config,
             skip_filesystem_format=self.skip_filesystem_format,
             reset_after_upload=self.reset_after_upload,

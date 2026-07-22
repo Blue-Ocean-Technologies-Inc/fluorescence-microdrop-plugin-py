@@ -27,6 +27,7 @@ from fluorescence_controller.consts import (
 from fluorescence_controller.datamodels import upload_firmware_publisher
 
 from ..live_state import FluorescenceLiveState, fluorescence_live_state
+from .consts import DEVICE_ID_PLACEHOLDER
 from .model import FirmwareUploadModel
 from .view import build_panel_stylesheet, firmware_upload_view
 
@@ -94,9 +95,10 @@ class FirmwareUploadDialogController(HasTraits):
 
         # Reflect the connected board's identity into the read-only device id,
         # and point the port combo at its auto-detected port (a board may have
-        # connected before the dialog was opened). device_id stays blank until
+        # connected before the dialog was opened). Shows the placeholder until
         # a whoami has actually been received.
-        self.model.device_id = self.live_state.board_device_id
+        self.model.device_id = (
+            self.live_state.board_device_id or DEVICE_ID_PLACEHOLDER)
         self.model.sync_selected_port(self.live_state.board_port)
 
         self.dialog.finished.connect(self._on_dialog_closed)
@@ -133,9 +135,10 @@ class FirmwareUploadDialogController(HasTraits):
     @observe("live_state:board_device_id", dispatch="ui")
     def _on_board_device_id_changed(self, event):
         """The board's whoami id arrived (or cleared on disconnect) — mirror
-        it into the read-only Device ID field, so the field is blank unless a
-        whoami is currently backing it (GUI thread)."""
-        self.model.device_id = event.new
+        it into the read-only Device ID field, falling back to the
+        placeholder so the field only shows a real id while a whoami is
+        currently backing it (GUI thread)."""
+        self.model.device_id = event.new or DEVICE_ID_PLACEHOLDER
 
     @observe("live_state:board_port", dispatch="ui")
     def _on_board_port_changed(self, event):
