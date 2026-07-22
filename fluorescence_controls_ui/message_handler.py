@@ -9,6 +9,10 @@ from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedMessage,
 )
 
+from fluorescence_controller.consts import (
+    FIRMWARE_UPLOAD_FINISHED, FIRMWARE_UPLOAD_LOG, FIRMWARE_UPLOAD_STARTED,
+)
+
 from .live_state import fluorescence_live_state
 from .model import FluorescenceStatusModel
 
@@ -52,6 +56,23 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         logger.debug(f"Fluorescence applied ack: {body}")
         from . import capture_service
         capture_service.notify_applied()
+
+    def _on_firmware_upload_started_triggered(self, body):
+        """Backend accepted an upload — ferry to the GUI thread via
+        live_state (the firmware-upload dialog's dispatch="ui" observer
+        applies it; never touch a model here)."""
+        fluorescence_live_state.firmware_upload_message = (
+            FIRMWARE_UPLOAD_STARTED, body)
+
+    def _on_firmware_upload_log_triggered(self, body):
+        """One uploader progress line — ferry to the GUI thread."""
+        fluorescence_live_state.firmware_upload_message = (
+            FIRMWARE_UPLOAD_LOG, body)
+
+    def _on_firmware_upload_finished_triggered(self, body):
+        """Upload outcome — ferry to the GUI thread."""
+        fluorescence_live_state.firmware_upload_message = (
+            FIRMWARE_UPLOAD_FINISHED, body)
 
     def _on_searching_triggered(self, body):
         """Backend scan state (json bool) -> the model, which drives the

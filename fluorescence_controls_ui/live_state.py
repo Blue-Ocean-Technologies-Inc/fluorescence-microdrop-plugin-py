@@ -26,6 +26,14 @@ class FluorescenceLiveState(HasTraits):
     #: commit).
     tree_row_selected = Event()
 
+    #: (topic, message) tuples of the backend's firmware-upload signals
+    #: (started / log line / finished), ferried from the worker-thread
+    #: listener to the GUI thread: the firmware-upload dialog controller
+    #: observes this with dispatch="ui". An Event trait fires on every write
+    #: — a plain trait's equality check would swallow consecutive identical
+    #: log lines.
+    firmware_upload_message = Event()
+
 
 #: Module-level singleton shared inside the fluorescence plugin.
 fluorescence_live_state = FluorescenceLiveState()
