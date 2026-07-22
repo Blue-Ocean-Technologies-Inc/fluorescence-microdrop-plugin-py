@@ -1,10 +1,12 @@
 from traits.api import Instance, List, Str
 
-from peripheral_device_controller_base.consts import DEFAULT_ALWAYS_ALLOWED_SUBTOPICS
+from peripheral_device_controller_base.consts import (
+    DEFAULT_ALWAYS_ALLOWED_SUBTOPICS, FIRMWARE_UPLOAD_ALWAYS_ALLOWED_SUBTOPICS,
+)
 from peripheral_device_controller_base.peripheral_device_controller_base import PeripheralDeviceControllerBase
 
 from .fluorescence_serial_proxy import FluorescenceSerialProxy
-from .consts import CANCEL_FIRMWARE_UPLOAD, DEVICE_NAME, UPLOAD_FIRMWARE
+from .consts import DEVICE_NAME
 
 from logger.logger_service import get_logger
 logger = get_logger(__name__, level="INFO")
@@ -23,7 +25,8 @@ class FluorescenceControllerBase(PeripheralDeviceControllerBase):
     # Firmware upload/cancel must run while disconnected: flashing IS the
     # recovery path for a board whose firmware can't connect, and the upload
     # service itself releases the proxy (disconnecting) before flashing.
-    _always_allowed_subtopics = List(Str, DEFAULT_ALWAYS_ALLOWED_SUBTOPICS + [
-        UPLOAD_FIRMWARE.rsplit("/", 1)[-1],
-        CANCEL_FIRMWARE_UPLOAD.rsplit("/", 1)[-1],
-    ])
+    _always_allowed_subtopics = List(
+        Str,
+        DEFAULT_ALWAYS_ALLOWED_SUBTOPICS
+        + FIRMWARE_UPLOAD_ALWAYS_ALLOWED_SUBTOPICS,
+    )

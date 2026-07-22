@@ -6,8 +6,12 @@ from traits.api import Instance, Str
 
 from microdrop_utils.dramatiq_traits_helpers import DramatiqMessagePublishAction
 
+from microdrop_utils.firmware_upload_dialog.controller import (
+    FirmwareUploadDialogController,
+)
+
 from .consts import START_DEVICE_MONITORING, ASI_DRIVER_URL
-from .firmware_upload.controller import FirmwareUploadDialogController
+from .firmware_upload.controller import make_firmware_upload_controller
 
 
 class InstallAsiDriverAction(Action):
@@ -28,7 +32,7 @@ class UploadFirmwareAction(Action):
 
     def perform(self, event):
         if self.controller is None:
-            self.controller = FirmwareUploadDialogController()
+            self.controller = make_firmware_upload_controller()
         self.controller.open()
 
 

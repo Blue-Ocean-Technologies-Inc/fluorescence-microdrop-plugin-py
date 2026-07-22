@@ -1,4 +1,9 @@
-from peripheral_device_controller_base.consts import connected_topic, disconnected_topic, searching_topic
+from peripheral_device_controller_base.consts import (
+    connected_topic, disconnected_topic, searching_topic,
+    upload_firmware_topic, cancel_firmware_upload_topic,
+    firmware_upload_started_topic, firmware_upload_log_topic,
+    firmware_upload_finished_topic,
+)
 
 # This module's package.
 PKG = '.'.join(__name__.split('.')[:-1])
@@ -12,11 +17,9 @@ DEVICE_NAME = "Fluorescence"
 FLUORESCENCE_HWID = "VID:PID=2E8A:0005"
 DEVICE_ID_FRAGMENT = "fluo"
 # Full whoami device_id in the board's config.json (DEVICE_ID_FRAGMENT is the
-# substring the monitor greps for; upload matching needs the exact id).
+# substring the monitor greps for; the firmware-upload dialog falls back to
+# this exact id when no whoami has been received yet).
 FLUORESCENCE_BOARD_DEVICE_ID = "fluo_board"
-# Raspberry Pi Foundation's USB vendor id, shared by the whole Pico family
-# (numeric twin of the VID in FLUORESCENCE_HWID, for pyserial port scans).
-PICO_USB_VENDOR_ID = 0x2E8A
 BOARD_BAUDRATE = 115200
 
 # Serial timeouts + write-retry policy (heater proxy parity). A write that
@@ -64,19 +67,17 @@ ALL_LEDS_ON = f"{DEVICE_NAME}/requests/all_leds_on"
 PROTOCOL_SET_FLUORESCENCE = f"{DEVICE_NAME}/requests/protocol_set_fluorescence"
 FLUORESCENCE_APPLIED = f"{DEVICE_NAME}/signals/fluorescence_applied"
 
-# Firmware upload: the frontend publishes an UploadFirmwareData payload and
-# renders the signals below; the backend service owns the upload subprocess.
-# Upload/cancel are always-allowed subtopics (FluorescenceControllerBase):
-# flashing IS the recovery path for a board whose firmware can't connect, and
-# the service itself disconnects the proxy before flashing.
-UPLOAD_FIRMWARE = f"{DEVICE_NAME}/requests/upload_firmware"
-CANCEL_FIRMWARE_UPLOAD = f"{DEVICE_NAME}/requests/cancel_firmware_upload"
-# Human-readable description of the accepted run (source, port, dry-run).
-FIRMWARE_UPLOAD_STARTED = f"{DEVICE_NAME}/signals/firmware_upload_started"
-# One uploader progress line per message.
-FIRMWARE_UPLOAD_LOG = f"{DEVICE_NAME}/signals/firmware_upload_log"
-# JSON: {"success": bool} on completion, {"error": str} on an uploader crash.
-FIRMWARE_UPLOAD_FINISHED = f"{DEVICE_NAME}/signals/firmware_upload_finished"
+# Firmware upload: the shared PeripheralFirmwareUploadService owns the run and
+# the shared dialog renders the signals below. Topic strings come from the
+# peripheral base factories (identical wire names, one definition). Upload /
+# cancel are always-allowed subtopics (FluorescenceControllerBase): flashing
+# IS the recovery path for a board whose firmware can't connect, and the
+# service disconnects the proxy before flashing.
+UPLOAD_FIRMWARE = upload_firmware_topic(DEVICE_NAME)
+CANCEL_FIRMWARE_UPLOAD = cancel_firmware_upload_topic(DEVICE_NAME)
+FIRMWARE_UPLOAD_STARTED = firmware_upload_started_topic(DEVICE_NAME)
+FIRMWARE_UPLOAD_LOG = firmware_upload_log_topic(DEVICE_NAME)
+FIRMWARE_UPLOAD_FINISHED = firmware_upload_finished_topic(DEVICE_NAME)
 
 # Topics actor declared by plugin subscribes to. The listener-name key MUST
 # match FluorescenceControllerBase.listener_name.

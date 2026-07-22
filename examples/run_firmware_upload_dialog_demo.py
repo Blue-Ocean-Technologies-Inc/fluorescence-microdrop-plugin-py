@@ -35,7 +35,7 @@ from fluorescence_controller.services.fluorescence_monitor_mixin_service import 
     FluorescenceMonitorMixinService,
 )
 from fluorescence_controls_ui.firmware_upload.controller import (
-    FirmwareUploadDialogController,
+    make_firmware_upload_controller,
 )
 from fluorescence_controls_ui.live_state import fluorescence_live_state
 
@@ -79,7 +79,7 @@ def main():
         router.message_router_data.add_subscriber_to_topic(
             topic, DEMO_LISTENER_NAME)
 
-    controller = FirmwareUploadDialogController()
+    controller = make_firmware_upload_controller()
     controller.open()
     app.exec()
     backend.cleanup()
