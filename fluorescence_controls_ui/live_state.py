@@ -40,6 +40,12 @@ class FluorescenceLiveState(HasTraits):
     #: a board identifies.
     board_device_id = Str()
 
+    #: The connected board's serial port (CONNECTED signal), ferried from the
+    #: worker-thread listener to the GUI thread. The firmware-upload dialog
+    #: keeps its port combo in sync with this auto-detected port; empty while
+    #: disconnected.
+    board_port = Str()
+
 
 #: Module-level singleton shared inside the fluorescence plugin.
 fluorescence_live_state = FluorescenceLiveState()

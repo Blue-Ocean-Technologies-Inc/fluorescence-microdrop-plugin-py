@@ -92,10 +92,12 @@ class FirmwareUploadDialogController(HasTraits):
         stretch_group_layouts_horizontally(panel)
         self.dialog.add_content_widget(panel)
 
-        # Reflect the connected board's identity into the read-only device id
-        # (a board may have identified before the dialog was opened).
+        # Reflect the connected board's identity into the read-only device id,
+        # and point the port combo at its auto-detected port (a board may have
+        # connected before the dialog was opened).
         if self.live_state.board_device_id:
             self.model.device_id = self.live_state.board_device_id
+        self.model.sync_selected_port(self.live_state.board_port)
 
         self.dialog.finished.connect(self._on_dialog_closed)
         self.dialog.show()
@@ -134,6 +136,12 @@ class FirmwareUploadDialogController(HasTraits):
         the read-only Device ID field (GUI thread)."""
         if event.new:
             self.model.device_id = event.new
+
+    @observe("live_state:board_port", dispatch="ui")
+    def _on_board_port_changed(self, event):
+        """The auto-detected port changed — keep the port combo in sync
+        (GUI thread)."""
+        self.model.sync_selected_port(event.new)
 
     # ---- upload run ------------------------------------------------------
 

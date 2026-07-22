@@ -57,6 +57,23 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         from . import capture_service
         capture_service.notify_applied()
 
+    def _on_connected_triggered(self, body):
+        """Base handler flips the connected flag; also ferry the board's
+        serial port to live_state so the firmware-upload dialog keeps its
+        port combo in sync with the auto-detected port. The monitor
+        republishes a "<device>_connected" sentinel (not a port) when asked
+        to start monitoring an already-connected board — ignore that."""
+        super()._on_connected_triggered(body)
+        port = str(body)
+        if port and not port.endswith("_connected"):
+            fluorescence_live_state.board_port = port
+
+    def _on_disconnected_triggered(self, body):
+        """Base handler clears the connected flag; also clear the ferried
+        port so consumers see no auto-detected port while disconnected."""
+        super()._on_disconnected_triggered(body)
+        fluorescence_live_state.board_port = ""
+
     def _on_firmware_upload_started_triggered(self, body):
         """Backend accepted an upload — ferry to the GUI thread via
         live_state (the firmware-upload dialog's dispatch="ui" observer

@@ -92,6 +92,26 @@ class FirmwareUploadModel(HasTraits):
     def selected_port_device(self):
         return self.selected_port_entry.split(PORT_ENTRY_SEPARATOR)[0]
 
+    def _entry_for_device(self, port_device):
+        """The dropdown entry whose port device matches, or None."""
+        for entry in self.available_ports:
+            if entry.split(PORT_ENTRY_SEPARATOR)[0] == port_device:
+                return entry
+        return None
+
+    def sync_selected_port(self, port_device):
+        """Point the combo at the connected / auto-detected port, rescanning
+        the port list if it isn't currently listed. No-op if the port can't
+        be matched (e.g. empty, or disconnected)."""
+        if not port_device:
+            return
+        entry = self._entry_for_device(port_device)
+        if entry is None:
+            self.available_ports = self._scan_port_entries()
+            entry = self._entry_for_device(port_device)
+        if entry is not None:
+            self.selected_port_entry = entry
+
     def _firmware_source_is_zip(self):
         return self.firmware_source.lower().endswith(".zip")
 
