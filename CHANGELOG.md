@@ -1,3 +1,51 @@
+## v2.0.0 (2026-07-22)
+
+### Feat
+
+- **controls-ui**: lower the camera exposure minimum to 0.032 ms
+- **fluorescence**: live run mirror, per-run camera, phase folders
+- **image-viewer**: experiment-wide browsing and navigation
+- **controls-ui**: show a '-' placeholder for the board device id
+- **controls-ui**: blank device id until the board's whoami arrives
+- **controls-ui**: keep the port combo in sync with the detected port
+- **controls-ui**: zip source, board device id, timeout spinner
+- **uploader**: accept a .zip firmware bundle
+- **deps**: declare mpremote as a conda run dependency
+- **controls-ui**: Upload Firmware entry in the Fluorescence menu
+- **controls-ui**: firmware-upload dialog MVC subpackage
+- **controls-ui**: ferry firmware-upload signals into live_state
+- **examples**: firmware-upload dialog demo
+- **services**: firmware upload service implementation
+- **fluorescence_controller**: Add firmware upload service
+- **uploader**: port mpremote firmware uploader from standalone script
+- **datamodels**: UploadFirmwareData payload and validated publisher
+- **consts**: add firmware-upload topics and Pico board ids
+- **chain-column**: fire entries at step start, end, or both
+- **controls-ui**: Start/End capture-time toggles in params pane
+- **controls-ui**: carry capture phase fields through panel/row
+- **capture-chain**: per-entry capture_start/capture_end phases
+- **controls-ui**: collapsible viewer sections + folder in pane title
+- **controls-ui**: burst-aware image viewer with wavelength filter
+- **controls-ui**: derive chain labels from tag_wavelength_index
+- **controls-ui**: route-table chain view, glyph buttons, row deletion
+
+### Fix
+
+- **uploader**: wipe filesystem per entry, never rmdir the root
+- **chain-column**: end-phase burst folder gets _end suffix
+- **fluorescence_controls_ui**: Adjust controls view glyphs + layout
+- **controls-ui**: re-highlight the moved row after up/down
+- **controls-ui**: stale-echo guard, up/down repositioning, one-shot capture
+- **controls-ui**: seek sliders count 1-based in the view
+- **controls-ui**: name pane bursts by dotted path, stamp filenames
+- **controls-ui**: persist run toggles, guard attach dialog mid-run
+
+### Refactor
+
+- **firmware-upload**: rewire onto the shared peripheral base
+- **services**: route upload status lines through the logger bridge
+- **examples**: demo reuses the plugin's firmware-upload dialog
+
 ## v1.0.0 (2026-07-17)
 
 ### BREAKING CHANGE
