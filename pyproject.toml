@@ -41,6 +41,9 @@ channels = ["https://prefix.dev/conda-forge"]
 [tool.pixi.package.host-dependencies]
 hatchling = "*"
 
+[tool.pixi.package.run-dependencies]
+mpremote = ">=1.20"
+
 [tool.commitizen]
 name = "cz_conventional_commits"
 version_provider = "pep621"
