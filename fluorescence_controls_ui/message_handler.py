@@ -94,6 +94,33 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         fluorescence_live_state.firmware_upload_message = (
             FIRMWARE_UPLOAD_FINISHED, body)
 
+    def _on_protocol_step_fluorescence_triggered(self, body):
+        """The entry a running protocol is firing right now — ferry to the
+        GUI thread via live_state (the controller's dispatch="ui" observer
+        mirrors it into the panel and highlights the firing chain row).
+        Never touch the model here (worker thread)."""
+        try:
+            payload = json.loads(body)
+        except Exception:
+            logger.error(f"Unparseable protocol-step payload: {body!r}")
+            return
+        fluorescence_live_state.protocol_step_applied = payload
+
+    def _on_protocol_fluorescence_session_triggered(self, body):
+        """A capture session start/end. Open/close the run's own headless
+        camera on the GUI thread (Qt camera objects), and ferry the flag to
+        live_state so the controller drops its live mirror on end."""
+        try:
+            active = bool(json.loads(body).get("active"))
+        except Exception:
+            logger.error(f"Unparseable protocol-session payload: {body!r}")
+            return
+        from pyface.api import GUI
+        from . import camera_session
+        GUI.invoke_later(
+            camera_session.activate if active else camera_session.deactivate)
+        fluorescence_live_state.protocol_session_active = active
+
     def _on_searching_triggered(self, body):
         """Backend scan state (json bool) -> the model, which drives the
         status-bar icon's click affordance and tooltip."""

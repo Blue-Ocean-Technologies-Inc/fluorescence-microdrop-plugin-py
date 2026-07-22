@@ -163,17 +163,33 @@ def _collapse_header(trait, label):
     )
 
 
-# Burst layer: captures land one folder per burst, so navigation is
-# two-level — pick the burst, then the image within it.
+# Experiment layer (collapsed by default): browse another experiment's
+# captures without hunting for its folder — pick it and the viewer repoints
+# there, then the image-group / image levels reload under it.
+experiments_group = VGroup(
+    Item("selected_experiment", label="Experiment",
+         editor=HoverScrollEnumEditor(values_name="experiment_names"),
+         tooltip="Browse another experiment's captures (repoints the viewer "
+                 "at that experiment; use Home to return to the ongoing one)"),
+    Item("experiment_number", label="Experiment Seek",
+         editor=RangeEditor(low=1, high_name="object.max_experiment_number",
+                            mode="slider"),
+         tooltip="Drag through the experiments, oldest to newest"),
+    visible_when="show_experiments",
+    show_border=True,
+)
+
+# Image-group layer: captures land one folder per group, so navigation is
+# two-level — pick the group, then the image within it.
 bursts_group = VGroup(
-    Item("selected_burst", label="Burst",
+    Item("selected_burst", label="Image Group",
          editor=HoverScrollEnumEditor(values_name="burst_names"),
-         tooltip="Pick a capture burst (one folder per burst; "
+         tooltip="Pick a capture image group (one folder per group; "
                  "'ungrouped' holds legacy flat captures)"),
-    Item("burst_number", label="Burst Seek",
+    Item("burst_number", label="Image Group Seek",
          editor=RangeEditor(low=1, high_name="object.max_burst_number",
                             mode="slider"),
-         tooltip="Drag through the bursts, oldest to newest"),
+         tooltip="Drag through the image groups, oldest to newest"),
     visible_when="show_bursts",
     show_border=True,
 )
@@ -185,11 +201,11 @@ images_group = VGroup(
                  "(detected from the filenames)"),
     Item("selected_image", label="Image",
          editor=HoverScrollEnumEditor(values_name="image_names"),
-         tooltip="Pick an image from the selected burst"),
+         tooltip="Pick an image from the selected image group"),
     Item("image_number", label="Seek",
          editor=RangeEditor(low=1, high_name="object.max_image_number",
                             mode="slider"),
-         tooltip="Drag through the burst's images"),
+         tooltip="Drag through the image group's images"),
     visible_when="show_images",
     show_border=True,
 )
@@ -213,7 +229,10 @@ ImageViewerView = View(
     VGroup(
         buttons_group,
 
-        _collapse_header("show_bursts", "Bursts"),
+        _collapse_header("show_experiments", "Experiments"),
+        experiments_group,
+
+        _collapse_header("show_bursts", "Image Groups"),
         bursts_group,
 
         _collapse_header("show_images", "Images"),

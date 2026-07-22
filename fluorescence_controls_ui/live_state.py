@@ -46,6 +46,18 @@ class FluorescenceLiveState(HasTraits):
     #: disconnected.
     board_port = Str()
 
+    #: The entry a running protocol is firing right now (dict payload of
+    #: PROTOCOL_STEP_FLUORESCENCE), ferried worker->GUI: the controller's
+    #: dispatch="ui" observer mirrors its params into the panel and
+    #: highlights the firing chain row while the run has the pane's own
+    #: publishes suppressed.
+    protocol_step_applied = Event()
+
+    #: A capture session's start (True) / end (False), from
+    #: PROTOCOL_FLUORESCENCE_SESSION. On end the controller drops the live
+    #: mirror (light off, nothing highlighted).
+    protocol_session_active = Event()
+
 
 #: Module-level singleton shared inside the fluorescence plugin.
 fluorescence_live_state = FluorescenceLiveState()

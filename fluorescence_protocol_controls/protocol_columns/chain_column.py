@@ -15,6 +15,8 @@ wait for the backend's applied-and-settled ack, grab a frame from the
 plugin's own camera feed. Priority 5 — one bucket EARLIER than
 capture/record/video (10), matching the old compound column's ordering.
 """
+import json
+
 from traits.api import Any, List, Str
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -22,7 +24,10 @@ from logger.logger_service import get_logger
 from microdrop_application.dialogs import pyface_wrapper
 from pyface.qt.QtCore import QTimer
 
-from fluorescence_controller.consts import ALL_LEDS_OFF, FLUORESCENCE_APPLIED
+from fluorescence_controller.consts import (
+    ALL_LEDS_OFF, FLUORESCENCE_APPLIED, PROTOCOL_FLUORESCENCE_SESSION,
+    PROTOCOL_STEP_FLUORESCENCE,
+)
 from fluorescence_controller.datamodels import (
     protocol_set_fluorescence_publisher,
 )
@@ -32,7 +37,10 @@ from pluggable_protocol_tree.models.column import (
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
 from ..capture_chain import parse_chain, ticked
-from ..consts import FLUORESCENCE_CHAIN_COLUMN_ID, LED_STABILIZATION_S
+from ..consts import (
+    CAMERA_WARMUP_S, FLUORESCENCE_CHAIN_COLUMN_ID, LED_STABILIZATION_S,
+    PHASE_START_SUFFIX, PHASE_END_SUFFIX,
+)
 
 logger = get_logger(__name__)
 
@@ -123,23 +131,38 @@ class FluorescenceChainHandler(BaseColumnHandler):
     wait_for_topics = [FLUORESCENCE_APPLIED]
     default_ack_time_s = 5.0
 
+    def on_pre_protocol_start(self, ctx):
+        """Open the capture camera just for this run, and reserve warm-up
+        time so the ASI feed is producing frames before the first capture.
+        This hook only fires when the fluorescence chain column is in the
+        protocol (so the camera opens exactly when fluorescence is in play),
+        and the pane closes the feed again at the end — the camera never
+        sits idle heating up. Preview runs touch no hardware."""
+        if getattr(ctx, "preview_mode", False):
+            return
+        publish_message(topic=PROTOCOL_FLUORESCENCE_SESSION,
+                        message=json.dumps({"active": True}))
+        ctx.add_pre_protocol_wait(CAMERA_WARMUP_S)
+
     def on_pre_step(self, row, ctx):
         """Step-start phase: fire the ticked entries with
         `capture_start=True` (every legacy entry — the field defaults on)."""
-        self._run_phase(row, ctx, lambda e: e.capture_start)
+        self._run_phase(row, ctx, lambda e: e.capture_start,
+                        folder_suffix=PHASE_START_SUFFIX)
 
     def on_post_step(self, row, ctx):
         """Step-end phase: fire the ticked entries with
         `capture_end=True`. An entry may fire in both phases."""
-        self._run_phase(row, ctx, lambda e: e.capture_end, folder_suffix="_end")
+        self._run_phase(row, ctx, lambda e: e.capture_end,
+                        folder_suffix=PHASE_END_SUFFIX)
 
     def _run_phase(self, row, ctx, phase_filter, folder_suffix=""):
         """Fire this step's ticked entries passing ``phase_filter``, in
         order, into one folder per phase: apply camera settings, publish
         the LED state, block on the EXECUTOR's own applied-ack mailbox
         (`ctx.wait_for` — not capture_service's Event, which is for
-        pane-driven bursts only), then save the frame. The end phase's
-        folder carries an `_end` marker (via ``folder_suffix``) so a
+        pane-driven bursts only), then save the frame. Each phase's folder
+        carries its own marker (``folder_suffix`` — `_start` / `_end`) so a
         sub-second both-phases step can never overwrite its start
         captures — `burst_folder`'s timestamp alone is only
         1-second-granular. Any raise (TimeoutError from the wait,
@@ -161,15 +184,54 @@ class FluorescenceChainHandler(BaseColumnHandler):
 
         from fluorescence_controls_ui import capture_service
 
+        chain_cell = getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID, None) or []
         folder = capture_service.burst_folder(
             step_desc=row.name + folder_suffix, dotted_id=row.dotted_path())
-        for entry in entries:
-            capture_service.apply_camera_settings(entry)
-            protocol_set_fluorescence_publisher.publish(
-                light_on=True, led=entry.led_index, duty=entry.intensity,
-                frequency=entry.frequency, settle_s=LED_STABILIZATION_S)
-            ctx.wait_for(FLUORESCENCE_APPLIED, timeout=self.ack_time_s)
-            capture_service.save_entry_capture(entry, folder)
+        try:
+            for entry in entries:
+                self._broadcast_firing(row, chain_cell, entry)
+                capture_service.apply_camera_settings(entry)
+                protocol_set_fluorescence_publisher.publish(
+                    light_on=True, led=entry.led_index, duty=entry.intensity,
+                    frequency=entry.frequency, settle_s=LED_STABILIZATION_S)
+                ctx.wait_for(FLUORESCENCE_APPLIED, timeout=self.ack_time_s)
+                capture_service.save_entry_capture(entry, folder)
+        finally:
+            # Lights out the moment the burst is done — the LED is needed only
+            # for the brief capture, never between the start/end phases nor
+            # after the last capture (idle heat). Runs even if a capture
+            # raised, so a failed step never leaves the light lit. The pane
+            # mirror follows (light off, nothing firing).
+            publish_message(topic=ALL_LEDS_OFF, message="")
+            self._broadcast_burst_done(row, chain_cell)
+
+    @staticmethod
+    def _broadcast_firing(row, chain_cell, entry):
+        """Tell the controls pane which entry is firing right now, so it can
+        mirror the live params, light state, and highlight the firing chain
+        row while the run has the pane's own publishes suppressed."""
+        publish_message(
+            topic=PROTOCOL_STEP_FLUORESCENCE,
+            message=json.dumps({
+                "step_uuid": row.uuid,
+                "chain": chain_cell,
+                "firing_label": entry.label,
+                "light_on": True,
+            }))
+
+    @staticmethod
+    def _broadcast_burst_done(row, chain_cell):
+        """Tell the pane the burst is over: light off, nothing firing. The
+        chain stays loaded (same step_uuid + cell) so the table doesn't
+        thrash — only the highlight clears."""
+        publish_message(
+            topic=PROTOCOL_STEP_FLUORESCENCE,
+            message=json.dumps({
+                "step_uuid": row.uuid,
+                "chain": chain_cell,
+                "firing_label": "",
+                "light_on": False,
+            }))
 
     def on_post_protocol_end(self, ctx):
         """Lights out at the end of every run — unconditional, because the
@@ -181,6 +243,11 @@ class FluorescenceChainHandler(BaseColumnHandler):
         if getattr(ctx, "preview_mode", False):
             return
         publish_message(topic=ALL_LEDS_OFF, message="")
+        # End the capture session: the pane closes the camera it opened and
+        # drops its live run mirror (light off, no row highlighted) so the
+        # camera + LEDs don't sit idle heating up.
+        publish_message(topic=PROTOCOL_FLUORESCENCE_SESSION,
+                        message=json.dumps({"active": False}))
 
 
 def make_fluorescence_chain_column():

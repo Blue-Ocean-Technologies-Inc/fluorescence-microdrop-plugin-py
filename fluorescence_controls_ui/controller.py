@@ -105,14 +105,23 @@ class FluorescenceControlsController(BaseStatusController):
         stretch_group_layouts_horizontally(info.ui.control)
         fluorescence_live_state.observe(
             self._on_tree_row_selected, "tree_row_selected", dispatch="ui")
+        fluorescence_live_state.observe(
+            self._on_protocol_step_applied, "protocol_step_applied",
+            dispatch="ui")
+        fluorescence_live_state.observe(
+            self._on_protocol_session_active, "protocol_session_active",
+            dispatch="ui")
         return super().init(info)
 
     def closed(self, info, is_ok):
-        """Unhook the singleton observer wired in init (the pane can be
+        """Unhook the singleton observers wired in init (the pane can be
         unmounted and remounted at runtime via plugin hot load)."""
-        fluorescence_live_state.observe(
-            self._on_tree_row_selected, "tree_row_selected", dispatch="ui",
-            remove=True)
+        for handler, name in (
+                (self._on_tree_row_selected, "tree_row_selected"),
+                (self._on_protocol_step_applied, "protocol_step_applied"),
+                (self._on_protocol_session_active, "protocol_session_active")):
+            fluorescence_live_state.observe(
+                handler, name, dispatch="ui", remove=True)
         return super().closed(info, is_ok)
 
     # ------------------------------------------------------------------ #
@@ -590,6 +599,46 @@ class FluorescenceControlsController(BaseStatusController):
             self._enter_free_mode()
         else:
             self._enter_free_mode()
+
+    # ------------------------------------------------------------------ #
+    # Live protocol-run mirror (pane is publish-suppressed during a run)   #
+    # ------------------------------------------------------------------ #
+    def _on_protocol_step_applied(self, event):
+        """The running protocol is firing an entry: show the executing
+        step's chain, highlight the firing entry, and reflect its params +
+        the light on. Setting ``chain_selection`` drives `_load_selected_row`
+        (params mirror + table highlight); every hardware publish it would
+        trigger is suppressed by ``protocol_running``, so nothing reaches the
+        board. Runs on the GUI thread (live_state observer, dispatch="ui")."""
+        payload = event.new
+        step_uuid = payload.get("step_uuid", "")
+        rows = [FluorescenceChainRow.from_entry(entry)
+                for entry in parse_chain(payload.get("chain") or [])]
+        # Replace the table only when the executing step's chain changed —
+        # don't thrash the TableEditor on every entry of the same step.
+        if (step_uuid != self.model.attached_step_id
+                or [r.to_entry_dict() for r in self.model.chain_rows]
+                != [r.to_entry_dict() for r in rows]):
+            self.model.attached_step_id = step_uuid
+            self.model.attached_group_id = ""
+            self.model.chain_rows = rows
+        firing_label = payload.get("firing_label", "")
+        self.model.chain_selection = next(
+            (r for r in self.model.chain_rows if r.label == firing_label),
+            None)
+        self.model.light_on = bool(payload.get("light_on"))
+
+    def _on_protocol_session_active(self, event):
+        """Session start: show the LED board as streaming, matching the
+        camera the run just opened — the pane is publish-suppressed during a
+        run (`protocol_running`), so this only updates the visual state, no
+        board command. Session end: drop the live mirror — stream off, light
+        off, nothing highlighted, so the pane reflects the idle board."""
+        self.model.stream_active = bool(event.new)
+        if event.new:
+            return
+        self.model.chain_selection = None
+        self.model.light_on = False
 
     # ------------------------------------------------------------------ #
     # Run Capture                                                          #
