@@ -15,6 +15,7 @@ from ..fluorescence_serial_proxy import FluorescenceSerialProxy
 from ..datamodels import UploadFirmwareData
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -73,12 +74,16 @@ class FluorescenceFirmwareUploadService(HasTraits):
                 return
             port, proxy_released = self._resolve_upload_port(data)
             self.upload_cancel_event = threading.Event()
-            publish_message(
-                message=f"Starting firmware upload from "
-                        f"{data.single_file or data.firmware_source} "
-                        f"(port: {port or 'auto-detect'}"
-                        f"{', dry run' if data.dry_run else ''})",
-                topic=FIRMWARE_UPLOAD_STARTED)
+
+            started_message = (
+                f"Starting firmware upload from "
+                f"{data.single_file or data.firmware_source} "
+                f"(port: {port or 'auto-detect'}"
+                f"{', dry run' if data.dry_run else ''})")
+            publish_message(message=started_message,
+                            topic=FIRMWARE_UPLOAD_STARTED)
+            logger.info(started_message)
+
             if data.upload_timeout_s > 0:
                 self.upload_timeout_timer = threading.Timer(
                     data.upload_timeout_s, self._cancel_timed_out_upload,
@@ -97,10 +102,7 @@ class FluorescenceFirmwareUploadService(HasTraits):
         with self.upload_state_lock:
             if self.upload_thread is None or not self.upload_thread.is_alive():
                 return
-            publish_message(
-                message="Cancel requested — stopping the upload at the next "
-                        "step.",
-                topic=FIRMWARE_UPLOAD_LOG)
+            self._publish_upload_log_line("Cancel requested — stopping the upload at the next step.")
             self.upload_cancel_event.set()
 
     # ---- upload run ------------------------------------------------------
@@ -114,15 +116,15 @@ class FluorescenceFirmwareUploadService(HasTraits):
         """
         port = data.port
         if self.proxy is not None:
+
             if not port:
                 port = self.proxy.port
+
             if port == self.proxy.port:
-                publish_message(
-                    message=f"Disconnecting the board on {port} to free the "
-                            f"port for the upload.",
-                    topic=FIRMWARE_UPLOAD_LOG)
+                self._publish_upload_log_line(f"Disconnecting the board on {port} to free the port for the upload.")
                 self.cleanup()
                 return port, True
+
         return port, False
 
     def _run_upload(self, data, port, proxy_released, cancel_event):
@@ -166,8 +168,5 @@ class FluorescenceFirmwareUploadService(HasTraits):
     def _cancel_timed_out_upload(cancel_event, upload_timeout_s):
         if cancel_event.is_set():
             return
-        publish_message(
-            message=f"Upload timed out after {upload_timeout_s} s — "
-                    f"aborting.",
-            topic=FIRMWARE_UPLOAD_LOG)
+        FluorescenceFirmwareUploadService._publish_upload_log_line(f"Upload timed out after {upload_timeout_s} s — aborting.")
         cancel_event.set()
