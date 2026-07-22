@@ -1,11 +1,11 @@
 """Qt-free firmware uploader for the fluorescence board.
 
 Ported from fluorescence-camera-ui's upload_firmware.py so the backend does
-not depend on a script living in another repo; only the firmware SOURCE tree
-stays external (the request's firmware_dir points at it). Files are pushed
-with mpremote, one command per ``python -m mpremote`` subprocess: that keeps
-mpremote's sys.argv/SystemExit machinery out of the backend process and lets
-each command's output be captured for the caller's log.
+not depend on a script living in another repo; only the firmware SOURCE
+(a folder or a .zip bundle) stays external (the request points at it). Files
+are pushed with mpremote, one command per ``python -m mpremote`` subprocess:
+that keeps mpremote's sys.argv/SystemExit machinery out of the backend
+process and lets each command's output be captured for the caller's log.
 
 Every function takes a ``log`` callable for progress lines (the firmware
 upload service publishes them to FIRMWARE_UPLOAD_LOG) and ``upload_firmware``
@@ -15,10 +15,12 @@ bounded by MPREMOTE_COMMAND_TIMEOUT_S.
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from pathlib import Path
 
 import serial
@@ -321,6 +323,49 @@ def _cancelled(cancel_event, log):
 
 
 # ------------------------------------------------------------------ #
+# Zip bundle handling                                                 #
+# ------------------------------------------------------------------ #
+
+def _firmware_root(extracted_dir: Path) -> Path:
+    """The firmware root inside an extracted bundle. If the archive wrapped
+    everything in a single top-level directory (a zip of the firmware
+    folder), that directory is the root; otherwise the extraction dir is."""
+    entries = list(extracted_dir.iterdir())
+    if len(entries) == 1 and entries[0].is_dir():
+        return entries[0]
+    return extracted_dir
+
+
+def _extract_firmware_zip(zip_path: Path, log):
+    """Unzip a firmware bundle into a fresh temp dir and return
+    ``(firmware_root, temp_dir)``. ``temp_dir`` is always the mkdtemp root so
+    the caller deletes exactly what was created, even when the firmware root
+    is a subdirectory of it."""
+    temp_dir = Path(tempfile.mkdtemp(prefix="fluorescence_fw_"))
+    log(f"Unzipping firmware bundle {zip_path.name} -> {temp_dir}")
+    with zipfile.ZipFile(zip_path) as archive:
+        names = archive.namelist()
+        archive.extractall(temp_dir)
+    for name in names:
+        logger.debug(f"  extracted: {name}")
+    log(f"Unzipped {len(names)} entr{'y' if len(names) == 1 else 'ies'}.")
+    root = _firmware_root(temp_dir)
+    if root != temp_dir:
+        log(f"Firmware root inside the bundle: {root.name}/")
+    return root, temp_dir
+
+
+def _cleanup_extracted_dir(temp_dir: Path, log):
+    """Delete the temp dir an upload's zip bundle was extracted into."""
+    log(f"Deleting unzipped firmware copy {temp_dir}")
+    try:
+        shutil.rmtree(temp_dir)
+    except Exception as e:
+        logger.warning(f"Could not delete temp firmware dir {temp_dir}: {e}")
+        log(f"WARNING: could not delete unzipped copy {temp_dir}: {e}")
+
+
+# ------------------------------------------------------------------ #
 # Main entry point                                                    #
 # ------------------------------------------------------------------ #
 
@@ -339,7 +384,9 @@ def upload_firmware(
     """Upload the firmware tree (or one file) to the board. Returns success.
 
     Args:
-        firmware_path: Directory containing the firmware files.
+        firmware_path: Directory containing the firmware files, OR a .zip
+            bundle of them — a zip is extracted to a temp dir, uploaded, and
+            the temp dir deleted before returning.
         port: Serial port to use; None probes for the board by HWID and
             whoami ``device_id`` (find_port_by_device_id — an empty/None
             device_id claims the first board that identifies at all).
@@ -362,7 +409,12 @@ def upload_firmware(
             command is in flight).
     """
     fw_path = Path(firmware_path)
+    temp_extract_dir = None
     try:
+        # Zip bundle: unzip to a temp dir, upload that, delete it in finally.
+        if fw_path.is_file() and fw_path.suffix.lower() == ".zip":
+            fw_path, temp_extract_dir = _extract_firmware_zip(fw_path, log)
+
         if single_file:
             single_file_path = Path(single_file)
             if single_file_path.is_absolute():
@@ -553,3 +605,6 @@ def upload_firmware(
         logger.exception("Error during firmware upload")
         log(f"ERROR: error during firmware upload: {e}")
         return False
+    finally:
+        if temp_extract_dir is not None:
+            _cleanup_extracted_dir(temp_extract_dir, log)
