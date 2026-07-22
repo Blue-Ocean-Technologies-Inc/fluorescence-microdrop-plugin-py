@@ -58,6 +58,18 @@ ALL_LEDS_ON = f"{DEVICE_NAME}/requests/all_leds_on"
 PROTOCOL_SET_FLUORESCENCE = f"{DEVICE_NAME}/requests/protocol_set_fluorescence"
 FLUORESCENCE_APPLIED = f"{DEVICE_NAME}/signals/fluorescence_applied"
 
+# Frontend protocol -> controls-pane signals (pane-facing, NOT board acks).
+# The capture-chain executor emits these so the controls pane can mirror a
+# running protocol's live fluorescence state — the pane is otherwise
+# publish-suppressed during a run and would freeze — and so the capture
+# camera is opened just for the run and closed when idle.
+# PROTOCOL_STEP_FLUORESCENCE: JSON {step_uuid, chain, firing_label, light_on}
+# for the entry firing right now. PROTOCOL_FLUORESCENCE_SESSION: JSON {active}
+# on run start (True) and end (False). The pane subscribes via signals/#, so
+# no extra routing is needed; the backend (requests/#) never sees them.
+PROTOCOL_STEP_FLUORESCENCE = f"{DEVICE_NAME}/signals/protocol_step_fluorescence"
+PROTOCOL_FLUORESCENCE_SESSION = f"{DEVICE_NAME}/signals/protocol_fluorescence_session"
+
 # Topics actor declared by plugin subscribes to. The listener-name key MUST
 # match FluorescenceControllerBase.listener_name.
 ACTOR_TOPIC_DICT = {
