@@ -2,19 +2,22 @@
 `on_post_step` (issue #6, Task 7): the per-entry burst execution loop —
 apply camera settings, publish the LED state, wait for the executor's
 own applied ack, save the capture — for each ticked entry in chain
-order, inside one folder built per phase (the end phase's folder carries
-an `_end` suffix, so a sub-second both-phases step cannot overwrite its
-start captures). No real camera/backend anywhere: `capture_service` is
+order, inside one folder built per phase (each phase's folder carries its
+own `_start` / `_end` suffix, so a sub-second both-phases step cannot
+overwrite its start captures). No real camera/backend anywhere: `capture_service` is
 faked wholesale (it is imported lazily inside `_run_phase`, mirroring
 `controller.run_capture`'s pattern), and the publisher + `ctx.wait_for`
 are recorded fakes.
 """
+import json
 import sys
 
 import pytest
 
 import fluorescence_controls_ui
-from fluorescence_controller.consts import FLUORESCENCE_APPLIED
+from fluorescence_controller.consts import (
+    ALL_LEDS_OFF, FLUORESCENCE_APPLIED, PROTOCOL_STEP_FLUORESCENCE,
+)
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 from fluorescence_protocol_controls.consts import LED_STABILIZATION_S
 from fluorescence_protocol_controls.protocol_columns import (
@@ -116,8 +119,14 @@ def fake_capture_service(monkeypatch):
     return calls
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def published(monkeypatch):
+    """Stub `publish_message` for the whole (hardware-free) module: the
+    handler now broadcasts the per-entry firing state, the burst-done
+    light-off, and the session/ALL_LEDS_OFF signals, none of which should
+    reach a real Redis. Autouse so every test is isolated; tests that care
+    about the emitted signals take ``published`` as a param and read the
+    recorded ``(topic, message)`` list."""
     calls = []
 
     def record(message, topic, **kw):
@@ -165,7 +174,7 @@ def test_two_ticked_entries_run_in_order_one_folder(
 
     assert len(fake_capture_service["burst_folder"]) == 1
     assert fake_capture_service["burst_folder"][0] == dict(
-        step_desc="Step A", dotted_id=row.dotted_path(), step_id=None)
+        step_desc="Step A_start", dotted_id=row.dotted_path(), step_id=None)
 
     assert [e.label for e in fake_capture_service["apply"]] == ["a", "c"]
 
@@ -357,8 +366,8 @@ def test_post_step_preview_mode_is_a_noop(row_type, fake_capture_service,
 def test_post_step_burst_folder_is_phase_disambiguated(
         row_type, fake_capture_service, publisher_calls):
     """A both-phases entry in a sub-second step must not overwrite its
-    step-start capture: the end phase bursts into an `_end`-suffixed
-    folder, the start phase keeps the legacy folder name."""
+    step-start capture: each phase bursts into its own suffixed folder
+    (`_start` / `_end`)."""
     Row, col = row_type
     row = Row()
     row.name = "Step A"
@@ -371,4 +380,51 @@ def test_post_step_burst_folder_is_phase_disambiguated(
     handler.on_post_step(row, ctx)
 
     assert [c["step_desc"] for c in fake_capture_service["burst_folder"]] \
-        == ["Step A", "Step A_end"]
+        == ["Step A_start", "Step A_end"]
+
+
+def test_each_burst_phase_turns_the_light_off_when_done(
+        row_type, fake_capture_service, publisher_calls, published):
+    """The LED is lit only for the capture: each phase's burst must end
+    with an ALL_LEDS_OFF so the light never stays on between the start and
+    end phases nor after the last capture (idle heat)."""
+    Row, col = row_type
+    row = Row()
+    row.name = "Step A"
+    col.model.set_value(row, [
+        _entry("a", capture_start=True, capture_end=True).model_dump()])
+
+    handler = FluorescenceChainHandler()
+    ctx = _Ctx()
+    handler.on_pre_step(row, ctx)
+    handler.on_post_step(row, ctx)
+
+    topics = [topic for topic, _msg in published]
+    assert topics.count(ALL_LEDS_OFF) == 2   # one per phase burst
+    # The last signal of each phase is the light-off broadcast to the pane.
+    step_signals = [msg for topic, msg in published
+                    if topic == PROTOCOL_STEP_FLUORESCENCE]
+    assert json.loads(step_signals[-1])["light_on"] is False
+
+
+def test_burst_light_off_fires_even_when_a_capture_raises(
+        row_type, fake_capture_service, publisher_calls, published,
+        monkeypatch):
+    """A failed capture must not leave the LED lit: the ALL_LEDS_OFF is in
+    the phase's ``finally``, so it fires even when a save raises."""
+    Row, col = row_type
+    row = Row()
+    row.name = "Step A"
+    col.model.set_value(row, [_entry("a").model_dump()])
+
+    def boom(entry, folder):
+        raise RuntimeError("save failed")
+
+    monkeypatch.setattr(
+        sys.modules["fluorescence_controls_ui.capture_service"],
+        "save_entry_capture", boom)
+
+    with pytest.raises(RuntimeError):
+        FluorescenceChainHandler().on_pre_step(row, _Ctx())
+
+    assert ALL_LEDS_OFF in [topic for topic, _msg in published]

@@ -7,7 +7,9 @@ import json
 
 import pytest
 
-from fluorescence_controller.consts import ALL_LEDS_OFF, FLUORESCENCE_APPLIED
+from fluorescence_controller.consts import (
+    ALL_LEDS_OFF, FLUORESCENCE_APPLIED, PROTOCOL_FLUORESCENCE_SESSION,
+)
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
 from fluorescence_protocol_controls.protocol_columns import (
@@ -195,7 +197,11 @@ def published(monkeypatch):
 
 def test_run_end_always_turns_lights_off(published):
     FluorescenceChainHandler().on_post_protocol_end(object())
-    assert [topic for topic, _ in published] == [ALL_LEDS_OFF]
+    # Lights out, then the capture session ends (the pane closes the camera
+    # it opened, so camera + LEDs don't sit idle heating up).
+    topics = [topic for topic, _ in published]
+    assert topics == [ALL_LEDS_OFF, PROTOCOL_FLUORESCENCE_SESSION]
+    assert json.loads(published[-1][1]) == {"active": False}
 
 
 def test_run_end_preview_mode_publishes_nothing(published):
