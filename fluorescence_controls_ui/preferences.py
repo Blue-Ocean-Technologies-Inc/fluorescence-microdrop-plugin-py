@@ -131,6 +131,8 @@ class FluorescencePreferences(PreferencesHelper):
     auto_max_exposure_unit = Str(
         "ms", desc="Unit of the max exposure limit: ms or s")
 
+    firmware_source = Directory(desc="Firmware directory or zip file")
+
 
 fluorescence_tab = PreferencesCategory(
     id="microdrop.peripheral_settings.fluorescence",
