@@ -13,6 +13,7 @@ from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
 from ..consts import PERSISTED_VIEWER_TRAITS
 from ..preferences import FluorescencePreferences
+from .analysis.roi_model import RoiAnalysisModel, roi_analysis_model
 
 #: The wavelength filter's no-filter choice.
 WAVELENGTH_FILTER_ALL = "All"
@@ -145,6 +146,9 @@ class FluorescenceImageViewerModel(HasTraits):
     #: pattern as FluorescenceStatusModel's control values.
     preferences = Instance(FluorescencePreferences, FluorescencePreferences())
 
+    #: ROI intensity-analysis state (shared with the plot pane).
+    roi_analysis = Instance(RoiAnalysisModel)
+
     #: Guards the two-way preferences sync against echoing its own writes
     #: (declared trait, so the pull observer can read it in any ordering).
     _self_preference_change = Bool(False)
@@ -155,6 +159,9 @@ class FluorescenceImageViewerModel(HasTraits):
     position_text = Property(
         Str, observe=("bursts.items, burst_index, selected_burst, "
                       "selected_wavelength, paths.items, current_path"))
+
+    def _roi_analysis_default(self):
+        return roi_analysis_model
 
     def traits_init(self):
         self._self_preference_change = True
