@@ -2,6 +2,9 @@
 the raw (16-bit) sensor frames for the current experiment, and the ordered
 list of those files. Pure path logic so it stays hardware/Qt-free testable.
 """
+import calendar
+import re
+import time
 from pathlib import Path
 
 from device_viewer.consts import CAPTURES_DIR_NAME, RAW_CAPTURES_SUBDIR
@@ -10,7 +13,7 @@ from fluorescence_protocol_controls.capture_chain import sanitize_label
 from microdrop_application.helpers import get_current_experiment_directory
 from logger.logger_service import get_logger
 
-from ..consts import IMAGE_PATTERNS
+from ..consts import IMAGE_PATTERNS, CAPTURE_TIMESTAMP_FORMAT
 
 logger = get_logger(__name__)
 
@@ -106,3 +109,22 @@ def detect_wavelength(path) -> str:
         if token in name:
             return display
     return ""
+
+
+#: The utc_stamp() pattern as it appears inside capture filenames.
+CAPTURE_TIMESTAMP_PATTERN = re.compile(
+    r"\d{4}_\d{2}_\d{2}-\d{2}_\d{2}_\d{2}")
+
+
+def capture_timestamp(path) -> float:
+    """Capture time (epoch seconds) embedded in the filename by
+    capture_service.utc_stamp(), falling back to the file's mtime for
+    names without a stamp (legacy captures); 0.0 when neither exists."""
+    match = CAPTURE_TIMESTAMP_PATTERN.search(Path(path).name)
+    if match:
+        return float(calendar.timegm(
+            time.strptime(match.group(0), CAPTURE_TIMESTAMP_FORMAT)))
+    try:
+        return Path(path).stat().st_mtime
+    except OSError:
+        return 0.0

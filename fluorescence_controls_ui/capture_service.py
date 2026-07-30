@@ -24,6 +24,7 @@ from device_viewer.consts import CAPTURES_DIR_NAME, RAW_CAPTURES_SUBDIR
 from microdrop_application.helpers import get_current_experiment_directory
 
 from fluorescence_controller.consts import ALL_LEDS_OFF
+from .consts import CAPTURE_TIMESTAMP_FORMAT
 from fluorescence_controller.datamodels import (
     protocol_set_fluorescence_publisher,
 )
@@ -64,7 +65,7 @@ def wait_applied(timeout: float) -> bool:
 
 def utc_stamp() -> str:
     """UTC timestamp in the shared capture-filename format."""
-    return time.strftime("%Y_%m_%d-%H_%M_%S", time.gmtime())
+    return time.strftime(CAPTURE_TIMESTAMP_FORMAT, time.gmtime())
 
 
 def burst_folder(step_desc: str | None, dotted_id: str | None) -> Path:

@@ -68,3 +68,8 @@ DISCOVERY_POLL_INTERVAL_MS = 2_000
 #: Auto-advance cadence while the slideshow is playing (ms).
 SLIDESHOW_INTERVAL_MS = 1_500
 
+#: strftime format of the UTC stamp embedded in capture filenames
+#: (capture_service.utc_stamp writes it; discovery.capture_timestamp
+#: parses it back).
+CAPTURE_TIMESTAMP_FORMAT = "%Y_%m_%d-%H_%M_%S"
+
