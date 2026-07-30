@@ -260,9 +260,9 @@ def test_rescan_follows_newest_burst_and_populates_wavelengths(
         monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
-    assert model.burst_names == ["Mix_1.2_a", "Rinse_3_b"]
+    assert model.burst_names == ["All", "Mix_1.2_a", "Rinse_3_b"]
     assert model.selected_burst == "Rinse_3_b"
-    assert model.burst_index == 1
+    assert model.burst_index == 2
     assert model.current_path == str(paths["new_blue"])
     assert model.wavelength_names == [
         WAVELENGTH_FILTER_ALL, "Blue (460 nm)", "Green (540 nm)"]
@@ -272,7 +272,7 @@ def test_selecting_older_burst_shows_its_first_image(monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
     model.selected_burst = "Mix_1.2_a"
-    assert model.burst_index == 0
+    assert model.burst_index == 1
     assert [p.name for p in model.paths] == [
         "Blue_460_nm_1_t1_raw.png", "Green_540_nm_2_t2_raw.png"]
     assert model.current_path == str(paths["old_blue"])
@@ -282,6 +282,8 @@ def test_burst_slider_drives_selection(monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
     model.burst_index = 0
+    assert model.selected_burst == "All"
+    model.burst_index = 1
     assert model.selected_burst == "Mix_1.2_a"
 
 
@@ -318,10 +320,10 @@ def test_seek_sliders_are_one_based_twins(monkeypatch, tmp_path):
     drives the 0-based index and vice versa."""
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
-    assert model.burst_number == model.burst_index + 1 == 2
-    assert model.max_burst_number == 2
-    model.burst_number = 1
-    assert model.burst_index == 0 and model.selected_burst == "Mix_1.2_a"
+    assert model.burst_number == model.burst_index + 1 == 3
+    assert model.max_burst_number == 3
+    model.burst_number = 2
+    assert model.burst_index == 1 and model.selected_burst == "Mix_1.2_a"
     assert model.max_image_number == len(model.paths) == 2
     model.image_number = 2
     assert model.image_index == 1

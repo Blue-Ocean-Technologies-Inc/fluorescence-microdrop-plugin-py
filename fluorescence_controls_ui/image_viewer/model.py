@@ -17,6 +17,9 @@ from ..preferences import FluorescencePreferences
 #: The wavelength filter's no-filter choice.
 WAVELENGTH_FILTER_ALL = "All"
 
+#: The image-group filter's no-filter choice (spans every group).
+BURST_FILTER_ALL = "All"
+
 
 class FluorescenceImageViewerModel(HasTraits):
     """State for the 16-bit capture viewer."""
@@ -150,8 +153,8 @@ class FluorescenceImageViewerModel(HasTraits):
     #: an image from elsewhere, '' when nothing is discovered) — the arrows
     #: traverse the whole experiment, so the counter spans every image group.
     position_text = Property(
-        Str, observe=("bursts.items, burst_index, selected_wavelength, "
-                      "paths.items, current_path"))
+        Str, observe=("bursts.items, burst_index, selected_burst, "
+                      "selected_wavelength, paths.items, current_path"))
 
     def traits_init(self):
         self._self_preference_change = True
@@ -184,10 +187,11 @@ class FluorescenceImageViewerModel(HasTraits):
         return max(len(self.paths) - 1, 0)
 
     def _get_burst_names(self):
-        return [name for name, _paths in self.bursts]
+        names = [name for name, _paths in self.bursts]
+        return [BURST_FILTER_ALL] + names if names else []
 
     def _get_max_burst_index(self):
-        return max(len(self.bursts) - 1, 0)
+        return max(len(self.burst_names) - 1, 0)
 
     def _get_experiment_names(self):
         return [name for name, _captures in self.experiments]
@@ -224,10 +228,13 @@ class FluorescenceImageViewerModel(HasTraits):
         self.burst_index = value - 1
 
     def _get_max_burst_number(self):
-        return max(len(self.bursts), 1)
+        return max(len(self.burst_names), 1)
 
     def burst_paths(self, burst_name):
-        """The named burst's images, or [] for an unknown name."""
+        """The named burst's images — every group's, flattened in group
+        order, for the "All" choice; [] for an unknown name."""
+        if burst_name == BURST_FILTER_ALL:
+            return [path for _name, paths in self.bursts for path in paths]
         for name, paths in self.bursts:
             if name == burst_name:
                 return list(paths)
@@ -247,14 +254,18 @@ class FluorescenceImageViewerModel(HasTraits):
     def _get_position_text(self):
         """Position across every image group in the experiment (the arrows
         traverse them all), through the active wavelength filter — the
-        images actually reachable. ``self.paths`` is already the current
-        group's filtered list; the groups before it contribute their filtered
-        counts."""
+        images actually reachable. ``self.paths`` is already the filtered
+        list; a specific group adds its predecessors' filtered counts,
+        the "All" choice starts at zero."""
         total = sum(len(self.visible_of(paths)) for _name, paths in self.bursts)
         if total == 0:
             return ""
-        before = sum(len(self.visible_of(paths))
-                     for _name, paths in self.bursts[:self.burst_index])
+        before = 0
+        if self.selected_burst != BURST_FILTER_ALL:
+            for name, paths in self.bursts:
+                if name == self.selected_burst:
+                    break
+                before += len(self.visible_of(paths))
         index = self.path_index()
         if index is not None:
             return f"{before + index + 1}/{total}"
