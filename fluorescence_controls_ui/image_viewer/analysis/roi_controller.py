@@ -8,7 +8,7 @@ import queue
 import time
 from pathlib import Path
 
-from traits.api import Any, Bool, Dict, HasTraits, Instance, observe
+from traits.api import Bool, Dict, HasTraits, Instance, observe
 from pyface.api import NO, YES
 
 from logger.logger_service import get_logger
@@ -50,9 +50,6 @@ class RoiAnalysisController(HasTraits):
     #: drained results land under the geometry they were computed with.
     _dispatched_keys = Dict()
 
-    #: The Roi whose instant result should feed roi_info_text.
-    _instant_roi = Any(None)
-
     # ------------------------------------------------------------------ #
     # Interaction modes                                                    #
     # ------------------------------------------------------------------ #
@@ -86,8 +83,8 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.rois.append(roi)
         self.analysis_model.interaction_mode = self._rest_mode()
         self._save_config()
-        self._instant_stats(roi)
         self._restart_batch_if_running()
+        self._instant_stats(roi)
 
     @observe("analysis_model:canvas_roi_edited")
     def _on_canvas_roi_edited(self, event):
@@ -99,8 +96,8 @@ class RoiAnalysisController(HasTraits):
         roi.apply_edit(capture_timestamp(current),
                        [float(value) for value in geometry])
         self._save_config()
-        self._instant_stats(roi)
         self._restart_batch_if_running()
+        self._instant_stats(roi)
 
     # ------------------------------------------------------------------ #
     # Delete / clear / reset                                               #
@@ -269,7 +266,6 @@ class RoiAnalysisController(HasTraits):
             return
         key = self.analysis_model.cache_key(current, roi)
         self._dispatched_keys[(current, roi.roi_id)] = key
-        self._instant_roi = roi
         cached = self.analysis_model.cache.get(key)
         if cached is not None:
             self._show_instant({"path": current,
@@ -280,14 +276,19 @@ class RoiAnalysisController(HasTraits):
                                    {roi.roi_id: (roi.kind, tuple(key[4]))})
 
     def _show_instant(self, payload):
-        roi = self._instant_roi
+        """Derive the ROI from the payload itself (an instant payload
+        carries exactly one roi_id) rather than trusting a controller-
+        held "last drawn/edited" reference, which a second quick edit
+        can race ahead of. An error payload has empty stats — there is
+        no roi_id to key off, and the failure is already logged by the
+        batch/instant compute layer, so it is skipped silently."""
+        stats_by_roi = payload["stats"]
+        roi = None
+        for roi_id in stats_by_roi:
+            roi = self.analysis_model.roi_by_id(roi_id)
         if roi is None:
             return
-        stats = payload["stats"].get(roi.roi_id)
-        if stats is None or payload.get("error"):
-            self.analysis_model.roi_info_text = (
-                f"{roi.name}: no stats ({payload.get('error') or 'empty'})")
-            return
+        stats = stats_by_roi[roi.roi_id]
         self.analysis_model.roi_info_text = (
             f"{roi.name}: mean {stats['mean']:.1f}  "
             f"std {stats['std']:.1f}  min {stats['min']:.0f}  "
