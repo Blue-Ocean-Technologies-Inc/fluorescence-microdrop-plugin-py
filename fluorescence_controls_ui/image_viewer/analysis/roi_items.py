@@ -37,6 +37,9 @@ class _ResizeHandle(QGraphicsRectItem):
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
 
     def mousePressEvent(self, event):
+        # A handle drag resizes the parent without going through its
+        # mouse events, so guard sync() from here too.
+        self.parentItem()._dragging = True
         event.accept()
 
     def mouseMoveEvent(self, event):
@@ -45,6 +48,7 @@ class _ResizeHandle(QGraphicsRectItem):
 
     def mouseReleaseEvent(self, event):
         self.parentItem().commit_geometry()
+        self.parentItem()._dragging = False
         event.accept()
 
 
@@ -52,9 +56,9 @@ class _RoiItemBase:
     """Shared behavior mixed into the two shape items: identity, label,
     grip, edit-mode flags, and commit-on-release."""
 
-    #: True between mousePressEvent and mouseReleaseEvent on this item
-    #: (a move drag): sync() skips this item while it's set, so it
-    #: doesn't yank a rect the user is actively dragging.
+    #: True while the user drags this item (a move) or its resize
+    #: handle: sync() skips this item while it's set, so it doesn't
+    #: yank a rect the user is actively dragging.
     _dragging = False
 
     def _setup(self, roi_id, name, on_edited):

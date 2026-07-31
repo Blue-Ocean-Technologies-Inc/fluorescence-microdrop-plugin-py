@@ -12,7 +12,7 @@ import os
 import queue
 import threading
 from concurrent.futures import (
-    ProcessPoolExecutor, ThreadPoolExecutor, as_completed,
+    BrokenExecutor, ProcessPoolExecutor, ThreadPoolExecutor, as_completed,
 )
 
 from traits.api import Any, HasTraits
@@ -39,7 +39,7 @@ def _pool_workers():
 
 def _shared_executor():
     """The one process pool (falling back to threads) reused across every
-    batch and instant compute, created on first use."""
+    batch, created on first use."""
     global _executor
     with _executor_lock:
         if _executor is None:
@@ -50,6 +50,17 @@ def _shared_executor():
                                f"threads: {error}")
                 _executor = ThreadPoolExecutor(max_workers=_pool_workers())
         return _executor
+
+
+def _discard_executor(executor):
+    """Drop a broken shared pool so the next batch rebuilds it (the
+    persistent pool otherwise has no recovery path after a worker
+    crash kills it)."""
+    global _executor
+    with _executor_lock:
+        if _executor is executor:
+            _executor = None
+    executor.shutdown(wait=False, cancel_futures=True)
 
 
 class RoiBatchRunner(HasTraits):
@@ -107,6 +118,10 @@ class RoiBatchRunner(HasTraits):
                 return
             try:
                 results.put((BATCH_RESULT, future.result()))
+            except BrokenExecutor as error:
+                logger.warning(f"ROI pool broke, rebuilding on next "
+                               f"batch: {error}")
+                _discard_executor(executor)
             except Exception as error:
                 # Pool infrastructure failure (the work unit itself
                 # reports its errors inside the payload).
