@@ -22,6 +22,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 from ..cameras.asi_thread import frame_to_qimage
+from .analysis.roi_items import RoiCanvasLayer
 from .display import stretch_to_8bit
 
 
@@ -31,9 +32,10 @@ class _ImageView(QGraphicsView):
     dock pane (a full-resolution scene would otherwise dictate a huge size
     hint) and keeps the image fitted on resize until the user zooms."""
 
-    def __init__(self, scene, on_hover):
+    def __init__(self, scene, on_hover, roi_layer):
         super().__init__(scene)
         self._on_hover = on_hover
+        self._roi_layer = roi_layer
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
@@ -48,10 +50,27 @@ class _ImageView(QGraphicsView):
         self.scale(factor, factor)
         event.accept()
 
+    def mousePressEvent(self, event):
+        point = self.mapToScene(event.position().toPoint())
+        if self._roi_layer.mouse_press(point):
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
     def mouseMoveEvent(self, event):
         point = self.mapToScene(event.position().toPoint())
         self._on_hover(int(point.x()), int(point.y()))
+        if self._roi_layer.mouse_move(point):
+            event.accept()
+            return
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        point = self.mapToScene(event.position().toPoint())
+        if self._roi_layer.mouse_release(point):
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -78,28 +97,76 @@ class _ImageCanvasEditor(QtEditor):
         self._scene = QGraphicsScene()
         self._pixmap_item = QGraphicsPixmapItem()
         self._scene.addItem(self._pixmap_item)
-        self.control = _ImageView(self._scene, self._on_hover)
+        self._roi_layer = RoiCanvasLayer(self._scene)
+        analysis = self.object.roi_analysis
+        self._roi_layer.on_roi_created = (
+            lambda kind, geometry:
+            analysis.trait_set(canvas_roi_created=(kind, geometry)))
+        self._roi_layer.on_roi_edited = (
+            lambda roi_id, geometry:
+            analysis.trait_set(canvas_roi_edited=(roi_id, geometry)))
+        self._roi_layer.on_roi_selected = (
+            lambda roi_id: analysis.trait_set(selected_roi_id=roi_id))
+        self.control = _ImageView(self._scene, self._on_hover,
+                                  self._roi_layer)
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max")
         self.object.observe(self._on_fit_request, "fit_request")
+        self.object.observe(
+            self._on_roi_state_changed,
+            "current_path, roi_analysis:rois.items, "
+            "roi_analysis:rois:items:geometry, "
+            "roi_analysis:rois:items:overrides:items, "
+            "roi_analysis:selected_roi_id")
+        self.object.observe(self._on_interaction_mode_changed,
+                            "roi_analysis:interaction_mode")
 
     def dispose(self):
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max",
                             remove=True)
         self.object.observe(self._on_fit_request, "fit_request", remove=True)
+        self.object.observe(
+            self._on_roi_state_changed,
+            "current_path, roi_analysis:rois.items, "
+            "roi_analysis:rois:items:geometry, "
+            "roi_analysis:rois:items:overrides:items, "
+            "roi_analysis:selected_roi_id",
+            remove=True)
+        self.object.observe(self._on_interaction_mode_changed,
+                            "roi_analysis:interaction_mode", remove=True)
         super().dispose()
 
     def update_editor(self):
         # A new image arrived in `array`: redraw and refit.
         self._redraw()
         self.control.fit()
+        self._sync_roi_layer()
 
     def _on_window_changed(self, event):
         self._redraw()   # window edit: keep the user's zoom
 
     def _on_fit_request(self, event):
         self.control.fit()
+
+    def _on_roi_state_changed(self, event):
+        self._sync_roi_layer()
+
+    def _sync_roi_layer(self):
+        model = self.object
+        if not model.current_path or model.array is None:
+            self._roi_layer.clear_items()
+            return
+        self._roi_layer.sync(
+            model.roi_analysis.effective_for(model.current_path),
+            model.roi_analysis.selected_roi_id)
+
+    def _on_interaction_mode_changed(self, event):
+        mode = event.new
+        self._roi_layer.set_mode(mode)
+        self.control.setDragMode(
+            self.control.DragMode.ScrollHandDrag if mode == "pan"
+            else self.control.DragMode.NoDrag)
 
     def _redraw(self):
         array = self.value
