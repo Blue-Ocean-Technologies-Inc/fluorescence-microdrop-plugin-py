@@ -26,6 +26,8 @@ from logger.logger_service import get_logger
 
 from ..consts import PKG
 from ..consts import DISCOVERY_POLL_INTERVAL_MS, SLIDESHOW_INTERVAL_MS
+from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
+from .analysis.roi_controller import RoiAnalysisController
 from .controller import FluorescenceImageViewerController
 from .model import FluorescenceImageViewerModel
 from .view import ImageViewerView
@@ -59,12 +61,17 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
 
     model = Instance(FluorescenceImageViewerModel)
     controller = Instance(FluorescenceImageViewerController)
+    analysis_controller = Instance(RoiAnalysisController)
     _poll_timer = Any()
     _play_timer = Any()
+    _drain_timer = Any()
 
     def traits_init(self):
         self.model = FluorescenceImageViewerModel()
         self.controller = FluorescenceImageViewerController(model=self.model)
+        self.analysis_controller = RoiAnalysisController(
+            viewer_model=self.model,
+            analysis_model=self.model.roi_analysis)
         # Event-driven refresh: the device viewer fires this the moment a
         # capture file finishes writing, so new images appear immediately
         # instead of on the next poll tick (the poll below stays only to
@@ -93,6 +100,11 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self._poll_timer.setInterval(DISCOVERY_POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self.controller.rescan)
         self._poll_timer.start()
+        self._drain_timer = QTimer(control)
+        self._drain_timer.setInterval(ANALYSIS_RESULT_DRAIN_INTERVAL_MS)
+        self._drain_timer.timeout.connect(
+            self.analysis_controller.drain_results)
+        self._drain_timer.start()
         self.controller.rescan()
         return control
 
