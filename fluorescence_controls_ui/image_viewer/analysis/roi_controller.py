@@ -17,7 +17,6 @@ from microdrop_application.dialogs.pyface_wrapper import confirm
 from device_viewer.consts import CAPTURES_DIR_NAME
 from fluorescence_protocol_controls.capture_chain import sanitize_label
 
-from ...capture_service import utc_stamp
 from ...consts import CAPTURE_TIMESTAMP_FORMAT
 from ..discovery import UNGROUPED_BURST, capture_timestamp, \
     detect_wavelength
@@ -397,10 +396,14 @@ class RoiAnalysisController(HasTraits):
                 "wavelength": detect_wavelength(path),
                 "stats": stats_by_roi,
             })
+        # capture_service needs the camera stack, so the import stays
+        # lazily deferred here — never at module load time (also what
+        # keeps it mockable via sys.modules in tests).
+        from fluorescence_controls_ui import capture_service
         name = (f"roi_intensities_"
                 f"{sanitize_label(self.viewer_model.selected_burst)}_"
                 f"{sanitize_label(self.viewer_model.selected_wavelength)}_"
-                f"{utc_stamp()}.csv")
+                f"{capture_service.utc_stamp()}.csv")
         csv_path = analysis_directory(directory) / name
         try:
             write_intensity_csv(csv_path, rows, model.rois)
