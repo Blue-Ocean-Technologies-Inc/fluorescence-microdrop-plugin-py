@@ -1,9 +1,13 @@
 """Off-GUI batch computation: a daemon orchestrator thread (the plugin's
-established off-GUI pattern) fans the images out to a process pool and
-streams results back through a thread-safe queue that the dock pane's
-drain timer empties on the GUI thread. One batch at a time — start()
-cancels any running one and swaps in a fresh queue, so a superseded
-batch's stragglers die with the old queue."""
+established off-GUI pattern) fans the images out to a lazily-created,
+persistent process pool and streams results back through a thread-safe
+queue that the dock pane's drain timer empties on the GUI thread. The
+pool is created once (module-level, lock-guarded) and reused across
+every batch — on Windows spawn, rebuilding it per start() costs seconds
+and rescans during live capture would otherwise thrash it with
+overlapping pools — so it is never shut down. One batch at a time:
+start() cancels any running one and swaps in a fresh queue, so a
+superseded batch's stragglers die with the old queue."""
 import os
 import queue
 import threading
@@ -25,9 +29,27 @@ BATCH_RESULT = "result"
 BATCH_FINISHED = "finished"
 INSTANT_RESULT = "instant"
 
+_executor = None
+_executor_lock = threading.Lock()
+
 
 def _pool_workers():
     return max((os.cpu_count() or 2) - 1, 1)
+
+
+def _shared_executor():
+    """The one process pool (falling back to threads) reused across every
+    batch and instant compute, created on first use."""
+    global _executor
+    with _executor_lock:
+        if _executor is None:
+            try:
+                _executor = ProcessPoolExecutor(max_workers=_pool_workers())
+            except Exception as error:
+                logger.warning(f"Process pool unavailable, falling back to "
+                               f"threads: {error}")
+                _executor = ThreadPoolExecutor(max_workers=_pool_workers())
+        return _executor
 
 
 class RoiBatchRunner(HasTraits):
@@ -73,25 +95,21 @@ class RoiBatchRunner(HasTraits):
 
     @staticmethod
     def _run(work_items, cancel, results):
-        try:
-            executor = ProcessPoolExecutor(max_workers=_pool_workers())
-        except Exception as error:
-            logger.warning(f"Process pool unavailable, falling back to "
-                           f"threads: {error}")
-            executor = ThreadPoolExecutor(max_workers=_pool_workers())
-        with executor:
-            futures = [executor.submit(compute_image_stats, path, rois)
-                       for path, rois in work_items]
-            for future in as_completed(futures):
-                if cancel.is_set():
-                    for pending in futures:
-                        pending.cancel()
-                    return
-                try:
-                    results.put((BATCH_RESULT, future.result()))
-                except Exception as error:
-                    # Pool infrastructure failure (the work unit itself
-                    # reports its errors inside the payload).
-                    logger.warning(f"ROI batch worker failed: {error}")
+        # No `with`: this is the shared, persistent executor — it must
+        # outlive this batch for the next one to reuse it.
+        executor = _shared_executor()
+        futures = [executor.submit(compute_image_stats, path, rois)
+                  for path, rois in work_items]
+        for future in as_completed(futures):
+            if cancel.is_set():
+                for pending in futures:
+                    pending.cancel()
+                return
+            try:
+                results.put((BATCH_RESULT, future.result()))
+            except Exception as error:
+                # Pool infrastructure failure (the work unit itself
+                # reports its errors inside the payload).
+                logger.warning(f"ROI batch worker failed: {error}")
         if not cancel.is_set():
             results.put((BATCH_FINISHED, None))

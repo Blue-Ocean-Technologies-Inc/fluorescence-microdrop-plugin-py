@@ -161,29 +161,37 @@ class RoiAnalysisController(HasTraits):
         if not self.analysis_model.rois or not self.viewer_model.paths:
             self.analysis_model.progress_text = "Nothing to export"
             return
-        if self._missing_work():
+        self._dispatched_keys = {}
+        work = self._missing_work()
+        if work:
             self._pending_export = True
             self.analysis_model.progress_text = "Calculating for export…"
-            self._start_batch()
+            self._start_batch(work)
             return
         self._write_export()
 
     @observe("viewer_model:paths.items, viewer_model:selected_wavelength,"
              " viewer_model:selected_burst")
     def _on_filter_changed(self, event):
-        """The filtered series changed mid-batch: restart on the new
-        snapshot (the work list is a snapshot by design)."""
+        """The filtered series changed (mid-batch or not): rebuild the
+        plot on the new snapshot first — a rescan can land a new
+        ``paths`` after ``browsed_directory`` already swapped in the new
+        experiment's cache/series, so the series must be rebuilt here
+        even with no batch running — then restart any running batch on
+        the new snapshot (the work list is a snapshot by design)."""
+        self._rebuild_plot_series()
         self._restart_batch_if_running()
 
     def _missing_work(self):
         """[(path_str, {roi_id: (kind, geometry)}), ...] for every
         filtered image with at least one uncached (image, ROI) pair —
         only the missing ROIs are dispatched per image."""
+        stat_cache = {}
         work = []
         for path in self.viewer_model.paths:
             missing = {}
             for roi in self.analysis_model.rois:
-                key = self.analysis_model.cache_key(path, roi)
+                key = self.analysis_model.cache_key(path, roi, stat_cache)
                 if key not in self.analysis_model.cache:
                     missing[roi.roi_id] = (roi.kind,
                                            tuple(key[4]))
@@ -192,16 +200,18 @@ class RoiAnalysisController(HasTraits):
                 work.append((str(path), missing))
         return work
 
-    def _start_batch(self):
+    def _start_batch(self, work=None):
         if not self.analysis_model.rois or not self.viewer_model.paths:
             return
-        self._dispatched_keys = {}
-        work = self._missing_work()
+        if work is None:
+            self._dispatched_keys = {}
+            work = self._missing_work()
         self.analysis_model.batch_done = 0
         self.analysis_model.batch_failed = 0
         self.analysis_model.batch_total = len(work)
         if not work:
             self.analysis_model.batch_running = False
+            self.analysis_model.progress_text = "ROI stats up to date"
             self._rebuild_plot_series()
             if self._pending_export:
                 self._write_export()
@@ -283,9 +293,8 @@ class RoiAnalysisController(HasTraits):
         no roi_id to key off, and the failure is already logged by the
         batch/instant compute layer, so it is skipped silently."""
         stats_by_roi = payload["stats"]
-        roi = None
-        for roi_id in stats_by_roi:
-            roi = self.analysis_model.roi_by_id(roi_id)
+        roi_id = next(iter(stats_by_roi), None)
+        roi = self.analysis_model.roi_by_id(roi_id)
         if roi is None:
             return
         stats = stats_by_roi[roi.roi_id]
@@ -304,13 +313,18 @@ class RoiAnalysisController(HasTraits):
             model.plot_series = {}
             model.plot_revision += 1
             return
-        times = [capture_timestamp(path) for path in paths]
+        #: One stat()/capture_timestamp() per path for this whole pass —
+        #: cache_key() would otherwise re-stat every (image, ROI) pair,
+        #: and this rebuilds ~5x/s while a batch drains.
+        stat_cache = {}
+        times = [model.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0]
         series = {}
         for roi in model.rois:
             elapsed, means = [], []
             for path, capture_time in zip(paths, times):
-                stats = model.cache.get(model.cache_key(path, roi))
+                stats = model.cache.get(
+                    model.cache_key(path, roi, stat_cache))
                 elapsed.append(capture_time - start_time)
                 means.append(stats["mean"] if stats else math.nan)
             series[roi.roi_id] = (roi.name, elapsed, means)
@@ -363,13 +377,15 @@ class RoiAnalysisController(HasTraits):
             return
         model = self.analysis_model
         paths = list(self.viewer_model.paths)
-        times = [capture_timestamp(path) for path in paths]
+        stat_cache = {}
+        times = [model.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0
         rows = []
         for path, capture_time in zip(paths, times):
             stats_by_roi = {}
             for roi in model.rois:
-                stats = model.cache.get(model.cache_key(path, roi))
+                stats = model.cache.get(
+                    model.cache_key(path, roi, stat_cache))
                 if stats is not None:
                     stats_by_roi[roi.roi_id] = stats
             rows.append({

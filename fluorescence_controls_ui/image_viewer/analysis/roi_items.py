@@ -52,6 +52,11 @@ class _RoiItemBase:
     """Shared behavior mixed into the two shape items: identity, label,
     grip, edit-mode flags, and commit-on-release."""
 
+    #: True between mousePressEvent and mouseReleaseEvent on this item
+    #: (a move drag): sync() skips this item while it's set, so it
+    #: doesn't yank a rect the user is actively dragging.
+    _dragging = False
+
     def _setup(self, roi_id, name, on_edited):
         self.roi_id = roi_id
         self._on_edited = on_edited
@@ -74,14 +79,25 @@ class _RoiItemBase:
         self.setPen(ROI_SELECTED_PEN if selected else ROI_PEN)
         self._label.setBrush(QBrush(self.pen().color()))
 
+    def is_dragging(self):
+        return self._dragging
+
     def commit_geometry(self):
         self._on_edited(self.roi_id, self.geometry())
 
+    def mousePressEvent(self, event):
+        # Starts a possible move drag: guard sync() until release.
+        super().mousePressEvent(event)
+        if self.flags() & self.GraphicsItemFlag.ItemIsMovable:
+            self._dragging = True
+
     def mouseReleaseEvent(self, event):
-        # Ends a move drag: report the moved geometry.
+        # Ends a move drag: report the moved geometry, then let sync()
+        # touch this item again.
         super().mouseReleaseEvent(event)
         if self.flags() & self.GraphicsItemFlag.ItemIsMovable:
             self.commit_geometry()
+        self._dragging = False
 
 
 class CircleRoiItem(_RoiItemBase, QGraphicsEllipseItem):
@@ -196,8 +212,11 @@ class RoiCanvasLayer:
                 item.set_editable(self.mode == "edit")
                 self._scene.addItem(item)
                 self._items[roi_id] = item
-            elif not item.isSelected():
-                # The selected item may be mid-drag: don't yank it.
+            elif not item.is_dragging():
+                # Skip only while actually mid-drag; a selected-but-idle
+                # item must still pick up geometry/name changes (e.g. an
+                # image switch), or a later nudge would commit its stale
+                # rect as a new drift override.
                 item.set_geometry(geometry)
                 item.set_name(name)
             item.set_selected_style(roi_id == selected_roi_id)

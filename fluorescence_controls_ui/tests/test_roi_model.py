@@ -62,5 +62,6 @@ def test_roi_ids_are_unique_and_names_sequence():
     model = RoiAnalysisModel()
     first, second = Roi(), Roi()
     assert first.roi_id != second.roi_id
+    first.name = "ROI 1"
     model.rois = [first]
     assert model.next_roi_name() == "ROI 2"

@@ -118,7 +118,7 @@ class _ImageCanvasEditor(QtEditor):
             self._on_roi_state_changed,
             "current_path, roi_analysis:rois.items, "
             "roi_analysis:rois:items:geometry, "
-            "roi_analysis:rois:items:overrides:items, "
+            "roi_analysis:rois:items:overrides.items, "
             "roi_analysis:selected_roi_id")
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode")
@@ -132,7 +132,7 @@ class _ImageCanvasEditor(QtEditor):
             self._on_roi_state_changed,
             "current_path, roi_analysis:rois.items, "
             "roi_analysis:rois:items:geometry, "
-            "roi_analysis:rois:items:overrides:items, "
+            "roi_analysis:rois:items:overrides.items, "
             "roi_analysis:selected_roi_id",
             remove=True)
         self.object.observe(self._on_interaction_mode_changed,

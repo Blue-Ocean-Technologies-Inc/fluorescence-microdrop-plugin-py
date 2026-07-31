@@ -2,6 +2,7 @@
 plus forward drift-overrides), the intensity-stats cache, batch progress,
 and the plot-ready series. Mutated only on the GUI thread (button events
 and the dock pane's drain timer), so no Qt bridging is needed."""
+import re
 import uuid
 from pathlib import Path
 
@@ -11,6 +12,10 @@ from traits.api import (
 )
 
 from ..discovery import capture_timestamp
+
+#: Matches the "ROI N" names next_roi_name() itself produces, to find
+#: the next free number.
+ROI_NAME_PATTERN = re.compile(r"^ROI (\d+)$")
 
 
 class Roi(HasTraits):
@@ -121,17 +126,43 @@ class RoiAnalysisModel(HasTraits):
         return None
 
     def next_roi_name(self):
-        return f"ROI {len(self.rois) + 1}"
+        """'ROI N' with N one past the highest numbered existing ROI
+        name, so a deleted ROI's number isn't reissued to collide with
+        a surviving one (duplicate names would double up CSV columns
+        and plot legend labels)."""
+        highest = 0
+        for roi in self.rois:
+            match = ROI_NAME_PATTERN.match(roi.name)
+            if match:
+                highest = max(highest, int(match.group(1)))
+        return f"ROI {highest + 1}"
 
-    def cache_key(self, path, roi):
-        """Cache key for one (image, ROI) pair: the file identity/mtime
-        plus the geometry in force at the image's capture time."""
+    def stat_info(self, path, stat_cache=None):
+        """(mtime, capture_time) for ``path``. Pass a dict as
+        ``stat_cache`` (path str -> (mtime, capture_time)) to memoize
+        the filesystem stat and timestamp parse across many calls in
+        the same pass (a rebuild calls this once per image, cache_key()
+        once per image per ROI)."""
+        key = str(path)
+        if stat_cache is not None and key in stat_cache:
+            return stat_cache[key]
         try:
             mtime = Path(path).stat().st_mtime
         except OSError:
             mtime = 0.0
+        info = (mtime, capture_timestamp(path))
+        if stat_cache is not None:
+            stat_cache[key] = info
+        return info
+
+    def cache_key(self, path, roi, stat_cache=None):
+        """Cache key for one (image, ROI) pair: the file identity/mtime
+        plus the geometry in force at the image's capture time. Pass
+        ``stat_cache`` through from stat_info() to avoid re-stating the
+        same path for every ROI."""
+        mtime, capture_time = self.stat_info(path, stat_cache)
         return (str(path), mtime, roi.roi_id, roi.kind,
-                tuple(roi.effective_geometry(capture_timestamp(path))))
+                tuple(roi.effective_geometry(capture_time)))
 
     def effective_for(self, path):
         """[(roi_id, name, kind, geometry), ...] in force for ``path`` —

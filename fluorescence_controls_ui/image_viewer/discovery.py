@@ -119,11 +119,15 @@ CAPTURE_TIMESTAMP_PATTERN = re.compile(
 def capture_timestamp(path) -> float:
     """Capture time (epoch seconds) embedded in the filename by
     capture_service.utc_stamp(), falling back to the file's mtime for
-    names without a stamp (legacy captures); 0.0 when neither exists."""
+    names without a stamp (legacy captures) or an impossible one (e.g.
+    a mangled "13_45" month/day); 0.0 when neither exists."""
     match = CAPTURE_TIMESTAMP_PATTERN.search(Path(path).name)
     if match:
-        return float(calendar.timegm(
-            time.strptime(match.group(0), CAPTURE_TIMESTAMP_FORMAT)))
+        try:
+            return float(calendar.timegm(
+                time.strptime(match.group(0), CAPTURE_TIMESTAMP_FORMAT)))
+        except ValueError:
+            pass
     try:
         return Path(path).stat().st_mtime
     except OSError:
