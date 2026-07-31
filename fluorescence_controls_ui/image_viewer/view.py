@@ -14,8 +14,10 @@ from traitsui.api import (
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.icons.icons import (
+    ICON_CIRCLE, ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT,
     ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY,
-    ICON_PREVIOUS, ICON_REFRESH,
+    ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH,
+    ICON_SAVE, ICON_SHOW_CHART,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
@@ -291,6 +293,57 @@ contrast_group = VGroup(
     show_border=True,
 )
 
+# ROI analysis: draw/edit tools, then the calculate -> plot -> export
+# pipeline over the filtered images. The readouts show the freshly drawn
+# ROI's instant stats and the batch progress.
+analysis_group = VGroup(
+    HGroup(
+        UItem("object.roi_analysis.draw_circle_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_CIRCLE,
+                  tooltip="Draw a circular ROI (click-drag on the image)")),
+        UItem("object.roi_analysis.draw_box_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_RECTANGLE,
+                  tooltip="Draw a rectangular ROI (click-drag on the "
+                          "image)")),
+        UItem("object.roi_analysis.edit_mode",
+              editor=IconToggleEditor(
+                  on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
+                  tooltip="Edit ROIs: drag to move, grip to resize, "
+                          "click to select. Editing on a later image "
+                          "adds a drift override from there on")),
+        UItem("object.roi_analysis.delete_roi_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_DELETE,
+                  tooltip="Delete the selected ROI")),
+        UItem("object.roi_analysis.clear_rois_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_DELETE_SWEEP,
+                  tooltip="Remove all ROIs")),
+        UItem("object.roi_analysis.calculate_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_SHOW_CHART,
+                  tooltip="Calculate ROI intensities across the "
+                          "filtered images and plot them")),
+        UItem("object.roi_analysis.export_csv_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_SAVE,
+                  tooltip="Export the intensities to the experiment's "
+                          "analysis folder (calculates first if "
+                          "needed)")),
+        UItem("object.roi_analysis.reset_cache_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_RESET_WRENCH,
+                  tooltip="Reset calculated intensities (optionally "
+                          "also the drift overrides)")),
+    ),
+    UItem("object.roi_analysis.roi_info_text", style="readonly"),
+    UItem("object.roi_analysis.progress_text", style="readonly"),
+    visible_when="show_analysis",
+    show_border=True,
+)
+
 
 ImageViewerView = View(
     VGroup(
@@ -307,6 +360,9 @@ ImageViewerView = View(
 
         _collapse_header("show_contrast", "Contrast"),
         contrast_group,
+
+        _collapse_header("show_analysis", "Analysis"),
+        analysis_group,
 
         UItem("array", editor=ImageCanvasEditor(), springy=True, resizable=True),
         UItem("pixel_text", style="readonly"),

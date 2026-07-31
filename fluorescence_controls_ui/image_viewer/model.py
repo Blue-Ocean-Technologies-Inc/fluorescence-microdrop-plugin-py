@@ -41,6 +41,7 @@ class FluorescenceImageViewerModel(HasTraits):
     show_bursts = Bool(True)
     show_images = Bool(True)
     show_contrast = Bool(True)
+    show_analysis = Bool(True)
 
     #: Experiment folders that hold captures: ``[(name, captures_path), ...]``
     #: oldest first (discovery.discover_experiments). Selecting one repoints
