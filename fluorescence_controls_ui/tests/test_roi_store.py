@@ -1,31 +1,83 @@
-"""ROI config JSON round-trip and intensity-CSV layout."""
+"""Persistence tests: session config round-trip (v2 + v1 fallback),
+stats-store round-trip, and the CSV export layout."""
 import csv
+import json
+import math
 
-from fluorescence_controls_ui.image_viewer.analysis.roi_model import Roi
+from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
+    AnalysisSession, Roi, RoiStyle,
+)
 from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
-    load_roi_config, save_roi_config, write_intensity_csv,
+    load_roi_stats, load_session, save_roi_stats, save_session,
+    write_intensity_csv,
 )
 
 
-def test_roi_config_round_trip(tmp_path):
-    roi = Roi(name="ROI 1", kind="circle", geometry=[50.0, 50.0, 10.0],
-              base_anchor=100.0)
-    roi.apply_edit(200.0, [60.0, 60.0, 12.0])
-    save_roi_config(tmp_path, [roi])
-    loaded = load_roi_config(tmp_path)
-    assert len(loaded) == 1
-    assert loaded[0].roi_id == roi.roi_id
-    assert loaded[0].kind == "circle"
-    assert loaded[0].effective_geometry(250.0) == [60.0, 60.0, 12.0]
-    assert loaded[0].base_anchor == 100.0
+def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
+    roi = Roi(name="Cell body", kind="box",
+              geometry=[1.0, 2.0, 30.0, 40.0], base_anchor=100.0,
+              overrides={200.0: [5.0, 6.0, 30.0, 40.0]},
+              style=RoiStyle(color="#d62728", line_style="dashed",
+                             marker="o", marker_size=7.0))
+    session = AnalysisSession(directory=str(tmp_path), rois=[roi],
+                              plot_stat="bg_corrected")
+    session.figure.y_auto = False
+    session.figure.y_max = 4096.0
+    save_session(tmp_path, session)
+
+    loaded = load_session(tmp_path)
+    assert loaded.directory == str(tmp_path)
+    assert loaded.plot_stat == "bg_corrected"
+    assert loaded.figure.y_auto is False and loaded.figure.y_max == 4096.0
+    (back,) = loaded.rois
+    assert back.roi_id == roi.roi_id and back.name == "Cell body"
+    assert back.overrides == {200.0: [5.0, 6.0, 30.0, 40.0]}
+    assert back.style.color == "#d62728"
+    assert back.style.line_style == "dashed"
+    assert back.style.marker == "o" and back.style.marker_size == 7.0
 
 
-def test_load_missing_or_corrupt_config_is_empty(tmp_path):
-    assert load_roi_config(tmp_path) == []
-    config_dir = tmp_path / "analysis"
-    config_dir.mkdir()
-    (config_dir / "roi_config.json").write_text("{not json")
-    assert load_roi_config(tmp_path) == []
+def test_load_session_accepts_v1_bare_list(tmp_path):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text(json.dumps([{
+        "roi_id": "abcd1234", "name": "ROI 1", "kind": "circle",
+        "geometry": [10.0, 10.0, 5.0], "base_anchor": 0.0,
+        "overrides": {},
+    }]))
+    loaded = load_session(tmp_path)
+    (roi,) = loaded.rois
+    assert roi.roi_id == "abcd1234" and roi.kind == "circle"
+    assert loaded.plot_stat == "mean"          # defaults fill in
+    assert roi.style.line_style == "solid"
+
+
+def test_load_session_missing_or_corrupt_is_empty(tmp_path):
+    assert load_session(tmp_path).rois == []
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text("{nope")
+    assert load_session(tmp_path).rois == []
+
+
+def test_stats_store_round_trip_including_nan(tmp_path):
+    key = (str(tmp_path / "a_raw.png"), 123.5, "abcd1234", "circle",
+           (10.0, 10.0, 5.0))
+    stats = {"mean": 42.5, "std": float("nan"), "count": 9.0}
+    save_roi_stats(tmp_path, {key: stats})
+
+    loaded = load_roi_stats(tmp_path)
+    assert set(loaded) == {key}
+    assert loaded[key]["mean"] == 42.5
+    assert math.isnan(loaded[key]["std"])
+
+
+def test_load_roi_stats_missing_or_corrupt_is_empty(tmp_path):
+    assert load_roi_stats(tmp_path) == {}
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_stats.json").write_text("[not the schema]")
+    assert load_roi_stats(tmp_path) == {}
 
 
 def test_write_intensity_csv_layout(tmp_path):

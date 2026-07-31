@@ -24,9 +24,9 @@ from ..model import FluorescenceImageViewerModel
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
 )
-from .roi_model import Roi, RoiAnalysisModel
+from .roi_model import AnalysisSession, Roi, RoiAnalysisModel
 from .roi_store import (
-    analysis_directory, load_roi_config, save_roi_config,
+    analysis_directory, load_session, save_session,
     write_intensity_csv,
 )
 
@@ -349,7 +349,7 @@ class RoiAnalysisController(HasTraits):
         if directory is None:
             return
         try:
-            save_roi_config(directory, self.analysis_model.rois)
+            save_session(directory, AnalysisSession(directory=str(directory), rois=list(self.analysis_model.rois)))
         except Exception as error:
             logger.warning(f"Could not save ROI config: {error}")
 
@@ -364,7 +364,7 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.selected_roi_id = ""
         self.analysis_model.cache = {}
         directory = self._experiment_directory()
-        self.analysis_model.rois = (load_roi_config(directory)
+        self.analysis_model.rois = (list(load_session(directory).rois)
                                     if directory is not None else [])
         self._rebuild_plot_series()
 

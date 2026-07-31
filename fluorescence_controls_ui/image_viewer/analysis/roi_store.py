@@ -1,6 +1,7 @@
-"""Persistence for the ROI analysis: the per-experiment roi_config.json
-(bases + overrides, auto-saved on change and auto-loaded per experiment)
-and the intensity CSV export. Qt-free, pure file IO."""
+"""Persistence for the ROI analysis: the per-experiment session config
+(roi_config.json v2 — ROIs with styles, plot stat, figure settings),
+the computed-stats store (roi_stats.json), and the intensity CSV
+export. Qt-free, pure file IO."""
 import csv
 import json
 from pathlib import Path
@@ -8,11 +9,17 @@ from pathlib import Path
 from logger.logger_service import get_logger
 
 from .consts import ANALYSIS_DIR_NAME, OUTLINE_STATS_PREFIX, \
-    ROI_CONFIG_FILENAME
+    ROI_CONFIG_FILENAME, ROI_STATS_FILENAME
 from .roi_compute import STAT_NAMES
-from .roi_model import Roi
+from .roi_model import AnalysisSession, FigureSettings, Roi, RoiStyle
 
 logger = get_logger(__name__)
+
+#: Persisted FigureSettings fields (also the tolerated-missing set on
+#: load, so older configs upgrade with defaults).
+_FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
+                  "y_max", "export_format", "export_dpi")
+_STYLE_FIELDS = ("color", "line_style", "marker", "marker_size")
 
 
 def analysis_directory(experiment_directory) -> Path:
@@ -22,40 +29,102 @@ def analysis_directory(experiment_directory) -> Path:
     return directory
 
 
-def save_roi_config(experiment_directory, rois):
-    payload = [{
-        "roi_id": roi.roi_id,
-        "name": roi.name,
-        "kind": roi.kind,
-        "geometry": list(roi.geometry),
-        "base_anchor": roi.base_anchor,
-        "overrides": {repr(anchor): list(geometry)
-                      for anchor, geometry in roi.overrides.items()},
-    } for roi in rois]
+def save_session(experiment_directory, session):
+    payload = {
+        "version": 2,
+        "plot_stat": session.plot_stat,
+        "figure": {name: getattr(session.figure, name)
+                   for name in _FIGURE_FIELDS},
+        "rois": [{
+            "roi_id": roi.roi_id,
+            "name": roi.name,
+            "kind": roi.kind,
+            "geometry": list(roi.geometry),
+            "base_anchor": roi.base_anchor,
+            "overrides": {repr(anchor): list(geometry)
+                          for anchor, geometry in roi.overrides.items()},
+            "style": {name: getattr(roi.style, name)
+                      for name in _STYLE_FIELDS},
+        } for roi in session.rois],
+    }
     path = analysis_directory(experiment_directory) / ROI_CONFIG_FILENAME
     path.write_text(json.dumps(payload, indent=2))
 
 
-def load_roi_config(experiment_directory) -> list:
-    """The experiment's saved ROIs, [] when absent or unreadable."""
+def _roi_from(entry):
+    style = RoiStyle()
+    style.trait_set(**{name: entry.get("style", {})[name]
+                       for name in _STYLE_FIELDS
+                       if name in entry.get("style", {})})
+    return Roi(roi_id=entry["roi_id"], name=entry["name"],
+               kind=entry["kind"],
+               geometry=[float(value) for value in entry["geometry"]],
+               base_anchor=float(entry["base_anchor"]),
+               overrides={
+                   float(anchor): [float(value) for value in geometry]
+                   for anchor, geometry in entry["overrides"].items()},
+               style=style)
+
+
+def load_session(experiment_directory) -> AnalysisSession:
+    """The experiment's saved analysis session; empty (with defaults)
+    when absent or unreadable. Accepts the v1 format (a bare ROI list,
+    no styles/figure) with defaults filling the rest."""
+    session = AnalysisSession(directory=str(experiment_directory))
     path = (Path(experiment_directory) / ANALYSIS_DIR_NAME
             / ROI_CONFIG_FILENAME)
     if not path.is_file():
-        return []
+        return session
     try:
         payload = json.loads(path.read_text())
-        return [
-            Roi(roi_id=entry["roi_id"], name=entry["name"],
-                kind=entry["kind"],
-                geometry=[float(value) for value in entry["geometry"]],
-                base_anchor=float(entry["base_anchor"]),
-                overrides={
-                    float(anchor): [float(value) for value in geometry]
-                    for anchor, geometry in entry["overrides"].items()})
-            for entry in payload]
+        entries = payload if isinstance(payload, list) \
+            else payload["rois"]
+        session.rois = [_roi_from(entry) for entry in entries]
+        if isinstance(payload, dict):
+            session.plot_stat = payload.get("plot_stat", "mean")
+            figure = FigureSettings()
+            figure.trait_set(**{name: payload.get("figure", {})[name]
+                                for name in _FIGURE_FIELDS
+                                if name in payload.get("figure", {})})
+            session.figure = figure
     except Exception as error:
         logger.warning(f"Could not load ROI config {path}: {error}")
-        return []
+        return AnalysisSession(directory=str(experiment_directory))
+    return session
+
+
+def save_roi_stats(experiment_directory, stats):
+    """Lossless dump of the computed-stats store (json allows the NaN
+    literal, which Python's parser reads back)."""
+    payload = {"version": 1, "entries": [{
+        "path": key[0], "mtime": key[1], "roi_id": key[2],
+        "kind": key[3], "geometry": list(key[4]), "stats": value,
+    } for key, value in stats.items()]}
+    path = analysis_directory(experiment_directory) / ROI_STATS_FILENAME
+    path.write_text(json.dumps(payload))
+
+
+def load_roi_stats(experiment_directory) -> dict:
+    """The persisted stats store, {} when absent/unreadable/unknown
+    version. Entries that no longer match anything (moved ROI, changed
+    file) are simply never looked up — invalidation stays automatic."""
+    path = (Path(experiment_directory) / ANALYSIS_DIR_NAME
+            / ROI_STATS_FILENAME)
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text())
+        if payload["version"] != 1:
+            logger.warning(f"Unknown ROI stats version in {path}")
+            return {}
+        return {(entry["path"], float(entry["mtime"]), entry["roi_id"],
+                 entry["kind"],
+                 tuple(float(value) for value in entry["geometry"])):
+                entry["stats"]
+                for entry in payload["entries"]}
+    except Exception as error:
+        logger.warning(f"Could not load ROI stats {path}: {error}")
+        return {}
 
 
 #: Per-ROI CSV columns, in order: interior stats then outline stats.
