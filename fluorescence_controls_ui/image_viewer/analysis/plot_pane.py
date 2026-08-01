@@ -15,12 +15,28 @@ from matplotlib.figure import Figure
 
 from pyface.tasks.api import DockPane
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget,
+)
 
 from ...consts import PKG
 from .consts import ROI_PLOT_COALESCE_MS
 from .plot_series import derive_series
-from .roi_model import roi_analysis_model
+from .roi_model import PLOT_STATS, roi_analysis_model
+
+#: Human labels for the plotted stat (dropdown + y-axis).
+PLOT_STAT_LABELS = {
+    "mean": "Mean intensity",
+    "bg_corrected": "Background-corrected mean",
+    "median": "Median intensity",
+    "min": "Min intensity",
+    "max": "Max intensity",
+    "outline_mean": "Outline ring mean",
+}
+
+#: matplotlib linestyle codes for RoiStyle.line_style.
+LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":",
+               "dashdot": "-."}
 
 #: Everything the derived series depends on; one observer, one redraw
 #: path. Session swap covers experiment changes; stats_revision covers
@@ -28,6 +44,10 @@ from .roi_model import roi_analysis_model
 #: filtered_paths for the axes content.
 _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:rois:items:name, session:plot_stat, "
+               "session:rois:items:style:color, "
+               "session:rois:items:style:line_style, "
+               "session:rois:items:style:marker, "
+               "session:rois:items:style:marker_size, "
                "filtered_paths.items")
 
 
@@ -69,6 +89,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._redraw_pending = False
         if not self.isVisible():
             return                # showEvent reschedules
+        self._axes.set_ylabel(
+            PLOT_STAT_LABELS[self._model.session.plot_stat])
         series = derive_series(self._model.session,
                                self._model.filtered_paths)
         for roi_id in list(self._lines):
@@ -76,11 +98,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 self._lines.pop(roi_id).remove()
         for roi_id, (name, elapsed, values) in series.items():
             if roi_id not in self._lines:
-                (self._lines[roi_id],) = self._axes.plot(
-                    [], [], marker=".", label=name)
+                (self._lines[roi_id],) = self._axes.plot([], [])
             line = self._lines[roi_id]
             line.set_data(elapsed, values)
             line.set_label(name)
+            roi = self._model.session.roi_by_id(roi_id)
+            if roi is not None:
+                line.set_color(roi.style.color)
+                line.set_linestyle(LINE_STYLES[roi.style.line_style])
+                line.set_marker("" if roi.style.marker == "none"
+                                else roi.style.marker)
+                line.set_markersize(roi.style.marker_size)
         if self._lines:
             self._axes.legend(loc="best", fontsize="small")
         elif self._axes.get_legend() is not None:
@@ -101,6 +129,23 @@ class FluorescenceRoiPlotDockPane(DockPane):
         layout = QVBoxLayout(widget)
         canvas = RoiPlotCanvas(roi_analysis_model)
         layout.addWidget(NavigationToolbar2QT(canvas, widget))
+        controls = QHBoxLayout()
+        controls.addWidget(QLabel("Plot:", widget))
+        stat_combo = QComboBox(widget)
+        for stat in PLOT_STATS:
+            stat_combo.addItem(PLOT_STAT_LABELS[stat], stat)
+        stat_combo.setCurrentIndex(
+            PLOT_STATS.index(roi_analysis_model.session.plot_stat))
+        stat_combo.currentIndexChanged.connect(
+            lambda index: roi_analysis_model.session.trait_set(
+                plot_stat=PLOT_STATS[index]))
+        controls.addWidget(stat_combo)
+        controls.addStretch()
+        layout.addLayout(controls)
+        roi_analysis_model.observe(
+            lambda event: stat_combo.setCurrentIndex(
+                PLOT_STATS.index(event.object.plot_stat)),
+            "session:plot_stat")
         layout.addWidget(canvas)
         progress = QLabel("", widget)
         roi_analysis_model.observe(

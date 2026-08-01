@@ -379,6 +379,23 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.session = session
         self._dispatched_keys = {}
 
+    @observe("analysis_model:session:plot_stat, "
+             "analysis_model:session:figure:export_format, "
+             "analysis_model:session:figure:export_dpi, "
+             "analysis_model:session:figure:x_auto, "
+             "analysis_model:session:figure:x_min, "
+             "analysis_model:session:figure:x_max, "
+             "analysis_model:session:figure:y_auto, "
+             "analysis_model:session:figure:y_min, "
+             "analysis_model:session:figure:y_max, "
+             "analysis_model:session:rois:items:name, "
+             "analysis_model:session:rois:items:style:color, "
+             "analysis_model:session:rois:items:style:line_style, "
+             "analysis_model:session:rois:items:style:marker, "
+             "analysis_model:session:rois:items:style:marker_size")
+    def _on_plot_settings_changed(self, event):
+        self._save_config()
+
     @observe("viewer_model:paths.items")
     def _mirror_filtered_paths(self, event):
         self.analysis_model.filtered_paths = [
