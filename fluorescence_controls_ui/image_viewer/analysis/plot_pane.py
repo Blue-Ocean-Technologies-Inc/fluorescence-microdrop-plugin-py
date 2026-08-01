@@ -15,10 +15,10 @@ from matplotlib.backends.backend_qtagg import (
 from matplotlib.figure import Figure
 from pyface.api import FileDialog, OK
 from pyface.tasks.api import DockPane
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton,
-    QVBoxLayout, QWidget,
+    QSplitter, QVBoxLayout, QWidget,
 )
 from traits.api import Any, Instance, List
 
@@ -63,13 +63,18 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     """Intensity-vs-time chart derived from the analysis model."""
 
     def __init__(self, model):
-        self._figure = Figure(figsize=(4, 3), tight_layout=True)
+        # No layout engine: one would re-run on every draw and silently
+        # discard the margins set through the toolbar's configure-subplots
+        # sliders (and re-fit on savefig, breaking preview == export).
+        # tight_layout() once instead, for sensible initial margins.
+        self._figure = Figure(figsize=(4, 3))
         super().__init__(self._figure)
         self._model = model
         self._axes = self._figure.add_subplot(111)
         self._axes.set_xlabel("Elapsed time (s)")
         self._axes.set_ylabel("Mean intensity")
         self._axes.grid(True, alpha=0.3)
+        self._figure.tight_layout()
         self._lines = {}
         self._redraw_pending = False
         self._detached = False
@@ -248,9 +253,13 @@ class FluorescenceRoiPlotDockPane(DockPane):
                                    "session:plot_stat")
         roi_analysis_model.observe(self._sync_controls, "session")
 
-        layout.addWidget(self.canvas)
-        self.table = RoiStatsTable(roi_analysis_model, widget)
-        layout.addWidget(self.table)
+        splitter = QSplitter(Qt.Orientation.Vertical, widget)
+        splitter.addWidget(self.canvas)
+        self.table = RoiStatsTable(roi_analysis_model, splitter)
+        splitter.addWidget(self.table)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter, 1)
         self._progress_label = QLabel("", widget)
         roi_analysis_model.observe(self._on_progress_text_changed,
                                    "progress_text")
