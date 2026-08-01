@@ -8,7 +8,7 @@ import queue
 import time
 from pathlib import Path
 
-from traits.api import Bool, Dict, HasTraits, Instance, observe
+from traits.api import Bool, Dict, Float, HasTraits, Instance, observe
 from pyface.api import NO, YES
 
 from logger.logger_service import get_logger
@@ -21,14 +21,14 @@ from ...consts import CAPTURE_TIMESTAMP_FORMAT
 from ..discovery import UNGROUPED_BURST, capture_timestamp, \
     detect_wavelength
 from ..model import FluorescenceImageViewerModel
-from .consts import DEFAULT_ROI_COLORS
+from .consts import DEFAULT_ROI_COLORS, STATS_SAVE_DEBOUNCE_S
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
 )
 from .roi_model import AnalysisSession, Roi, RoiAnalysisModel, RoiStyle
 from .roi_store import (
-    analysis_directory, load_session, save_session,
-    write_intensity_csv,
+    analysis_directory, load_roi_stats, load_session, save_roi_stats,
+    save_session, write_intensity_csv,
 )
 
 logger = get_logger(__name__)
@@ -49,6 +49,11 @@ class RoiAnalysisController(HasTraits):
     #: (path str, roi_id) -> cache key, snapshotted at dispatch time so
     #: drained results land under the geometry they were computed with.
     _dispatched_keys = Dict()
+
+    #: The stats store changed since the last write; flushed by the
+    #: dock pane's drain tick after STATS_SAVE_DEBOUNCE_S of quiet.
+    _stats_dirty = Bool(False)
+    _stats_dirty_since = Float(0.0)
 
     @property
     def session(self):
@@ -149,6 +154,9 @@ class RoiAnalysisController(HasTraits):
         session = self.session
         self.runner.cancel()
         session.stats = {}
+        session.stats_revision += 1
+        self._mark_stats_dirty()
+        self.flush_stats(force=True)
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
         if result == NO:
@@ -257,6 +265,7 @@ class RoiAnalysisController(HasTraits):
             elif kind == BATCH_FINISHED:
                 self.analysis_model.batch_running = False
                 self._update_progress_text(finished=True)
+                self.flush_stats(force=True)
                 if self._pending_export:
                     self._write_export()
         if drained:
@@ -271,6 +280,7 @@ class RoiAnalysisController(HasTraits):
                 absorbed = True
         if absorbed:
             self.session.stats_revision += 1
+            self._mark_stats_dirty()
 
     def _update_progress_text(self, finished=False):
         model = self.analysis_model
@@ -368,19 +378,49 @@ class RoiAnalysisController(HasTraits):
         except Exception as error:
             logger.warning(f"Could not save ROI config: {error}")
 
+    def _mark_stats_dirty(self):
+        if not self._stats_dirty:
+            self._stats_dirty_since = time.monotonic()
+        self._stats_dirty = True
+
+    def flush_stats(self, force=False):
+        """Write the stats store if it changed — debounced (a draining
+        batch marks it dirty every tick) unless ``force``d (batch
+        finish, session swap, reset)."""
+        if not self._stats_dirty:
+            return
+        if not force and (time.monotonic() - self._stats_dirty_since
+                          < STATS_SAVE_DEBOUNCE_S):
+            return
+        directory = self.session.directory
+        if not directory:
+            self._stats_dirty = False
+            return
+        try:
+            save_roi_stats(directory, self.session.stats)
+            self._stats_dirty = False
+        except Exception as error:
+            logger.warning(f"Could not save ROI stats: {error}")
+
     @observe("viewer_model:browsed_directory")
     def _on_experiment_changed(self, event):
         """A different folder is being browsed: swap in its saved
-        session wholesale (ROIs, styles, figure settings)."""
+        session wholesale (ROIs, styles, figure settings), persisting
+        the outgoing experiment's stats first."""
         self.runner.cancel()
+        self.flush_stats(force=True)
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
         self.analysis_model.roi_info_text = ""
         self.analysis_model.selected_roi_id = ""
         directory = self._experiment_directory()
-        self.analysis_model.session = (
-            load_session(directory) if directory is not None
-            else AnalysisSession())
+        session = (load_session(directory) if directory is not None
+                   else AnalysisSession())
+        if directory is not None:
+            session.stats = load_roi_stats(directory)
+            session.stats_revision += 1
+        self.analysis_model.session = session
+        self._dispatched_keys = {}
         self._rebuild_plot_series()
 
     @observe("viewer_model:paths.items")

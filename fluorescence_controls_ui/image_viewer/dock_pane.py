@@ -11,6 +11,7 @@ in :class:`FluorescenceImageViewerController`, widgets in ``view.py``.
 This pane only assembles them, owns the Qt timers (the view-injected
 schedulers), and binds the persisted display-window preferences.
 """
+import threading
 from pathlib import Path
 
 from pyface.tasks.api import TraitsDockPane
@@ -27,6 +28,7 @@ from logger.logger_service import get_logger
 from ..consts import PKG
 from ..consts import DISCOVERY_POLL_INTERVAL_MS, SLIDESHOW_INTERVAL_MS
 from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
+from .analysis.roi_batch import _shared_executor
 from .analysis.roi_controller import RoiAnalysisController
 from .controller import FluorescenceImageViewerController
 from .model import FluorescenceImageViewerModel
@@ -72,6 +74,9 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self.analysis_controller = RoiAnalysisController(
             viewer_model=self.model,
             analysis_model=self.model.roi_analysis)
+        # Warm the process pool off-thread so the first Calculate does
+        # not pay the Windows spawn cost (~seconds for cv2 workers).
+        threading.Thread(target=_shared_executor, daemon=True).start()
         # Event-driven refresh: the device viewer fires this the moment a
         # capture file finishes writing, so new images appear immediately
         # instead of on the next poll tick (the poll below stays only to
@@ -102,11 +107,14 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self._poll_timer.start()
         self._drain_timer = QTimer(control)
         self._drain_timer.setInterval(ANALYSIS_RESULT_DRAIN_INTERVAL_MS)
-        self._drain_timer.timeout.connect(
-            self.analysis_controller.drain_results)
+        self._drain_timer.timeout.connect(self._drain_tick)
         self._drain_timer.start()
         self.controller.rescan()
         return control
+
+    def _drain_tick(self):
+        self.analysis_controller.drain_results()
+        self.analysis_controller.flush_stats()
 
     @observe("model:browsed_directory")
     def _update_title(self, event):

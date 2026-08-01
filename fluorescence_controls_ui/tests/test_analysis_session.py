@@ -44,3 +44,37 @@ def test_model_gains_session_and_mirrors():
     assert isinstance(model.session, AnalysisSession)
     assert model.filtered_paths == []
     assert model.current_image_path == ""
+
+
+def test_experiment_switch_saves_and_reloads_stats(tmp_path, monkeypatch):
+    """The headline behavior: stats computed in one visit are on disk
+    and come back on the next visit to that experiment."""
+    from fluorescence_controls_ui.image_viewer.analysis.roi_controller \
+        import RoiAnalysisController
+    from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
+        load_roi_stats,
+    )
+    from fluorescence_controls_ui.image_viewer.model import (
+        FluorescenceImageViewerModel,
+    )
+
+    exp_a = tmp_path / "ExpA"
+    exp_b = tmp_path / "ExpB"
+    (exp_a / "captures").mkdir(parents=True)
+    (exp_b / "captures").mkdir(parents=True)
+
+    viewer = FluorescenceImageViewerModel()
+    controller = RoiAnalysisController(viewer_model=viewer,
+                                       analysis_model=viewer.roi_analysis)
+    viewer.browsed_directory = str(exp_a / "captures")
+
+    key = ("img.png", 1.0, "abcd1234", "circle", (5.0, 5.0, 2.0))
+    controller.session.stats[key] = {"mean": 7.0, "count": 4.0}
+    controller._mark_stats_dirty()
+
+    viewer.browsed_directory = str(exp_b / "captures")   # forces flush
+    assert load_roi_stats(exp_a)[key]["mean"] == 7.0
+    assert controller.session.stats == {}                # B starts empty
+
+    viewer.browsed_directory = str(exp_a / "captures")   # come back
+    assert controller.session.stats[key]["count"] == 4.0
