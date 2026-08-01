@@ -8,15 +8,18 @@ import os
 os.environ.setdefault("QT_API", "pyside6")
 import matplotlib
 matplotlib.use("QtAgg")
+from pathlib import Path
+
 from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg, NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
-
+from pyface.api import FileDialog, OK
 from pyface.tasks.api import DockPane
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton,
+    QVBoxLayout, QWidget,
 )
 
 from ...consts import PKG
@@ -49,7 +52,10 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:rois:items:style:line_style, "
                "session:rois:items:style:marker, "
                "session:rois:items:style:marker_size, "
-               "filtered_paths.items")
+               "filtered_paths.items, "
+               "session:figure:x_auto, session:figure:x_min, "
+               "session:figure:x_max, session:figure:y_auto, "
+               "session:figure:y_min, session:figure:y_max")
 
 
 class RoiPlotCanvas(FigureCanvasQTAgg):
@@ -114,9 +120,34 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._axes.legend(loc="best", fontsize="small")
         elif self._axes.get_legend() is not None:
             self._axes.get_legend().remove()
+        figure_settings = self._model.session.figure
         self._axes.relim()
         self._axes.autoscale_view()
+        if not figure_settings.x_auto:
+            self._axes.set_xlim(figure_settings.x_min,
+                                figure_settings.x_max)
+        if not figure_settings.y_auto:
+            self._axes.set_ylim(figure_settings.y_min,
+                                figure_settings.y_max)
         self.draw_idle()
+
+
+def _save_figure(canvas):
+    """Render the current figure at the session's export settings; the
+    dialog defaults into the experiment's analysis folder."""
+    session = roi_analysis_model.session
+    default_dir = (str(Path(session.directory) / "analysis")
+                   if session.directory else "")
+    extension = session.figure.export_format
+    dialog = FileDialog(
+        action="save as", default_directory=default_dir,
+        default_filename=f"roi_intensities.{extension}",
+        wildcard=f"*.{extension}")
+    if dialog.open() != OK:
+        return
+    canvas.figure.savefig(dialog.path,
+                          dpi=session.figure.export_dpi,
+                          format=extension)
 
 
 class FluorescenceRoiPlotDockPane(DockPane):
@@ -141,12 +172,83 @@ class FluorescenceRoiPlotDockPane(DockPane):
             lambda index: roi_analysis_model.session.trait_set(
                 plot_stat=PLOT_STATS[index]))
         controls.addWidget(stat_combo)
+
+        _axis_syncers = []
+
+        def _axis_editors(label, auto_trait, low_trait, high_trait):
+            figure_settings = roi_analysis_model.session.figure
+            auto = QCheckBox(f"{label} auto", widget)
+            auto.setChecked(getattr(figure_settings, auto_trait))
+            low = QDoubleSpinBox(widget)
+            high = QDoubleSpinBox(widget)
+            for spin, trait in ((low, low_trait), (high, high_trait)):
+                spin.setRange(-1e9, 1e9)
+                spin.setDecimals(1)
+                spin.setValue(getattr(figure_settings, trait))
+                spin.setEnabled(not auto.isChecked())
+                spin.valueChanged.connect(
+                    lambda value, trait=trait:
+                    roi_analysis_model.session.figure.trait_set(
+                        **{trait: value}))
+            def _on_auto(checked, auto_trait=auto_trait, low=low,
+                         high=high):
+                roi_analysis_model.session.figure.trait_set(
+                    **{auto_trait: bool(checked)})
+                low.setEnabled(not checked)
+                high.setEnabled(not checked)
+            auto.toggled.connect(_on_auto)
+            for control in (auto, low, high):
+                controls.addWidget(control)
+            _axis_syncers.append((auto, low, high, auto_trait, low_trait,
+                                  high_trait))
+
+        _axis_editors("X", "x_auto", "x_min", "x_max")
+        _axis_editors("Y", "y_auto", "y_min", "y_max")
+
+        dpi_combo = QComboBox(widget)
+        for dpi in (150, 300, 600):
+            dpi_combo.addItem(f"{dpi} dpi", dpi)
+        dpi_combo.setCurrentIndex(
+            (150, 300, 600).index(
+                roi_analysis_model.session.figure.export_dpi))
+        dpi_combo.currentIndexChanged.connect(
+            lambda index: roi_analysis_model.session.figure.trait_set(
+                export_dpi=(150, 300, 600)[index]))
+        controls.addWidget(dpi_combo)
+        format_combo = QComboBox(widget)
+        format_combo.addItems(["png", "svg", "pdf", "tiff"])
+        format_combo.setCurrentText(
+            roi_analysis_model.session.figure.export_format)
+        format_combo.currentTextChanged.connect(
+            lambda value: roi_analysis_model.session.figure.trait_set(
+                export_format=value))
+        controls.addWidget(format_combo)
+        save_button = QPushButton("Save plot…", widget)
+        save_button.clicked.connect(
+            lambda: _save_figure(canvas))
+        controls.addWidget(save_button)
+
         controls.addStretch()
         layout.addLayout(controls)
         roi_analysis_model.observe(
             lambda event: stat_combo.setCurrentIndex(
                 PLOT_STATS.index(event.object.plot_stat)),
             "session:plot_stat")
+
+        def _sync_controls(event):
+            figure_settings = event.new.figure
+            stat_combo.setCurrentIndex(
+                PLOT_STATS.index(event.new.plot_stat))
+            dpi_combo.setCurrentIndex(
+                (150, 300, 600).index(figure_settings.export_dpi))
+            format_combo.setCurrentText(figure_settings.export_format)
+            for auto, low, high, auto_trait, low_trait, high_trait \
+                    in _axis_syncers:
+                auto.setChecked(getattr(figure_settings, auto_trait))
+                low.setValue(getattr(figure_settings, low_trait))
+                high.setValue(getattr(figure_settings, high_trait))
+        roi_analysis_model.observe(_sync_controls, "session")
+
         layout.addWidget(canvas)
         table = RoiStatsTable(roi_analysis_model, widget)
         layout.addWidget(table)
