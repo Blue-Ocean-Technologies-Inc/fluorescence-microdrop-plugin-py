@@ -3,8 +3,12 @@ plot legend and CSV columns), style editors (color, line, marker,
 size), and live stats for the image currently shown in the viewer —
 including the instant result right after drawing an ROI. A pure
 observer of the shared analysis model, mutating it only from Qt editor
-signals (GUI thread)."""
-from PySide6.QtCore import Qt
+signals (GUI thread). Rebuilds (row count, editors, cell identities) on
+structure/style change; value-refreshes (stat cells rewritten in place)
+on stats/current-image change — both scheduled onto the next event-loop
+turn so nothing mutates the table from inside the emitting Qt signal or
+traits notification."""
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QColorDialog, QComboBox, QDoubleSpinBox, QPushButton, QTableWidget,
@@ -12,7 +16,6 @@ from PySide6.QtWidgets import (
 )
 
 from .plot_series import stat_value
-from .roi_model import RoiStyle
 
 #: Value columns after the editors, shown for the current image.
 _STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max",
@@ -21,11 +24,16 @@ _HEADERS = ("Name", "Color", "Line", "Marker", "Size") + _STAT_COLUMNS
 _LINE_CHOICES = ("solid", "dashed", "dotted", "dashdot")
 _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
 
-#: Everything the table depends on (rebuild on structure/style change,
-#: value-refresh on stats/current-image change).
-_TABLE_STATE = ("session, session:rois.items, session:rois:items:name, "
-                "session:rois:items:style:color, "
-                "session:stats_revision, current_image_path")
+#: Row count/editors/cell identities change — triggers a full rebuild.
+_TABLE_STRUCTURE = ("session, session:rois.items, "
+                    "session:rois:items:name, "
+                    "session:rois:items:style:color")
+#: Only the stat-cell text can be stale — triggers a values-only
+#: refresh. The two geometry clauses close a staleness edge: editing an
+#: ROI back to an already-cached geometry never bumps stats_revision.
+_TABLE_VALUES = ("session:stats_revision, current_image_path, "
+                 "session:rois:items:geometry, "
+                 "session:rois:items:overrides.items")
 
 
 class RoiStatsTable(QTableWidget):
@@ -35,19 +43,43 @@ class RoiStatsTable(QTableWidget):
         super().__init__(0, len(_HEADERS), parent)
         self._model = model
         self._rebuilding = False
+        self._pending = None   # None | "rebuild" | "values"
         self.setHorizontalHeaderLabels(_HEADERS)
         self.verticalHeader().setVisible(False)
         self.itemChanged.connect(self._on_item_changed)
-        model.observe(self._on_state_changed, _TABLE_STATE)
+        model.observe(self._on_structure_changed, _TABLE_STRUCTURE)
+        model.observe(self._on_values_changed, _TABLE_VALUES)
         self._rebuild()
 
-    def closeEvent(self, event):
-        self._model.observe(self._on_state_changed, _TABLE_STATE,
+    def detach(self):
+        self._model.observe(self._on_structure_changed, _TABLE_STRUCTURE,
                             remove=True)
-        super().closeEvent(event)
+        self._model.observe(self._on_values_changed, _TABLE_VALUES,
+                            remove=True)
 
-    def _on_state_changed(self, event):
-        self._rebuild()
+    def _on_structure_changed(self, event):
+        self._schedule("rebuild")
+
+    def _on_values_changed(self, event):
+        self._schedule("values")
+
+    def _schedule(self, kind):
+        """Coalesce onto the next event-loop turn; a pending rebuild
+        subsumes a pending values-only refresh."""
+        if self._pending == "rebuild":
+            return
+        if kind == "rebuild" or self._pending is None:
+            already_scheduled = self._pending is not None
+            self._pending = kind
+            if not already_scheduled:
+                QTimer.singleShot(0, self._run_pending)
+
+    def _run_pending(self):
+        pending, self._pending = self._pending, None
+        if pending == "rebuild":
+            self._rebuild()
+        elif pending == "values":
+            self._refresh_values()
 
     def _rebuild(self):
         self._rebuilding = True
@@ -82,6 +114,31 @@ class RoiStatsTable(QTableWidget):
                 value_item.setFlags(value_item.flags()
                                     & ~Qt.ItemFlag.ItemIsEditable)
                 self.setItem(row, column, value_item)
+        self._rebuilding = False
+
+    def _refresh_values(self):
+        """Rewrite the read-only stat cells in place — no editors or
+        row identities touched, so this never deletes a widget the user
+        is mid-interaction with."""
+        self._rebuilding = True
+        session = self._model.session
+        rois = list(session.rois)
+        current = self._model.current_image_path
+        stat_cache = {}
+        for row, roi in enumerate(rois):
+            if row >= self.rowCount():
+                break
+            stats = (session.stats.get(
+                session.cache_key(current, roi, stat_cache))
+                if current else None)
+            for column, stat in enumerate(_STAT_COLUMNS,
+                                          start=len(_HEADERS)
+                                          - len(_STAT_COLUMNS)):
+                value = stat_value(stats, stat)
+                text = "" if value != value else f"{value:.1f}"
+                item = self.item(row, column)
+                if item is not None:
+                    item.setText(text)
         self._rebuilding = False
 
     def _on_item_changed(self, item):

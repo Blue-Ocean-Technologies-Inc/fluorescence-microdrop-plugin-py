@@ -52,6 +52,23 @@ def test_load_session_accepts_v1_bare_list(tmp_path):
     assert roi.style.line_style == "solid"
 
 
+def test_load_session_bad_plot_stat_keeps_parsed_roi(tmp_path):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text(json.dumps({
+        "version": 2, "plot_stat": "sparkle",
+        "rois": [{
+            "roi_id": "abcd1234", "name": "ROI 1", "kind": "circle",
+            "geometry": [10.0, 10.0, 5.0], "base_anchor": 0.0,
+            "overrides": {},
+        }],
+    }))
+    loaded = load_session(tmp_path)
+    (roi,) = loaded.rois
+    assert roi.roi_id == "abcd1234"
+    assert loaded.plot_stat == "mean"
+
+
 def test_load_session_missing_or_corrupt_is_empty(tmp_path):
     assert load_session(tmp_path).rois == []
     analysis = tmp_path / "analysis"

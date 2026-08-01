@@ -69,7 +69,9 @@ def _roi_from(entry):
 def load_session(experiment_directory) -> AnalysisSession:
     """The experiment's saved analysis session; empty (with defaults)
     when absent or unreadable. Accepts the v1 format (a bare ROI list,
-    no styles/figure) with defaults filling the rest."""
+    no styles/figure) with defaults filling the rest. One bad ROI entry
+    or an invalid plot_stat/figure value is skipped/defaulted in place
+    rather than discarding every other ROI already parsed."""
     session = AnalysisSession(directory=str(experiment_directory))
     path = (Path(experiment_directory) / ANALYSIS_DIR_NAME
             / ROI_CONFIG_FILENAME)
@@ -79,17 +81,34 @@ def load_session(experiment_directory) -> AnalysisSession:
         payload = json.loads(path.read_text())
         entries = payload if isinstance(payload, list) \
             else payload["rois"]
-        session.rois = [_roi_from(entry) for entry in entries]
-        if isinstance(payload, dict):
+    except Exception as error:
+        logger.warning(f"Could not load ROI config {path}: {error}")
+        return AnalysisSession(directory=str(experiment_directory))
+
+    rois = []
+    for entry in entries:
+        try:
+            rois.append(_roi_from(entry))
+        except Exception as error:
+            logger.warning(f"Skipping unreadable ROI entry in {path}: "
+                           f"{error}")
+    session.rois = rois
+
+    if isinstance(payload, dict):
+        try:
             session.plot_stat = payload.get("plot_stat", "mean")
+        except Exception as error:
+            logger.warning(f"Ignoring invalid plot_stat in {path}: "
+                           f"{error}")
+        try:
             figure = FigureSettings()
             figure.trait_set(**{name: payload.get("figure", {})[name]
                                 for name in _FIGURE_FIELDS
                                 if name in payload.get("figure", {})})
             session.figure = figure
-    except Exception as error:
-        logger.warning(f"Could not load ROI config {path}: {error}")
-        return AnalysisSession(directory=str(experiment_directory))
+        except Exception as error:
+            logger.warning(f"Ignoring invalid figure settings in "
+                           f"{path}: {error}")
     return session
 
 

@@ -34,5 +34,6 @@ DEFAULT_ROI_COLORS = (
 #: Persisted computed-stats store inside ANALYSIS_DIR_NAME.
 ROI_STATS_FILENAME = "roi_stats.json"
 
-#: Minimum seconds between debounced writes of the stats store.
+#: Seconds of quiet since the last change before a debounced write of
+#: the stats store.
 STATS_SAVE_DEBOUNCE_S = 2.0

@@ -133,6 +133,7 @@ class RoiAnalysisController(HasTraits):
                            "overrides)?") != YES:
             return
         self.runner.cancel()
+        self._pending_export = False
         session.rois = []
         self.analysis_model.selected_roi_id = ""
         self.analysis_model.batch_running = False
@@ -149,6 +150,7 @@ class RoiAnalysisController(HasTraits):
             return
         session = self.session
         self.runner.cancel()
+        self._pending_export = False
         session.stats = {}
         session.stats_revision += 1
         self._mark_stats_dirty()
@@ -314,14 +316,14 @@ class RoiAnalysisController(HasTraits):
             logger.warning(f"Could not save ROI config: {error}")
 
     def _mark_stats_dirty(self):
-        if not self._stats_dirty:
-            self._stats_dirty_since = time.monotonic()
+        self._stats_dirty_since = time.monotonic()
         self._stats_dirty = True
 
     def flush_stats(self, force=False):
-        """Write the stats store if it changed — debounced (a draining
-        batch marks it dirty every tick) unless ``force``d (batch
-        finish, session swap, reset)."""
+        """Write the stats store if it changed — debounced (waits
+        STATS_SAVE_DEBOUNCE_S seconds of quiet since the last change
+        before writing) unless ``force``d (batch finish, session swap,
+        reset)."""
         if not self._stats_dirty:
             return
         if not force and (time.monotonic() - self._stats_dirty_since
@@ -343,6 +345,7 @@ class RoiAnalysisController(HasTraits):
         session wholesale (ROIs, styles, figure settings), persisting
         the outgoing experiment's stats first."""
         self.runner.cancel()
+        self._pending_export = False
         self.flush_stats(force=True)
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
