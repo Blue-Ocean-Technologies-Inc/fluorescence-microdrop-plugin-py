@@ -41,7 +41,10 @@ class FluorescenceImageViewerModel(HasTraits):
     show_bursts = Bool(True)
     show_images = Bool(True)
     show_contrast = Bool(True)
-    show_analysis = Bool(True)
+
+    #: Master toggle: the whole selector sidebar collapses to the left
+    #: edge (device-viewer chevron parity).
+    show_sidebar = Bool(True)
 
     #: Experiment folders that hold captures: ``[(name, captures_path), ...]``
     #: oldest first (discovery.discover_experiments). Selecting one repoints

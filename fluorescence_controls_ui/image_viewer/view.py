@@ -8,16 +8,16 @@ from PySide6.QtWidgets import (
     QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QSizePolicy,
 )
 from traitsui.api import (
-    BasicEditorFactory, HGroup, Item, Label, RangeEditor, UItem, VGroup,
-    View,
+    BasicEditorFactory, HGroup, HSplit, Item, Label, RangeEditor, UItem,
+    VGroup, View,
 )
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.icons.icons import (
-    ICON_CIRCLE, ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT,
-    ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY,
-    ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH,
-    ICON_SAVE, ICON_SHOW_CHART,
+    ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CIRCLE, ICON_DELETE,
+    ICON_DELETE_SWEEP, ICON_EDIT, ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT,
+    ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH,
+    ICON_RESET_WRENCH, ICON_SAVE, ICON_SHOW_CHART,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
@@ -203,8 +203,8 @@ class ImageCanvasEditor(BasicEditorFactory):
     klass = _ImageCanvasEditor
 
 
-# Compact icon row; everything else stacks vertically below it so the pane
-# stays narrow.
+# Compact icon row above the image: browse/navigate/playback plus the
+# position and folder-info readouts.
 buttons_group = HGroup(
     UItem("directory_button", editor=IconButtonEditor(
         glyph=ICON_FOLDER_OPEN,
@@ -298,77 +298,87 @@ contrast_group = VGroup(
 )
 
 # ROI analysis: draw/edit tools, then the calculate -> plot -> export
-# pipeline over the filtered images. Instant/live per-ROI stats show in
-# the plot pane's table; the readout here is batch progress only.
-analysis_group = VGroup(
-    HGroup(
-        UItem("object.roi_analysis.draw_circle_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_CIRCLE,
-                  tooltip="Draw a circular ROI (click-drag on the image)")),
-        UItem("object.roi_analysis.draw_box_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_RECTANGLE,
-                  tooltip="Draw a rectangular ROI (click-drag on the "
-                          "image)")),
-        UItem("object.roi_analysis.edit_mode",
-              editor=IconToggleEditor(
-                  on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
-                  tooltip="Edit ROIs: drag to move, grip to resize, "
-                          "click to select. Editing on a later image "
-                          "adds a drift override from there on")),
-        UItem("object.roi_analysis.delete_roi_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_DELETE,
-                  tooltip="Delete the selected ROI")),
-        UItem("object.roi_analysis.clear_rois_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_DELETE_SWEEP,
-                  tooltip="Remove all ROIs")),
-        UItem("object.roi_analysis.calculate_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_SHOW_CHART,
-                  tooltip="Calculate ROI intensities across the "
-                          "filtered images and plot them")),
-        UItem("object.roi_analysis.export_csv_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_SAVE,
-                  tooltip="Export the intensities to the experiment's "
-                          "analysis folder (calculates first if "
-                          "needed)")),
-        UItem("object.roi_analysis.reset_cache_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_RESET_WRENCH,
-                  tooltip="Reset calculated intensities (optionally "
-                          "also the drift overrides)")),
-    ),
-    UItem("object.roi_analysis.progress_text", style="readonly"),
-    visible_when="show_analysis",
-    show_border=True,
+# pipeline over the filtered images, as an always-visible vertical
+# toolbar on the image's right edge. Instant/live per-ROI stats show in
+# the plot pane's table; batch progress shares the status row under the
+# image.
+analysis_toolbar = VGroup(
+    UItem("object.roi_analysis.draw_circle_button",
+          editor=IconButtonEditor(
+              glyph=ICON_CIRCLE,
+              tooltip="Draw a circular ROI (click-drag on the image)")),
+    UItem("object.roi_analysis.draw_box_button",
+          editor=IconButtonEditor(
+              glyph=ICON_RECTANGLE,
+              tooltip="Draw a rectangular ROI (click-drag on the "
+                      "image)")),
+    UItem("object.roi_analysis.edit_mode",
+          editor=IconToggleEditor(
+              on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
+              tooltip="Edit ROIs: drag to move, grip to resize, "
+                      "click to select. Editing on a later image "
+                      "adds a drift override from there on")),
+    UItem("object.roi_analysis.delete_roi_button",
+          editor=IconButtonEditor(
+              glyph=ICON_DELETE,
+              tooltip="Delete the selected ROI")),
+    UItem("object.roi_analysis.clear_rois_button",
+          editor=IconButtonEditor(
+              glyph=ICON_DELETE_SWEEP,
+              tooltip="Remove all ROIs")),
+    UItem("object.roi_analysis.calculate_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SHOW_CHART,
+              tooltip="Calculate ROI intensities across the "
+                      "filtered images and plot them")),
+    UItem("object.roi_analysis.export_csv_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SAVE,
+              tooltip="Export the intensities to the experiment's "
+                      "analysis folder (calculates first if "
+                      "needed)")),
+    UItem("object.roi_analysis.reset_cache_button",
+          editor=IconButtonEditor(
+              glyph=ICON_RESET_WRENCH,
+              tooltip="Reset calculated intensities (optionally "
+                      "also the drift overrides)")),
+)
+
+# Selector sidebar: the four collapsible sections stacked, hidden as one
+# unit by the chevron toggle (device-viewer sidebar parity).
+sidebar_group = VGroup(
+    _collapse_header("show_experiments", "Experiments"),
+    experiments_group,
+    _collapse_header("show_bursts", "Image Groups"),
+    bursts_group,
+    _collapse_header("show_images", "Images"),
+    images_group,
+    _collapse_header("show_contrast", "Contrast"),
+    contrast_group,
+    visible_when="show_sidebar",
+    scrollable=True,
 )
 
 
 ImageViewerView = View(
-    VGroup(
-        buttons_group,
-
-        _collapse_header("show_experiments", "Experiments"),
-        experiments_group,
-
-        _collapse_header("show_bursts", "Image Groups"),
-        bursts_group,
-
-        _collapse_header("show_images", "Images"),
-        images_group,
-
-        _collapse_header("show_contrast", "Contrast"),
-        contrast_group,
-
-        _collapse_header("show_analysis", "Analysis"),
-        analysis_group,
-
-        UItem("array", editor=ImageCanvasEditor(), springy=True, resizable=True),
-        UItem("pixel_text", style="readonly"),
+    HGroup(
+        VGroup(UItem("show_sidebar", editor=IconToggleEditor(
+            on_glyph=ICON_CHEVRON_LEFT, off_glyph=ICON_CHEVRON_RIGHT,
+            tooltip="Hide or show the selector sidebar"))),
+        HSplit(
+            sidebar_group,
+            VGroup(
+                buttons_group,
+                UItem("array", editor=ImageCanvasEditor(), springy=True,
+                      resizable=True),
+                HGroup(
+                    UItem("pixel_text", style="readonly"),
+                    UItem("object.roi_analysis.progress_text",
+                          style="readonly"),
+                ),
+            ),
+        ),
+        analysis_toolbar,
     ),
     resizable=True,
 )
