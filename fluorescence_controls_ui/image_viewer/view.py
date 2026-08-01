@@ -116,9 +116,10 @@ class _ImageCanvasEditor(QtEditor):
         self.object.observe(self._on_fit_request, "fit_request")
         self.object.observe(
             self._on_roi_state_changed,
-            "current_path, roi_analysis:rois.items, "
-            "roi_analysis:rois:items:geometry, "
-            "roi_analysis:rois:items:overrides.items, "
+            "current_path, roi_analysis:session, "
+            "roi_analysis:session:rois.items, "
+            "roi_analysis:session:rois:items:geometry, "
+            "roi_analysis:session:rois:items:overrides.items, "
             "roi_analysis:selected_roi_id")
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode")
@@ -130,9 +131,10 @@ class _ImageCanvasEditor(QtEditor):
         self.object.observe(self._on_fit_request, "fit_request", remove=True)
         self.object.observe(
             self._on_roi_state_changed,
-            "current_path, roi_analysis:rois.items, "
-            "roi_analysis:rois:items:geometry, "
-            "roi_analysis:rois:items:overrides.items, "
+            "current_path, roi_analysis:session, "
+            "roi_analysis:session:rois.items, "
+            "roi_analysis:session:rois:items:geometry, "
+            "roi_analysis:session:rois:items:overrides.items, "
             "roi_analysis:selected_roi_id",
             remove=True)
         self.object.observe(self._on_interaction_mode_changed,
@@ -160,7 +162,7 @@ class _ImageCanvasEditor(QtEditor):
             self._roi_layer.clear_items()
             return
         self._roi_layer.sync(
-            model.roi_analysis.effective_for(model.current_path),
+            model.roi_analysis.session.effective_for(model.current_path),
             model.roi_analysis.selected_roi_id)
 
     def _on_interaction_mode_changed(self, event):

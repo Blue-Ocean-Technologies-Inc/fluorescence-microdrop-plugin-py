@@ -181,10 +181,9 @@ class AnalysisSession(HasTraits):
 
 
 class RoiAnalysisModel(HasTraits):
-    """Shared state between the viewer pane (ROI editing, toolbuttons)
-    and the plot pane (series display)."""
-
-    rois = List(Instance(Roi))
+    """Shared tool-state between the viewer pane (ROI editing,
+    toolbuttons) and the plot pane; the per-experiment data lives in
+    ``session``."""
 
     #: Canvas interaction: pan (normal navigation), one-shot draw modes,
     #: or edit (move/resize/select existing ROIs).
@@ -192,11 +191,6 @@ class RoiAnalysisModel(HasTraits):
 
     #: roi_id of the canvas-selected ROI (edit mode), '' when none.
     selected_roi_id = Str()
-
-    #: (path str, mtime, roi_id, kind, geometry tuple) -> stats dict.
-    #: The geometry in the key makes invalidation implicit: an edit only
-    #: misses on the images its override actually covers.
-    cache = Dict()
 
     #: Instant-stats readout for the ROI just drawn/edited.
     roi_info_text = Str()
@@ -236,59 +230,6 @@ class RoiAnalysisModel(HasTraits):
     #: pane and stats table never need the viewer model.
     filtered_paths = List(Str)
     current_image_path = Str()
-
-    def roi_by_id(self, roi_id):
-        for roi in self.rois:
-            if roi.roi_id == roi_id:
-                return roi
-        return None
-
-    def next_roi_name(self):
-        """'ROI N' with N one past the highest numbered existing ROI
-        name, so a deleted ROI's number isn't reissued to collide with
-        a surviving one (duplicate names would double up CSV columns
-        and plot legend labels)."""
-        highest = 0
-        for roi in self.rois:
-            match = ROI_NAME_PATTERN.match(roi.name)
-            if match:
-                highest = max(highest, int(match.group(1)))
-        return f"ROI {highest + 1}"
-
-    def stat_info(self, path, stat_cache=None):
-        """(mtime, capture_time) for ``path``. Pass a dict as
-        ``stat_cache`` (path str -> (mtime, capture_time)) to memoize
-        the filesystem stat and timestamp parse across many calls in
-        the same pass (a rebuild calls this once per image, cache_key()
-        once per image per ROI)."""
-        key = str(path)
-        if stat_cache is not None and key in stat_cache:
-            return stat_cache[key]
-        try:
-            mtime = Path(path).stat().st_mtime
-        except OSError:
-            mtime = 0.0
-        info = (mtime, capture_timestamp(path))
-        if stat_cache is not None:
-            stat_cache[key] = info
-        return info
-
-    def cache_key(self, path, roi, stat_cache=None):
-        """Cache key for one (image, ROI) pair: the file identity/mtime
-        plus the geometry in force at the image's capture time. Pass
-        ``stat_cache`` through from stat_info() to avoid re-stating the
-        same path for every ROI."""
-        mtime, capture_time = self.stat_info(path, stat_cache)
-        return (str(path), mtime, roi.roi_id, roi.kind,
-                tuple(roi.effective_geometry(capture_time)))
-
-    def effective_for(self, path):
-        """[(roi_id, name, kind, geometry), ...] in force for ``path`` —
-        what the canvas draws and the batch computes for that image."""
-        capture_time = capture_timestamp(path)
-        return [(roi.roi_id, roi.name, roi.kind,
-                 roi.effective_geometry(capture_time))
-                for roi in self.rois]
 
 
 #: The single analysis state shared by the viewer pane and the plot pane

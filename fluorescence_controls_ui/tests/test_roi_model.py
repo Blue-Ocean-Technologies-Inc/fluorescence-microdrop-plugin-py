@@ -1,6 +1,6 @@
-"""Roi override resolution and RoiAnalysisModel cache keys."""
+"""Roi override resolution and AnalysisSession cache keys."""
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
-    Roi, RoiAnalysisModel,
+    AnalysisSession, Roi,
 )
 
 
@@ -46,22 +46,22 @@ def test_clear_overrides_restores_base_everywhere():
 def test_cache_key_changes_only_with_effective_geometry(tmp_path):
     path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
     path.write_bytes(b"")
-    model = RoiAnalysisModel()
+    session = AnalysisSession()
     roi = _roi()
-    model.rois = [roi]
-    key_before = model.cache_key(path, roi)
+    session.rois = [roi]
+    key_before = session.cache_key(path, roi)
     # An override anchored AFTER this image's capture time: key unchanged.
     roi.apply_edit(9e12, [60.0, 60.0, 12.0])
-    assert model.cache_key(path, roi) == key_before
+    assert session.cache_key(path, roi) == key_before
     # An override covering it: key changes.
     roi.apply_edit(0.0, [61.0, 61.0, 12.0])
-    assert model.cache_key(path, roi) != key_before
+    assert session.cache_key(path, roi) != key_before
 
 
 def test_roi_ids_are_unique_and_names_sequence():
-    model = RoiAnalysisModel()
+    session = AnalysisSession()
     first, second = Roi(), Roi()
     assert first.roi_id != second.roi_id
     first.name = "ROI 1"
-    model.rois = [first]
-    assert model.next_roi_name() == "ROI 2"
+    session.rois = [first]
+    assert session.next_roi_name() == "ROI 2"

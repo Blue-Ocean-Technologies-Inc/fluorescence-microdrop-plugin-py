@@ -21,10 +21,11 @@ from ...consts import CAPTURE_TIMESTAMP_FORMAT
 from ..discovery import UNGROUPED_BURST, capture_timestamp, \
     detect_wavelength
 from ..model import FluorescenceImageViewerModel
+from .consts import DEFAULT_ROI_COLORS
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
 )
-from .roi_model import AnalysisSession, Roi, RoiAnalysisModel
+from .roi_model import AnalysisSession, Roi, RoiAnalysisModel, RoiStyle
 from .roi_store import (
     analysis_directory, load_session, save_session,
     write_intensity_csv,
@@ -48,6 +49,10 @@ class RoiAnalysisController(HasTraits):
     #: (path str, roi_id) -> cache key, snapshotted at dispatch time so
     #: drained results land under the geometry they were computed with.
     _dispatched_keys = Dict()
+
+    @property
+    def session(self):
+        return self.analysis_model.session
 
     # ------------------------------------------------------------------ #
     # Interaction modes                                                    #
@@ -76,10 +81,12 @@ class RoiAnalysisController(HasTraits):
         kind, geometry = event.new
         current = self.viewer_model.current_path
         anchor = capture_timestamp(current) if current else 0.0
-        roi = Roi(name=self.analysis_model.next_roi_name(), kind=kind,
+        roi = Roi(name=self.session.next_roi_name(), kind=kind,
                   geometry=[float(value) for value in geometry],
-                  base_anchor=anchor)
-        self.analysis_model.rois.append(roi)
+                  base_anchor=anchor,
+                  style=RoiStyle(color=DEFAULT_ROI_COLORS[
+                      len(self.session.rois) % len(DEFAULT_ROI_COLORS)]))
+        self.session.rois.append(roi)
         self.analysis_model.interaction_mode = self._rest_mode()
         self._save_config()
         self._restart_batch_if_running()
@@ -88,7 +95,7 @@ class RoiAnalysisController(HasTraits):
     @observe("analysis_model:canvas_roi_edited")
     def _on_canvas_roi_edited(self, event):
         roi_id, geometry = event.new
-        roi = self.analysis_model.roi_by_id(roi_id)
+        roi = self.session.roi_by_id(roi_id)
         current = self.viewer_model.current_path
         if roi is None or not current:
             return
@@ -103,13 +110,13 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     @observe("analysis_model:delete_roi_button")
     def _delete_selected_roi(self, event):
-        roi = self.analysis_model.roi_by_id(
-            self.analysis_model.selected_roi_id)
+        session = self.session
+        roi = session.roi_by_id(self.analysis_model.selected_roi_id)
         if roi is None:
             self.analysis_model.roi_info_text = (
                 "Select an ROI first (edit mode) to delete it")
             return
-        self.analysis_model.rois.remove(roi)
+        session.rois.remove(roi)
         self.analysis_model.selected_roi_id = ""
         self._save_config()
         self._rebuild_plot_series()
@@ -117,13 +124,14 @@ class RoiAnalysisController(HasTraits):
 
     @observe("analysis_model:clear_rois_button")
     def _clear_rois(self, event):
-        if not self.analysis_model.rois:
+        session = self.session
+        if not session.rois:
             return
         if confirm(message="Remove ALL ROIs (and their drift "
                            "overrides)?") != YES:
             return
         self.runner.cancel()
-        self.analysis_model.rois = []
+        session.rois = []
         self.analysis_model.selected_roi_id = ""
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
@@ -138,12 +146,13 @@ class RoiAnalysisController(HasTraits):
             no_label="Cache + drift overrides")
         if result not in (YES, NO):
             return
+        session = self.session
         self.runner.cancel()
-        self.analysis_model.cache = {}
+        session.stats = {}
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
         if result == NO:
-            for roi in self.analysis_model.rois:
+            for roi in session.rois:
                 roi.clear_overrides()
             self._save_config()
         self._rebuild_plot_series()
@@ -157,7 +166,7 @@ class RoiAnalysisController(HasTraits):
 
     @observe("analysis_model:export_csv_button")
     def _export(self, event):
-        if not self.analysis_model.rois or not self.viewer_model.paths:
+        if not self.session.rois or not self.viewer_model.paths:
             self.analysis_model.progress_text = "Nothing to export"
             return
         self._dispatched_keys = {}
@@ -185,13 +194,14 @@ class RoiAnalysisController(HasTraits):
         """[(path_str, {roi_id: (kind, geometry)}), ...] for every
         filtered image with at least one uncached (image, ROI) pair —
         only the missing ROIs are dispatched per image."""
+        session = self.session
         stat_cache = {}
         work = []
         for path in self.viewer_model.paths:
             missing = {}
-            for roi in self.analysis_model.rois:
-                key = self.analysis_model.cache_key(path, roi, stat_cache)
-                if key not in self.analysis_model.cache:
+            for roi in session.rois:
+                key = session.cache_key(path, roi, stat_cache)
+                if key not in session.stats:
                     missing[roi.roi_id] = (roi.kind,
                                            tuple(key[4]))
                     self._dispatched_keys[(str(path), roi.roi_id)] = key
@@ -200,7 +210,7 @@ class RoiAnalysisController(HasTraits):
         return work
 
     def _start_batch(self, work=None):
-        if not self.analysis_model.rois or not self.viewer_model.paths:
+        if not self.session.rois or not self.viewer_model.paths:
             return
         if work is None:
             self._dispatched_keys = {}
@@ -253,10 +263,14 @@ class RoiAnalysisController(HasTraits):
             self._rebuild_plot_series()
 
     def _absorb(self, payload):
+        absorbed = False
         for roi_id, stats in payload["stats"].items():
             key = self._dispatched_keys.get((payload["path"], roi_id))
             if key is not None:
-                self.analysis_model.cache[key] = stats
+                self.session.stats[key] = stats
+                absorbed = True
+        if absorbed:
+            self.session.stats_revision += 1
 
     def _update_progress_text(self, finished=False):
         model = self.analysis_model
@@ -273,9 +287,9 @@ class RoiAnalysisController(HasTraits):
         current = self.viewer_model.current_path
         if not current:
             return
-        key = self.analysis_model.cache_key(current, roi)
+        key = self.session.cache_key(current, roi)
         self._dispatched_keys[(current, roi.roi_id)] = key
-        cached = self.analysis_model.cache.get(key)
+        cached = self.session.stats.get(key)
         if cached is not None:
             self._show_instant({"path": current,
                                 "stats": {roi.roi_id: cached},
@@ -293,7 +307,7 @@ class RoiAnalysisController(HasTraits):
         batch/instant compute layer, so it is skipped silently."""
         stats_by_roi = payload["stats"]
         roi_id = next(iter(stats_by_roi), None)
-        roi = self.analysis_model.roi_by_id(roi_id)
+        roi = self.session.roi_by_id(roi_id)
         if roi is None:
             return
         stats = stats_by_roi[roi.roi_id]
@@ -307,8 +321,9 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     def _rebuild_plot_series(self):
         model = self.analysis_model
+        session = self.session
         paths = list(self.viewer_model.paths)
-        if not paths or not model.rois:
+        if not paths or not session.rois:
             model.plot_series = {}
             model.plot_revision += 1
             return
@@ -316,14 +331,14 @@ class RoiAnalysisController(HasTraits):
         #: cache_key() would otherwise re-stat every (image, ROI) pair,
         #: and this rebuilds ~5x/s while a batch drains.
         stat_cache = {}
-        times = [model.stat_info(path, stat_cache)[1] for path in paths]
+        times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0]
         series = {}
-        for roi in model.rois:
+        for roi in session.rois:
             elapsed, means = [], []
             for path, capture_time in zip(paths, times):
-                stats = model.cache.get(
-                    model.cache_key(path, roi, stat_cache))
+                stats = session.stats.get(
+                    session.cache_key(path, roi, stat_cache))
                 elapsed.append(capture_time - start_time)
                 means.append(stats["mean"] if stats else math.nan)
             series[roi.roi_id] = (roi.name, elapsed, means)
@@ -349,24 +364,34 @@ class RoiAnalysisController(HasTraits):
         if directory is None:
             return
         try:
-            save_session(directory, AnalysisSession(directory=str(directory), rois=list(self.analysis_model.rois)))
+            save_session(directory, self.session)
         except Exception as error:
             logger.warning(f"Could not save ROI config: {error}")
 
     @observe("viewer_model:browsed_directory")
     def _on_experiment_changed(self, event):
-        """A different folder is being browsed: its saved ROIs replace
-        the current set; cache and series start over."""
+        """A different folder is being browsed: swap in its saved
+        session wholesale (ROIs, styles, figure settings)."""
         self.runner.cancel()
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
         self.analysis_model.roi_info_text = ""
         self.analysis_model.selected_roi_id = ""
-        self.analysis_model.cache = {}
         directory = self._experiment_directory()
-        self.analysis_model.rois = (list(load_session(directory).rois)
-                                    if directory is not None else [])
+        self.analysis_model.session = (
+            load_session(directory) if directory is not None
+            else AnalysisSession())
         self._rebuild_plot_series()
+
+    @observe("viewer_model:paths.items")
+    def _mirror_filtered_paths(self, event):
+        self.analysis_model.filtered_paths = [
+            str(path) for path in self.viewer_model.paths]
+
+    @observe("viewer_model:current_path")
+    def _mirror_current_image(self, event):
+        self.analysis_model.current_image_path = \
+            self.viewer_model.current_path
 
     def _write_export(self):
         self._pending_export = False
@@ -374,17 +399,17 @@ class RoiAnalysisController(HasTraits):
         if directory is None:
             self.analysis_model.progress_text = "No experiment folder"
             return
-        model = self.analysis_model
+        session = self.session
         paths = list(self.viewer_model.paths)
         stat_cache = {}
-        times = [model.stat_info(path, stat_cache)[1] for path in paths]
+        times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0
         rows = []
         for path, capture_time in zip(paths, times):
             stats_by_roi = {}
-            for roi in model.rois:
-                stats = model.cache.get(
-                    model.cache_key(path, roi, stat_cache))
+            for roi in session.rois:
+                stats = session.stats.get(
+                    session.cache_key(path, roi, stat_cache))
                 if stats is not None:
                     stats_by_roi[roi.roi_id] = stats
             rows.append({
@@ -406,12 +431,12 @@ class RoiAnalysisController(HasTraits):
                 f"{capture_service.utc_stamp()}.csv")
         csv_path = analysis_directory(directory) / name
         try:
-            write_intensity_csv(csv_path, rows, model.rois)
+            write_intensity_csv(csv_path, rows, session.rois)
         except Exception as error:
             logger.warning(f"CSV export failed: {error}")
-            model.progress_text = f"Export failed: {error}"
+            self.analysis_model.progress_text = f"Export failed: {error}"
             return
-        model.progress_text = f"Exported {csv_path.name}"
+        self.analysis_model.progress_text = f"Exported {csv_path.name}"
         logger.info(f"ROI intensities exported to {csv_path}")
 
     def _group_of(self, path):
