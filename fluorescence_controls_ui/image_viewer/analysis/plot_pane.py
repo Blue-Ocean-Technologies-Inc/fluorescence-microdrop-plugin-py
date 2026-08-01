@@ -72,10 +72,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.grid(True, alpha=0.3)
         self._lines = {}
         self._redraw_pending = False
+        self._detached = False
         model.observe(self._on_plot_state_changed, _PLOT_STATE)
         self._schedule_redraw()
 
     def detach(self):
+        # An in-flight coalesced singleShot may fire after the widget's
+        # C++ side is gone; the flag makes it a no-op.
+        self._detached = True
         self._model.observe(self._on_plot_state_changed, _PLOT_STATE,
                             remove=True)
 
@@ -94,6 +98,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
 
     def _refresh(self):
         self._redraw_pending = False
+        if self._detached:
+            return
         if not self.isVisible():
             return                # showEvent reschedules
         self._axes.set_ylabel(
@@ -272,12 +278,16 @@ class FluorescenceRoiPlotDockPane(DockPane):
             high.setValue(getattr(figure_settings, high_trait))
 
     def destroy(self):
-        self.canvas.detach()
-        self.table.detach()
-        roi_analysis_model.observe(self._on_plot_stat_changed,
-                                   "session:plot_stat", remove=True)
-        roi_analysis_model.observe(self._sync_controls, "session",
-                                   remove=True)
-        roi_analysis_model.observe(self._on_progress_text_changed,
-                                   "progress_text", remove=True)
+        # Everything below was registered in create_contents, which a
+        # constructed-but-never-shown pane never ran (pyface's own
+        # destroy() guards its teardown the same way).
+        if self.control is not None:
+            self.canvas.detach()
+            self.table.detach()
+            roi_analysis_model.observe(self._on_plot_stat_changed,
+                                       "session:plot_stat", remove=True)
+            roi_analysis_model.observe(self._sync_controls, "session",
+                                       remove=True)
+            roi_analysis_model.observe(self._on_progress_text_changed,
+                                       "progress_text", remove=True)
         super().destroy()

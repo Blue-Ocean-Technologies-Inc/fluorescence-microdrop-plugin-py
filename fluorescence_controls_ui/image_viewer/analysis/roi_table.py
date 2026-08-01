@@ -43,6 +43,7 @@ class RoiStatsTable(QTableWidget):
         super().__init__(0, len(_HEADERS), parent)
         self._model = model
         self._rebuilding = False
+        self._detached = False
         self._pending = None   # None | "rebuild" | "values"
         self.setHorizontalHeaderLabels(_HEADERS)
         self.verticalHeader().setVisible(False)
@@ -52,6 +53,9 @@ class RoiStatsTable(QTableWidget):
         self._rebuild()
 
     def detach(self):
+        # An in-flight coalescing singleShot may fire after the widget's
+        # C++ side is gone; the flag makes it a no-op.
+        self._detached = True
         self._model.observe(self._on_structure_changed, _TABLE_STRUCTURE,
                             remove=True)
         self._model.observe(self._on_values_changed, _TABLE_VALUES,
@@ -76,6 +80,8 @@ class RoiStatsTable(QTableWidget):
 
     def _run_pending(self):
         pending, self._pending = self._pending, None
+        if self._detached:
+            return
         if pending == "rebuild":
             self._rebuild()
         elif pending == "values":
