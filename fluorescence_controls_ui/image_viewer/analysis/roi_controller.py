@@ -1,9 +1,7 @@
 """Controller for the ROI analysis: reacts to the analysis toolbuttons
-and canvas events, keeps the per-experiment ROI config in sync,
-orchestrates the cache-aware batch computation, and rebuilds the plot
-series as results drain in. All observers run on the GUI thread; the
-only off-thread work is inside RoiBatchRunner."""
-import math
+and canvas events, keeps the per-experiment ROI config in sync, and
+orchestrates the cache-aware batch computation. All observers run on
+the GUI thread; the only off-thread work is inside RoiBatchRunner."""
 import queue
 import time
 from pathlib import Path
@@ -124,7 +122,6 @@ class RoiAnalysisController(HasTraits):
         session.rois.remove(roi)
         self.analysis_model.selected_roi_id = ""
         self._save_config()
-        self._rebuild_plot_series()
         self._restart_batch_if_running()
 
     @observe("analysis_model:clear_rois_button")
@@ -141,7 +138,6 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
         self._save_config()
-        self._rebuild_plot_series()
 
     @observe("analysis_model:reset_cache_button")
     def _reset_cache(self, event):
@@ -163,7 +159,6 @@ class RoiAnalysisController(HasTraits):
             for roi in session.rois:
                 roi.clear_overrides()
             self._save_config()
-        self._rebuild_plot_series()
 
     # ------------------------------------------------------------------ #
     # Batch orchestration                                                  #
@@ -189,13 +184,9 @@ class RoiAnalysisController(HasTraits):
     @observe("viewer_model:paths.items, viewer_model:selected_wavelength,"
              " viewer_model:selected_burst")
     def _on_filter_changed(self, event):
-        """The filtered series changed (mid-batch or not): rebuild the
-        plot on the new snapshot first — a rescan can land a new
-        ``paths`` after ``browsed_directory`` already swapped in the new
-        experiment's cache/series, so the series must be rebuilt here
-        even with no batch running — then restart any running batch on
-        the new snapshot (the work list is a snapshot by design)."""
-        self._rebuild_plot_series()
+        """The filtered series changed mid-batch: restart on the new
+        snapshot (the work list is a snapshot by design; the plot pane
+        observes the filters itself)."""
         self._restart_batch_if_running()
 
     def _missing_work(self):
@@ -229,7 +220,6 @@ class RoiAnalysisController(HasTraits):
         if not work:
             self.analysis_model.batch_running = False
             self.analysis_model.progress_text = "ROI stats up to date"
-            self._rebuild_plot_series()
             if self._pending_export:
                 self._write_export()
             return
@@ -244,13 +234,11 @@ class RoiAnalysisController(HasTraits):
     def drain_results(self):
         """Called by the dock pane's drain QTimer (GUI thread): move
         finished results from the runner's queue into the model."""
-        drained = False
         while True:
             try:
                 kind, payload = self.runner.results.get_nowait()
             except queue.Empty:
                 break
-            drained = True
             if kind == BATCH_RESULT:
                 self._absorb(payload)
                 self.analysis_model.batch_done += 1
@@ -268,8 +256,6 @@ class RoiAnalysisController(HasTraits):
                 self.flush_stats(force=True)
                 if self._pending_export:
                     self._write_export()
-        if drained:
-            self._rebuild_plot_series()
 
     def _absorb(self, payload):
         absorbed = False
@@ -325,35 +311,6 @@ class RoiAnalysisController(HasTraits):
             f"{roi.name}: mean {stats['mean']:.1f}  "
             f"std {stats['std']:.1f}  min {stats['min']:.0f}  "
             f"max {stats['max']:.0f}  n {int(stats['count'])}")
-
-    # ------------------------------------------------------------------ #
-    # Plot series                                                          #
-    # ------------------------------------------------------------------ #
-    def _rebuild_plot_series(self):
-        model = self.analysis_model
-        session = self.session
-        paths = list(self.viewer_model.paths)
-        if not paths or not session.rois:
-            model.plot_series = {}
-            model.plot_revision += 1
-            return
-        #: One stat()/capture_timestamp() per path for this whole pass —
-        #: cache_key() would otherwise re-stat every (image, ROI) pair,
-        #: and this rebuilds ~5x/s while a batch drains.
-        stat_cache = {}
-        times = [session.stat_info(path, stat_cache)[1] for path in paths]
-        start_time = times[0]
-        series = {}
-        for roi in session.rois:
-            elapsed, means = [], []
-            for path, capture_time in zip(paths, times):
-                stats = session.stats.get(
-                    session.cache_key(path, roi, stat_cache))
-                elapsed.append(capture_time - start_time)
-                means.append(stats["mean"] if stats else math.nan)
-            series[roi.roi_id] = (roi.name, elapsed, means)
-        model.plot_series = series
-        model.plot_revision += 1
 
     # ------------------------------------------------------------------ #
     # Persistence                                                          #
@@ -421,7 +378,6 @@ class RoiAnalysisController(HasTraits):
             session.stats_revision += 1
         self.analysis_model.session = session
         self._dispatched_keys = {}
-        self._rebuild_plot_series()
 
     @observe("viewer_model:paths.items")
     def _mirror_filtered_paths(self, event):

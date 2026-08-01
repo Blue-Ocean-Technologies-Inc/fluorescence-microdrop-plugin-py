@@ -18,8 +18,9 @@ ROI_CONFIG_FILENAME = "roi_config.json"
 #: into the model.
 ANALYSIS_RESULT_DRAIN_INTERVAL_MS = 200
 
-#: Cadence (ms) of the plot pane's redraw poll.
-ROI_PLOT_REFRESH_INTERVAL_MS = 500
+#: Coalescing delay (ms) between an analysis-state notification and the
+#: plot redraw — a drain burst paints once.
+ROI_PLOT_COALESCE_MS = 100
 
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0

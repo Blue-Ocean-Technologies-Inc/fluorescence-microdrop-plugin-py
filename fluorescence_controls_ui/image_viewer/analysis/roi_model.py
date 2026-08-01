@@ -1,7 +1,7 @@
 """Qt-free ROI analysis state: the ROI definitions (shared base geometry
-plus forward drift-overrides), the intensity-stats cache, batch progress,
-and the plot-ready series. Mutated only on the GUI thread (button events
-and the dock pane's drain timer), so no Qt bridging is needed."""
+plus forward drift-overrides), the intensity-stats cache, and batch
+progress. Mutated only on the GUI thread (button events and the dock
+pane's drain timer), so no Qt bridging is needed."""
 import re
 import uuid
 from pathlib import Path
@@ -201,12 +201,6 @@ class RoiAnalysisModel(HasTraits):
     batch_done = Int(0)
     batch_failed = Int(0)
     batch_running = Bool(False)
-
-    #: Plot-ready series: roi_id -> (name, [elapsed_sec...], [mean...]).
-    plot_series = Dict()
-
-    #: Bumped whenever plot_series is rebuilt (the plot canvas polls it).
-    plot_revision = Int(0)
 
     # Toolbar buttons (view events; RoiAnalysisController reacts).
     draw_circle_button = Button()
