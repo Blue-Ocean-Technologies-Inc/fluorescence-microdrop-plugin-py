@@ -116,7 +116,7 @@ class RoiAnalysisController(HasTraits):
         session = self.session
         roi = session.roi_by_id(self.analysis_model.selected_roi_id)
         if roi is None:
-            self.analysis_model.roi_info_text = (
+            self.analysis_model.progress_text = (
                 "Select an ROI first (edit mode) to delete it")
             return
         session.rois.remove(roi)
@@ -249,7 +249,6 @@ class RoiAnalysisController(HasTraits):
                 self._update_progress_text()
             elif kind == INSTANT_RESULT:
                 self._absorb(payload)
-                self._show_instant(payload)
             elif kind == BATCH_FINISHED:
                 self.analysis_model.batch_running = False
                 self._update_progress_text(finished=True)
@@ -279,38 +278,17 @@ class RoiAnalysisController(HasTraits):
 
     def _instant_stats(self, roi):
         """Kick off the instant single-image compute for ``roi`` on the
-        shown image."""
+        shown image; already-cached stats need no compute — the table
+        reads the session cache directly."""
         current = self.viewer_model.current_path
         if not current:
             return
         key = self.session.cache_key(current, roi)
         self._dispatched_keys[(current, roi.roi_id)] = key
-        cached = self.session.stats.get(key)
-        if cached is not None:
-            self._show_instant({"path": current,
-                                "stats": {roi.roi_id: cached},
-                                "error": None})
+        if key in self.session.stats:
             return
         self.runner.compute_single(current,
                                    {roi.roi_id: (roi.kind, tuple(key[4]))})
-
-    def _show_instant(self, payload):
-        """Derive the ROI from the payload itself (an instant payload
-        carries exactly one roi_id) rather than trusting a controller-
-        held "last drawn/edited" reference, which a second quick edit
-        can race ahead of. An error payload has empty stats — there is
-        no roi_id to key off, and the failure is already logged by the
-        batch/instant compute layer, so it is skipped silently."""
-        stats_by_roi = payload["stats"]
-        roi_id = next(iter(stats_by_roi), None)
-        roi = self.session.roi_by_id(roi_id)
-        if roi is None:
-            return
-        stats = stats_by_roi[roi.roi_id]
-        self.analysis_model.roi_info_text = (
-            f"{roi.name}: mean {stats['mean']:.1f}  "
-            f"std {stats['std']:.1f}  min {stats['min']:.0f}  "
-            f"max {stats['max']:.0f}  n {int(stats['count'])}")
 
     # ------------------------------------------------------------------ #
     # Persistence                                                          #
@@ -368,7 +346,6 @@ class RoiAnalysisController(HasTraits):
         self.flush_stats(force=True)
         self.analysis_model.batch_running = False
         self.analysis_model.progress_text = ""
-        self.analysis_model.roi_info_text = ""
         self.analysis_model.selected_roi_id = ""
         directory = self._experiment_directory()
         session = (load_session(directory) if directory is not None

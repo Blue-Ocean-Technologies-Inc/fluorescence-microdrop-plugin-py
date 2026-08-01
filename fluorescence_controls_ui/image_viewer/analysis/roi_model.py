@@ -192,9 +192,6 @@ class RoiAnalysisModel(HasTraits):
     #: roi_id of the canvas-selected ROI (edit mode), '' when none.
     selected_roi_id = Str()
 
-    #: Instant-stats readout for the ROI just drawn/edited.
-    roi_info_text = Str()
-
     #: Batch progress readout ("12/40, 1 failed"; '' when idle).
     progress_text = Str()
     batch_total = Int(0)

@@ -120,6 +120,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois.items, "
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
+            "roi_analysis:session:rois:items:name, "
             "roi_analysis:selected_roi_id")
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode")
@@ -135,6 +136,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois.items, "
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
+            "roi_analysis:session:rois:items:name, "
             "roi_analysis:selected_roi_id",
             remove=True)
         self.object.observe(self._on_interaction_mode_changed,
@@ -296,8 +298,8 @@ contrast_group = VGroup(
 )
 
 # ROI analysis: draw/edit tools, then the calculate -> plot -> export
-# pipeline over the filtered images. The readouts show the freshly drawn
-# ROI's instant stats and the batch progress.
+# pipeline over the filtered images. Instant/live per-ROI stats show in
+# the plot pane's table; the readout here is batch progress only.
 analysis_group = VGroup(
     HGroup(
         UItem("object.roi_analysis.draw_circle_button",
@@ -340,7 +342,6 @@ analysis_group = VGroup(
                   tooltip="Reset calculated intensities (optionally "
                           "also the drift overrides)")),
     ),
-    UItem("object.roi_analysis.roi_info_text", style="readonly"),
     UItem("object.roi_analysis.progress_text", style="readonly"),
     visible_when="show_analysis",
     show_border=True,

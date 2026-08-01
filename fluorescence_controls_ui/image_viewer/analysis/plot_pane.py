@@ -23,6 +23,7 @@ from ...consts import PKG
 from .consts import ROI_PLOT_COALESCE_MS
 from .plot_series import derive_series
 from .roi_model import PLOT_STATS, roi_analysis_model
+from .roi_table import RoiStatsTable
 
 #: Human labels for the plotted stat (dropdown + y-axis).
 PLOT_STAT_LABELS = {
@@ -147,6 +148,8 @@ class FluorescenceRoiPlotDockPane(DockPane):
                 PLOT_STATS.index(event.object.plot_stat)),
             "session:plot_stat")
         layout.addWidget(canvas)
+        table = RoiStatsTable(roi_analysis_model, widget)
+        layout.addWidget(table)
         progress = QLabel("", widget)
         roi_analysis_model.observe(
             lambda event: progress.setText(event.new), "progress_text")
