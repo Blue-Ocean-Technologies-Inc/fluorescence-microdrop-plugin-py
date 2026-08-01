@@ -17,13 +17,19 @@ from pyface.api import FileDialog, OK
 from pyface.tasks.api import DockPane
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QHBoxLayout, QLabel, QPushButton,
-    QSplitter, QVBoxLayout, QWidget,
+    QLabel, QScrollArea, QSplitter, QVBoxLayout, QWidget,
 )
-from traits.api import Any, Instance, List
+from traits.api import Any, Instance
+from traitsui.api import EnumEditor, HGroup, Item, UItem, VGroup, View
+
+from microdrop_style.icons.icons import ICON_SAVE
+from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
 
 from ...consts import PKG
-from .consts import ROI_PLOT_COALESCE_MS
+from .consts import (
+    ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
+    ROI_PLOT_COALESCE_MS,
+)
 from .plot_series import derive_series
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
@@ -42,6 +48,40 @@ PLOT_STAT_LABELS = {
 #: matplotlib linestyle codes for RoiStyle.line_style.
 LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":",
                "dashdot": "-."}
+
+#: Controls over the per-session plot/export traits. Rebuilt against the
+#: new session on every swap (TraitsUI resolves context objects at build
+#: time), which replaces all hand-written widget<->trait syncing. Two
+#: rows keep the pane's un-scrolled minimum width small; `figure` is its
+#: own context key because enabled_when only re-evaluates on trait
+#: changes of direct context objects.
+_plot_controls_view = View(
+    VGroup(
+        HGroup(
+            Item("session.plot_stat", label="Plot",
+                 editor=EnumEditor(values=list(PLOT_STATS),
+                                   format_func=PLOT_STAT_LABELS.get)),
+            Item("figure.x_auto", label="X auto"),
+            Item("figure.x_min", label="min",
+                 enabled_when="not figure.x_auto"),
+            Item("figure.x_max", label="max",
+                 enabled_when="not figure.x_auto"),
+        ),
+        HGroup(
+            Item("figure.y_auto", label="Y auto"),
+            Item("figure.y_min", label="min",
+                 enabled_when="not figure.y_auto"),
+            Item("figure.y_max", label="max",
+                 enabled_when="not figure.y_auto"),
+            Item("figure.export_dpi", label="DPI"),
+            Item("figure.export_format", label="Format"),
+            UItem("model.save_plot_button", editor=IconButtonEditor(
+                glyph=ICON_SAVE,
+                tooltip="Save the plot to the experiment's analysis "
+                        "folder at the chosen format and DPI")),
+        ),
+    ),
+)
 
 #: Everything the derived series depends on; one observer, one redraw
 #: path. Session swap covers experiment changes; stats_revision covers
@@ -169,90 +209,18 @@ class FluorescenceRoiPlotDockPane(DockPane):
 
     canvas = Instance(RoiPlotCanvas)
     table = Instance(RoiStatsTable)
-    _stat_combo = Any()
-    _dpi_combo = Any()
-    _format_combo = Any()
+    _controls_ui = Any()
     _progress_label = Any()
-    _axis_syncers = List()
 
     def create_contents(self, parent):
         widget = QWidget(parent)
         layout = QVBoxLayout(widget)
         self.canvas = RoiPlotCanvas(roi_analysis_model)
+        self.canvas.setMinimumSize(ROI_PLOT_CANVAS_MIN_WIDTH,
+                                   ROI_PLOT_CANVAS_MIN_HEIGHT)
         layout.addWidget(NavigationToolbar2QT(self.canvas, widget))
-        controls = QHBoxLayout()
-        controls.addWidget(QLabel("Plot:", widget))
-        self._stat_combo = QComboBox(widget)
-        for stat in PLOT_STATS:
-            self._stat_combo.addItem(PLOT_STAT_LABELS[stat], stat)
-        self._stat_combo.setCurrentIndex(
-            PLOT_STATS.index(roi_analysis_model.session.plot_stat))
-        self._stat_combo.currentIndexChanged.connect(
-            lambda index: roi_analysis_model.session.trait_set(
-                plot_stat=PLOT_STATS[index]))
-        controls.addWidget(self._stat_combo)
-
-        self._axis_syncers = []
-
-        def _axis_editors(label, auto_trait, low_trait, high_trait):
-            figure_settings = roi_analysis_model.session.figure
-            auto = QCheckBox(f"{label} auto", widget)
-            auto.setChecked(getattr(figure_settings, auto_trait))
-            low = QDoubleSpinBox(widget)
-            high = QDoubleSpinBox(widget)
-            for spin, trait in ((low, low_trait), (high, high_trait)):
-                spin.setRange(-1e9, 1e9)
-                spin.setDecimals(1)
-                spin.setValue(getattr(figure_settings, trait))
-                spin.setEnabled(not auto.isChecked())
-                spin.valueChanged.connect(
-                    lambda value, trait=trait:
-                    roi_analysis_model.session.figure.trait_set(
-                        **{trait: value}))
-            def _on_auto(checked, auto_trait=auto_trait, low=low,
-                         high=high):
-                roi_analysis_model.session.figure.trait_set(
-                    **{auto_trait: bool(checked)})
-                low.setEnabled(not checked)
-                high.setEnabled(not checked)
-            auto.toggled.connect(_on_auto)
-            for control in (auto, low, high):
-                controls.addWidget(control)
-            self._axis_syncers.append((auto, low, high, auto_trait,
-                                       low_trait, high_trait))
-
-        _axis_editors("X", "x_auto", "x_min", "x_max")
-        _axis_editors("Y", "y_auto", "y_min", "y_max")
-
-        self._dpi_combo = QComboBox(widget)
-        for dpi in (150, 300, 600):
-            self._dpi_combo.addItem(f"{dpi} dpi", dpi)
-        self._dpi_combo.setCurrentIndex(
-            (150, 300, 600).index(
-                roi_analysis_model.session.figure.export_dpi))
-        self._dpi_combo.currentIndexChanged.connect(
-            lambda index: roi_analysis_model.session.figure.trait_set(
-                export_dpi=(150, 300, 600)[index]))
-        controls.addWidget(self._dpi_combo)
-        self._format_combo = QComboBox(widget)
-        self._format_combo.addItems(["png", "svg", "pdf", "tiff"])
-        self._format_combo.setCurrentText(
-            roi_analysis_model.session.figure.export_format)
-        self._format_combo.currentTextChanged.connect(
-            lambda value: roi_analysis_model.session.figure.trait_set(
-                export_format=value))
-        controls.addWidget(self._format_combo)
-        save_button = QPushButton("Save plot…", widget)
-        save_button.clicked.connect(
-            lambda: _save_figure(self.canvas))
-        controls.addWidget(save_button)
-
-        controls.addStretch()
-        layout.addLayout(controls)
-        roi_analysis_model.observe(self._on_plot_stat_changed,
-                                   "session:plot_stat")
-        roi_analysis_model.observe(self._sync_controls, "session")
-
+        self._controls_ui = self._build_controls(widget)
+        layout.addWidget(self._controls_ui.control)
         splitter = QSplitter(Qt.Orientation.Vertical, widget)
         splitter.addWidget(self.canvas)
         self.table = RoiStatsTable(roi_analysis_model, splitter)
@@ -261,30 +229,38 @@ class FluorescenceRoiPlotDockPane(DockPane):
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter, 1)
         self._progress_label = QLabel("", widget)
+        layout.addWidget(self._progress_label)
+        roi_analysis_model.observe(self._on_session_swapped, "session")
+        roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
         roi_analysis_model.observe(self._on_progress_text_changed,
                                    "progress_text")
-        layout.addWidget(self._progress_label)
-        return widget
+        # The pane may be resized below the content's minimum; past that
+        # point scrollbars take over instead of the dock pane locking.
+        scroll = QScrollArea(parent)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(widget)
+        return scroll
 
-    def _on_plot_stat_changed(self, event):
-        self._stat_combo.setCurrentIndex(
-            PLOT_STATS.index(event.object.plot_stat))
+    def _build_controls(self, parent):
+        session = roi_analysis_model.session
+        return _plot_controls_view.ui(
+            context={"session": session, "figure": session.figure,
+                     "model": roi_analysis_model},
+            kind="subpanel", parent=parent)
+
+    def _on_session_swapped(self, event):
+        old_ui = self._controls_ui
+        holder = old_ui.control.parentWidget()
+        self._controls_ui = self._build_controls(holder)
+        holder.layout().replaceWidget(old_ui.control,
+                                      self._controls_ui.control)
+        old_ui.dispose()
+
+    def _on_save_plot(self, event):
+        _save_figure(self.canvas)
 
     def _on_progress_text_changed(self, event):
         self._progress_label.setText(event.new)
-
-    def _sync_controls(self, event):
-        figure_settings = event.new.figure
-        self._stat_combo.setCurrentIndex(
-            PLOT_STATS.index(event.new.plot_stat))
-        self._dpi_combo.setCurrentIndex(
-            (150, 300, 600).index(figure_settings.export_dpi))
-        self._format_combo.setCurrentText(figure_settings.export_format)
-        for auto, low, high, auto_trait, low_trait, high_trait \
-                in self._axis_syncers:
-            auto.setChecked(getattr(figure_settings, auto_trait))
-            low.setValue(getattr(figure_settings, low_trait))
-            high.setValue(getattr(figure_settings, high_trait))
 
     def destroy(self):
         # Everything below was registered in create_contents, which a
@@ -293,10 +269,11 @@ class FluorescenceRoiPlotDockPane(DockPane):
         if self.control is not None:
             self.canvas.detach()
             self.table.detach()
-            roi_analysis_model.observe(self._on_plot_stat_changed,
-                                       "session:plot_stat", remove=True)
-            roi_analysis_model.observe(self._sync_controls, "session",
+            self._controls_ui.dispose()
+            roi_analysis_model.observe(self._on_session_swapped, "session",
                                        remove=True)
+            roi_analysis_model.observe(self._on_save_plot,
+                                       "save_plot_button", remove=True)
             roi_analysis_model.observe(self._on_progress_text_changed,
                                        "progress_text", remove=True)
         super().destroy()

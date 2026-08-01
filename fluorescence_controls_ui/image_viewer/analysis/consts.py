@@ -22,6 +22,11 @@ ANALYSIS_RESULT_DRAIN_INTERVAL_MS = 200
 #: plot redraw — a drain burst paints once.
 ROI_PLOT_COALESCE_MS = 100
 
+#: Below this the plot canvas stops shrinking and the plot pane's
+#: scroll area takes over with scrollbars instead.
+ROI_PLOT_CANVAS_MIN_WIDTH = 300
+ROI_PLOT_CANVAS_MIN_HEIGHT = 200
+
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0
 
