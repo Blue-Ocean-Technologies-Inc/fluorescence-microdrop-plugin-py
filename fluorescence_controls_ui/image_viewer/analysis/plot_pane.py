@@ -9,6 +9,7 @@ os.environ.setdefault("QT_API", "pyside6")
 import matplotlib
 matplotlib.use("QtAgg")
 
+import numpy as np
 from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg, NavigationToolbar2QT,
 )
@@ -30,6 +31,7 @@ from .consts import (
     ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
     ROI_PLOT_COALESCE_MS,
 )
+from .curve_fit import fit_series, second_derivative_extrema
 from .plot_series import derive_series
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
@@ -96,7 +98,14 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "filtered_paths.items, "
                "session:figure:x_auto, session:figure:x_min, "
                "session:figure:x_max, session:figure:y_auto, "
-               "session:figure:y_min, session:figure:y_max")
+               "session:figure:y_min, session:figure:y_max, "
+               "session:figure:fit_method, session:figure:show_legend, "
+               "session:figure:show_fit_equations, "
+               "session:figure:show_second_derivative_max, "
+               "session:figure:show_second_derivative_min, "
+               "session:figure:second_derivative_vline, "
+               "session:figure:second_derivative_hline, "
+               "session:figure:second_derivative_coords")
 
 
 class RoiPlotCanvas(FigureCanvasQTAgg):
@@ -116,6 +125,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.grid(True, alpha=0.3)
         self._figure.tight_layout()
         self._lines = {}
+        self._fit_artists = []
         self._redraw_pending = False
         self._detached = False
         model.observe(self._on_plot_state_changed, _PLOT_STATE)
@@ -167,11 +177,16 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none"
                                 else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
-        if self._lines:
+        for artist in self._fit_artists:
+            artist.remove()
+        self._fit_artists = []
+        figure_settings = self._model.session.figure
+        if figure_settings.fit_method != "none":
+            self._draw_fits(series, figure_settings)
+        if self._lines and figure_settings.show_legend:
             self._axes.legend(loc="best", fontsize="small")
         elif self._axes.get_legend() is not None:
             self._axes.get_legend().remove()
-        figure_settings = self._model.session.figure
         self._axes.relim()
         self._axes.autoscale_view()
         if not figure_settings.x_auto:
@@ -181,6 +196,71 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._axes.set_ylim(figure_settings.y_min,
                                 figure_settings.y_max)
         self.draw_idle()
+
+    def _draw_fits(self, series, figure_settings):
+        """Dashed fit overlay + optional corner equation lines per ROI;
+        series that cannot be fitted are silently skipped (the popup
+        table is where failures are reported)."""
+        equation_lines = []
+        for roi_id, (name, elapsed, values) in series.items():
+            roi = self._model.session.roi_by_id(roi_id)
+            if roi is None:
+                continue
+            fit = fit_series(elapsed, values, figure_settings.fit_method)
+            if fit is None:
+                continue
+            # fit_series requires >= 2 finite points, so never empty.
+            finite_t = np.asarray(elapsed, dtype=float)[
+                np.isfinite(np.asarray(values, dtype=float))]
+            dense = np.linspace(finite_t.min(), finite_t.max(), 200)
+            (overlay,) = self._axes.plot(
+                dense, fit.predict(dense), linestyle="--", alpha=0.8,
+                color=roi.style.color, label="_nolegend_")
+            self._fit_artists.append(overlay)
+            equation_lines.append(
+                (roi.style.color,
+                 f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"))
+            self._draw_extrema(fit, finite_t.min(), finite_t.max(),
+                               roi, figure_settings)
+        if figure_settings.show_fit_equations:
+            for index, (color, text) in enumerate(equation_lines):
+                self._fit_artists.append(self._axes.text(
+                    0.02, 0.97 - 0.06 * index, text,
+                    transform=self._axes.transAxes, va="top",
+                    fontsize="x-small", color=color))
+
+    def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings):
+        """Point (plus optional v/h line and coordinates) on the fitted
+        curve where its second derivative peaks/troughs."""
+        wanted = [key for key, enabled in
+                  (("max", figure_settings.show_second_derivative_max),
+                   ("min", figure_settings.show_second_derivative_min))
+                  if enabled]
+        if not wanted:
+            return
+        extrema = second_derivative_extrema(fit, t_start, t_end)
+        for key in wanted:
+            if key not in extrema:
+                continue
+            t_star, y_star = extrema[key]
+            (point,) = self._axes.plot(
+                [t_star], [y_star], marker="o", linestyle="",
+                color=roi.style.color, markeredgecolor="black",
+                label="_nolegend_")
+            self._fit_artists.append(point)
+            if figure_settings.second_derivative_vline:
+                self._fit_artists.append(self._axes.axvline(
+                    t_star, color=roi.style.color, linestyle=":",
+                    alpha=0.6))
+            if figure_settings.second_derivative_hline:
+                self._fit_artists.append(self._axes.axhline(
+                    y_star, color=roi.style.color, linestyle=":",
+                    alpha=0.6))
+            if figure_settings.second_derivative_coords:
+                self._fit_artists.append(self._axes.annotate(
+                    f"({t_star:.3g}, {y_star:.3g})", (t_star, y_star),
+                    textcoords="offset points", xytext=(6, 6),
+                    fontsize="x-small", color=roi.style.color))
 
 
 def _save_figure(canvas):
