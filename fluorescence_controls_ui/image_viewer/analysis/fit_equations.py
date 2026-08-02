@@ -2,7 +2,7 @@
 equation for the session's current fit method over the filtered
 images. Rows are recomputed when the popup is opened or its button
 re-clicked — not live."""
-from traits.api import HasTraits, List, Str
+from traits.api import Float, HasTraits, List, Str
 from traitsui.api import Item, TabularEditor, View
 from traitsui.tabular_adapter import TabularAdapter
 
@@ -23,6 +23,14 @@ class _FitEquationAdapter(TabularAdapter):
     columns = [("ROI", "roi_name"), ("Method", "method_label"),
                ("Equation", "equation"), ("R²", "r_squared_text")]
     can_edit = False
+    #: Proportional widths (fractions of the viewport): the equation
+    #: column takes the stretch as the window resizes; R² stays compact
+    #: instead of absorbing the spare width as the (stretched) last
+    #: section.
+    roi_name_width = Float(0.16)
+    method_label_width = Float(0.14)
+    equation_width = Float(0.55)
+    r_squared_text_width = Float(0.15)
 
 
 class FitEquationsTable(HasTraits):
@@ -33,7 +41,8 @@ class FitEquationsTable(HasTraits):
     traits_view = View(
         Item("rows", show_label=False,
              editor=TabularEditor(adapter=_FitEquationAdapter(),
-                                  editable=False)),
+                                  editable=False,
+                                  stretch_last_section=False)),
         title="Fit equations", width=560, height=280, resizable=True)
 
 
