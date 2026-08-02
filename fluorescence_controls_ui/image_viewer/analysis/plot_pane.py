@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 from traits.api import Any, Instance
 from traitsui.api import EnumEditor, HGroup, Item, UItem, VGroup, View
 
-from microdrop_style.icons.icons import ICON_SAVE
+from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
 from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
 
 from ...consts import PKG
@@ -31,7 +31,10 @@ from .consts import (
     ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
     ROI_PLOT_COALESCE_MS,
 )
-from .curve_fit import fit_series, second_derivative_extrema
+from .curve_fit import (
+    FIT_LABELS, FIT_METHODS, fit_series, second_derivative_extrema,
+)
+from .fit_equations import FitEquationsTable, fit_equation_rows
 from .plot_series import derive_series
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
@@ -81,6 +84,33 @@ _plot_controls_view = View(
                 glyph=ICON_SAVE,
                 tooltip="Save the plot to the experiment's analysis "
                         "folder at the chosen format and DPI")),
+        ),
+        HGroup(
+            Item("figure.fit_method", label="Fit",
+                 editor=EnumEditor(values=list(FIT_METHODS),
+                                   format_func=FIT_LABELS.get)),
+            Item("figure.show_legend", label="Legend"),
+            Item("figure.show_fit_equations", label="Equations on figure",
+                 enabled_when="figure.fit_method != 'none'"),
+            UItem("model.fit_equations_button", editor=IconButtonEditor(
+                glyph=ICON_FUNCTION,
+                tooltip="Show the fitted equation for every ROI in a "
+                        "table")),
+        ),
+        HGroup(
+            Item("figure.show_second_derivative_max", label="d² max",
+                 enabled_when="figure.fit_method != 'none'"),
+            Item("figure.show_second_derivative_min", label="d² min",
+                 enabled_when="figure.fit_method != 'none'"),
+            Item("figure.second_derivative_vline", label="V-line",
+                 enabled_when="figure.show_second_derivative_max or "
+                              "figure.show_second_derivative_min"),
+            Item("figure.second_derivative_hline", label="H-line",
+                 enabled_when="figure.show_second_derivative_max or "
+                              "figure.show_second_derivative_min"),
+            Item("figure.second_derivative_coords", label="Coords",
+                 enabled_when="figure.show_second_derivative_max or "
+                              "figure.show_second_derivative_min"),
         ),
     ),
 )
@@ -290,6 +320,7 @@ class FluorescenceRoiPlotDockPane(DockPane):
     canvas = Instance(RoiPlotCanvas)
     table = Instance(RoiStatsTable)
     _controls_ui = Any()
+    _equations_ui = Any()
     _progress_label = Any()
 
     def create_contents(self, parent):
@@ -312,6 +343,8 @@ class FluorescenceRoiPlotDockPane(DockPane):
         layout.addWidget(self._progress_label)
         roi_analysis_model.observe(self._on_session_swapped, "session")
         roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
+        roi_analysis_model.observe(self._on_fit_equations,
+                                   "fit_equations_button")
         roi_analysis_model.observe(self._on_progress_text_changed,
                                    "progress_text")
         # The pane may be resized below the content's minimum; past that
@@ -339,6 +372,18 @@ class FluorescenceRoiPlotDockPane(DockPane):
     def _on_save_plot(self, event):
         _save_figure(self.canvas)
 
+    def _on_fit_equations(self, event):
+        rows = fit_equation_rows(roi_analysis_model.session,
+                                 roi_analysis_model.filtered_paths)
+        if (self._equations_ui is not None
+                and self._equations_ui.control is not None):
+            self._equations_ui.info.object.rows = rows
+            self._equations_ui.control.raise_()
+            self._equations_ui.control.activateWindow()
+            return
+        self._equations_ui = FitEquationsTable(rows=rows).edit_traits(
+            kind="live")
+
     def _on_progress_text_changed(self, event):
         self._progress_label.setText(event.new)
 
@@ -350,10 +395,15 @@ class FluorescenceRoiPlotDockPane(DockPane):
             self.canvas.detach()
             self.table.detach()
             self._controls_ui.dispose()
+            if (self._equations_ui is not None
+                    and self._equations_ui.control is not None):
+                self._equations_ui.dispose()
             roi_analysis_model.observe(self._on_session_swapped, "session",
                                        remove=True)
             roi_analysis_model.observe(self._on_save_plot,
                                        "save_plot_button", remove=True)
+            roi_analysis_model.observe(self._on_fit_equations,
+                                       "fit_equations_button", remove=True)
             roi_analysis_model.observe(self._on_progress_text_changed,
                                        "progress_text", remove=True)
         super().destroy()

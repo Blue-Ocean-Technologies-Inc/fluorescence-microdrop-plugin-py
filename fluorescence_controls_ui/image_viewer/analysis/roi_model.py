@@ -223,6 +223,8 @@ class RoiAnalysisModel(HasTraits):
     #: Render the current plot to an image file at the session's export
     #: settings (handled by the plot dock pane, which owns the canvas).
     save_plot_button = Button()
+    #: Open the non-modal table of fitted equations per ROI.
+    fit_equations_button = Button()
 
     #: View -> controller channels fired by the canvas ROI layer.
     canvas_roi_created = Event()   # (kind, geometry)
