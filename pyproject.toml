@@ -43,6 +43,7 @@ hatchling = "*"
 
 [tool.pixi.package.run-dependencies]
 mpremote = ">=1.20"
+scipy = "*"
 
 [tool.commitizen]
 name = "cz_conventional_commits"
