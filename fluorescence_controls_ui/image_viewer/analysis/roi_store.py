@@ -18,7 +18,12 @@ logger = get_logger(__name__)
 #: Persisted FigureSettings fields (also the tolerated-missing set on
 #: load, so older configs upgrade with defaults).
 _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
-                  "y_max", "export_format", "export_dpi")
+                  "y_max", "export_format", "export_dpi",
+                  "fit_method", "show_legend", "show_fit_equations",
+                  "show_second_derivative_max",
+                  "show_second_derivative_min",
+                  "second_derivative_vline", "second_derivative_hline",
+                  "second_derivative_coords")
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size")
 
 

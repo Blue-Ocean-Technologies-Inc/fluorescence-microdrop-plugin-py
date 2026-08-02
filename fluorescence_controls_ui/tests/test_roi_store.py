@@ -37,6 +37,19 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert back.style.marker == "o" and back.style.marker_size == 7.0
 
 
+def test_figure_fit_settings_round_trip(tmp_path):
+    session = AnalysisSession()
+    session.figure.fit_method = "exponential"
+    session.figure.show_legend = False
+    session.figure.show_second_derivative_max = True
+    save_session(tmp_path, session)
+
+    loaded = load_session(tmp_path)
+    assert loaded.figure.fit_method == "exponential"
+    assert loaded.figure.show_legend is False
+    assert loaded.figure.show_second_derivative_max is True
+
+
 def test_load_session_accepts_v1_bare_list(tmp_path):
     analysis = tmp_path / "analysis"
     analysis.mkdir()

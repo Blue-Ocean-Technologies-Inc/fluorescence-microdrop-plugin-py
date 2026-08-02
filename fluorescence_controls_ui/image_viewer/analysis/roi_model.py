@@ -12,6 +12,7 @@ from traits.api import (
 )
 
 from ..discovery import capture_timestamp
+from .curve_fit import FIT_METHODS
 
 #: Matches the "ROI N" names next_roi_name() itself produces, to find
 #: the next free number.
@@ -44,6 +45,17 @@ class FigureSettings(HasTraits):
     y_max = Float(1.0)
     export_format = Enum("png", "svg", "pdf", "tiff")
     export_dpi = Enum(300, 150, 600)
+    fit_method = Enum(*FIT_METHODS)
+    show_legend = Bool(True)
+    #: Corner box with each ROI's fitted equation.
+    show_fit_equations = Bool(False)
+    #: Mark where the fitted curve's second derivative peaks/troughs.
+    show_second_derivative_max = Bool(False)
+    show_second_derivative_min = Bool(False)
+    #: Marker dressing for the enabled extrema.
+    second_derivative_vline = Bool(True)
+    second_derivative_hline = Bool(False)
+    second_derivative_coords = Bool(True)
 
 
 class Roi(HasTraits):
