@@ -1,8 +1,10 @@
 """Dock pane plotting the ROI intensity series: the chosen stat vs
-elapsed time, one line per ROI. A pure observer of the shared analysis
-model — it derives its own series from the session (stats store +
-filters + plot stat) and coalesces notification bursts into single
-redraws. Lines gap where an image failed or isn't computed."""
+elapsed time, one line per ROI — or, per the View dropdown, the fits'
+second-derivative curves or the per-ROI time-of-fastest-change bars.
+A pure observer of the shared analysis model — it derives its own
+series from the session (stats store + filters + plot stat) and
+coalesces notification bursts into single redraws. Lines gap where an
+image failed or isn't computed."""
 import os
 
 os.environ.setdefault("QT_API", "pyside6")
@@ -14,6 +16,7 @@ from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg, NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
+from matplotlib.ticker import AutoLocator, ScalarFormatter
 from pyface.api import FileDialog, OK
 from pyface.tasks.api import DockPane
 from PySide6.QtCore import Qt, QTimer
@@ -29,10 +32,11 @@ from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
 from ...consts import PKG
 from .consts import (
     ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
-    ROI_PLOT_COALESCE_MS,
+    ROI_PLOT_COALESCE_MS, VIEW_MODE_LABELS, VIEW_MODES,
 )
 from .curve_fit import (
-    FIT_LABELS, FIT_METHODS, fit_series, second_derivative_extrema,
+    FIT_LABELS, FIT_METHODS, fastest_change_time, fit_series,
+    second_derivative_extrema,
 )
 from .fit_equations import FitEquationsTable, fit_equation_rows
 from .plot_series import derive_series
@@ -63,6 +67,9 @@ LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":",
 _plot_controls_view = View(
     VGroup(
         HGroup(
+            Item("figure.view_mode", label="View",
+                 editor=EnumEditor(values=list(VIEW_MODES),
+                                   format_func=VIEW_MODE_LABELS.get)),
             Item("session.plot_stat", label="Plot",
                  editor=EnumEditor(values=list(PLOT_STATS),
                                    format_func=PLOT_STAT_LABELS.get)),
@@ -135,11 +142,13 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:show_second_derivative_min, "
                "session:figure:second_derivative_vline, "
                "session:figure:second_derivative_hline, "
-               "session:figure:second_derivative_coords")
+               "session:figure:second_derivative_coords, "
+               "session:figure:view_mode")
 
 
 class RoiPlotCanvas(FigureCanvasQTAgg):
-    """Intensity-vs-time chart derived from the analysis model."""
+    """Chart derived from the analysis model, rendering whichever view
+    the session's figure settings select."""
 
     def __init__(self, model):
         # No layout engine: one would re-run on every draw and silently
@@ -187,10 +196,39 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             return
         if not self.isVisible():
             return                # showEvent reschedules
-        self._axes.set_ylabel(
-            PLOT_STAT_LABELS[self._model.session.plot_stat])
         series = derive_series(self._model.session,
                                self._model.filtered_paths)
+        figure_settings = self._model.session.figure
+        for artist in self._fit_artists:
+            artist.remove()
+        self._fit_artists = []
+        # A previous fastest-change render left categorical ticks behind.
+        self._axes.xaxis.set_major_locator(AutoLocator())
+        self._axes.xaxis.set_major_formatter(ScalarFormatter())
+        self._axes.set_xlabel("Elapsed time (s)")
+        if figure_settings.view_mode == "intensity":
+            self._refresh_intensity(series, figure_settings)
+        else:
+            for roi_id in list(self._lines):
+                self._lines.pop(roi_id).remove()
+            if figure_settings.view_mode == "second_derivative":
+                self._draw_second_derivative(series, figure_settings)
+            else:
+                self._draw_fastest_change(series, figure_settings)
+        self._axes.relim()
+        self._axes.autoscale_view()
+        if (not figure_settings.x_auto
+                and figure_settings.view_mode != "fastest_change"):
+            self._axes.set_xlim(figure_settings.x_min,
+                                figure_settings.x_max)
+        if not figure_settings.y_auto:
+            self._axes.set_ylim(figure_settings.y_min,
+                                figure_settings.y_max)
+        self.draw_idle()
+
+    def _refresh_intensity(self, series, figure_settings):
+        self._axes.set_ylabel(
+            PLOT_STAT_LABELS[self._model.session.plot_stat])
         for roi_id in list(self._lines):
             if roi_id not in series:
                 self._lines.pop(roi_id).remove()
@@ -207,25 +245,104 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none"
                                 else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
-        for artist in self._fit_artists:
-            artist.remove()
-        self._fit_artists = []
-        figure_settings = self._model.session.figure
         if figure_settings.fit_method != "none":
             self._draw_fits(series, figure_settings)
-        if self._lines and figure_settings.show_legend:
+        self._apply_legend(bool(self._lines)
+                           and figure_settings.show_legend)
+
+    def _draw_second_derivative(self, series, figure_settings):
+        """One curve per ROI: the fitted model's d²y/dt² over the ROI's
+        time span; the d² max/min checkboxes mark its extrema here."""
+        self._axes.set_ylabel("d² of fit")
+        if figure_settings.fit_method == "none":
+            self._apply_legend(False)
+            self._draw_hint("Select a fit method to view d²")
+            return
+        drew = False
+        for roi_id, (name, elapsed, values) in series.items():
+            roi = self._model.session.roi_by_id(roi_id)
+            if roi is None:
+                continue
+            fit = fit_series(elapsed, values, figure_settings.fit_method)
+            if fit is None:
+                continue
+            finite_t = np.asarray(elapsed, dtype=float)[
+                np.isfinite(np.asarray(values, dtype=float))]
+            dense = np.linspace(finite_t.min(), finite_t.max(), 200)
+            d2 = np.asarray(fit.second_derivative(dense), dtype=float)
+            if d2.shape != dense.shape:
+                d2 = np.full_like(dense, float(d2))
+            (curve,) = self._axes.plot(dense, d2, color=roi.style.color,
+                                       label=name)
+            self._fit_artists.append(curve)
+            drew = True
+            wanted = [key for key, enabled in
+                      (("max", figure_settings.show_second_derivative_max),
+                       ("min", figure_settings.show_second_derivative_min))
+                      if enabled]
+            if wanted:
+                extrema = second_derivative_extrema(
+                    fit, finite_t.min(), finite_t.max())
+                for key in wanted:
+                    if key not in extrema:
+                        continue
+                    t_star = extrema[key][0]
+                    self._draw_extremum_marker(
+                        t_star, float(fit.second_derivative(t_star)),
+                        roi, figure_settings)
+        self._apply_legend(drew and figure_settings.show_legend)
+
+    def _draw_fastest_change(self, series, figure_settings):
+        """Bar per ROI: seconds until the fitted curve changes fastest
+        (max |dy/dt| — a sigmoid's inflection point). ROIs whose fit
+        fails or whose speed is flat (linear) get no bar."""
+        self._axes.set_ylabel("Time of fastest change (s)")
+        self._axes.set_xlabel("ROI")
+        self._apply_legend(False)
+        if figure_settings.fit_method == "none":
+            self._draw_hint("Select a fit method to view fastest change")
+            return
+        labels, times, colors = [], [], []
+        for roi_id, (name, elapsed, values) in series.items():
+            roi = self._model.session.roi_by_id(roi_id)
+            if roi is None:
+                continue
+            fit = fit_series(elapsed, values, figure_settings.fit_method)
+            if fit is None:
+                continue
+            finite_t = np.asarray(elapsed, dtype=float)[
+                np.isfinite(np.asarray(values, dtype=float))]
+            t_star = fastest_change_time(fit, finite_t.min(),
+                                         finite_t.max())
+            if t_star is None:
+                continue
+            labels.append(name)
+            times.append(t_star)
+            colors.append(roi.style.color)
+        if not labels:
+            self._draw_hint("No fastest-change times "
+                            "(fits failed or rate is constant)")
+            return
+        positions = list(range(len(labels)))
+        self._fit_artists.extend(
+            self._axes.bar(positions, times, color=colors))
+        self._axes.set_xticks(positions, labels)
+        for x, t_star in zip(positions, times):
+            self._fit_artists.append(self._axes.annotate(
+                f"{t_star:.3g}", (x, t_star),
+                textcoords="offset points", xytext=(0, 4),
+                ha="center", fontsize="x-small"))
+
+    def _apply_legend(self, wanted):
+        if wanted:
             self._axes.legend(loc="best", fontsize="small")
         elif self._axes.get_legend() is not None:
             self._axes.get_legend().remove()
-        self._axes.relim()
-        self._axes.autoscale_view()
-        if not figure_settings.x_auto:
-            self._axes.set_xlim(figure_settings.x_min,
-                                figure_settings.x_max)
-        if not figure_settings.y_auto:
-            self._axes.set_ylim(figure_settings.y_min,
-                                figure_settings.y_max)
-        self.draw_idle()
+
+    def _draw_hint(self, message):
+        self._fit_artists.append(self._axes.text(
+            0.5, 0.5, message, transform=self._axes.transAxes,
+            ha="center", va="center", color="gray"))
 
     def _draw_fits(self, series, figure_settings):
         """Dashed fit overlay + optional corner equation lines per ROI;
@@ -273,24 +390,31 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if key not in extrema:
                 continue
             t_star, y_star = extrema[key]
-            (point,) = self._axes.plot(
-                [t_star], [y_star], marker="o", linestyle="",
-                color=roi.style.color, markeredgecolor="black",
-                label="_nolegend_")
-            self._fit_artists.append(point)
-            if figure_settings.second_derivative_vline:
-                self._fit_artists.append(self._axes.axvline(
-                    t_star, color=roi.style.color, linestyle=":",
-                    alpha=0.6))
-            if figure_settings.second_derivative_hline:
-                self._fit_artists.append(self._axes.axhline(
-                    y_star, color=roi.style.color, linestyle=":",
-                    alpha=0.6))
-            if figure_settings.second_derivative_coords:
-                self._fit_artists.append(self._axes.annotate(
-                    f"({t_star:.3g}, {y_star:.3g})", (t_star, y_star),
-                    textcoords="offset points", xytext=(6, 6),
-                    fontsize="x-small", color=roi.style.color))
+            self._draw_extremum_marker(t_star, y_star, roi,
+                                       figure_settings)
+
+    def _draw_extremum_marker(self, t_star, y_star, roi,
+                              figure_settings):
+        """One d²-extremum marker at (t_star, y_star) — on the fitted
+        curve in the intensity view, on the d² curve in the d² view."""
+        (point,) = self._axes.plot(
+            [t_star], [y_star], marker="o", linestyle="",
+            color=roi.style.color, markeredgecolor="black",
+            label="_nolegend_")
+        self._fit_artists.append(point)
+        if figure_settings.second_derivative_vline:
+            self._fit_artists.append(self._axes.axvline(
+                t_star, color=roi.style.color, linestyle=":",
+                alpha=0.6))
+        if figure_settings.second_derivative_hline:
+            self._fit_artists.append(self._axes.axhline(
+                y_star, color=roi.style.color, linestyle=":",
+                alpha=0.6))
+        if figure_settings.second_derivative_coords:
+            self._fit_artists.append(self._axes.annotate(
+                f"({t_star:.3g}, {y_star:.3g})", (t_star, y_star),
+                textcoords="offset points", xytext=(6, 6),
+                fontsize="x-small", color=roi.style.color))
 
 
 def _save_figure(canvas):
