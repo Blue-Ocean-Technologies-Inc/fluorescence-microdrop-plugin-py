@@ -324,7 +324,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                             "(fits failed or rate is constant)")
             return
         positions = list(range(len(labels)))
-        self._fit_artists.extend(
+        # Keep the container, not its bars: its remove() also drops the
+        # axes.containers registration the bars alone would leave behind.
+        self._fit_artists.append(
             self._axes.bar(positions, times, color=colors))
         self._axes.set_xticks(positions, labels)
         for x, t_star in zip(positions, times):
