@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
-    fit_series, second_derivative_extrema,
+    fastest_change_time, fit_series, second_derivative_extrema,
 )
 
 
@@ -75,3 +75,61 @@ def test_flat_data_linear_fit_has_r_squared_one():
     t = np.linspace(0.0, 10.0, 10)
     fit = fit_series(t, np.full_like(t, 7.0), "linear")
     assert fit.r_squared == 1.0
+
+
+def test_sigmoid_recovers_known_params():
+    t = np.arange(0.0, 200.0, 10.0)
+    y = 3000.0 / (1.0 + np.exp(-0.08 * (t - 95.0))) + 500.0
+    fit = fit_series(t, y, "sigmoid")
+    assert fit is not None
+    assert fit.r_squared > 0.999
+    assert abs(fit.params["rate"] - 0.08) < 0.008
+    assert abs(fit.params["midpoint"] - 95.0) < 2.0
+    assert abs(fit.params["amplitude"] - 3000.0) < 150.0
+    assert fit.equation.startswith("y = ")
+    assert "e^(-" in fit.equation
+
+
+def test_sigmoid_canonicalizes_negative_rate():
+    # A falling sigmoid must still report a positive rate (the
+    # (L, k, C) -> (-L, -k, L+C) identity).
+    t = np.arange(0.0, 200.0, 10.0)
+    y = 3000.0 / (1.0 + np.exp(0.08 * (t - 95.0))) + 500.0
+    fit = fit_series(t, y, "sigmoid")
+    assert fit is not None
+    assert fit.params["rate"] > 0
+    assert fit.r_squared > 0.999
+
+
+def test_first_derivative_linear_is_slope():
+    t = np.arange(0.0, 100.0, 10.0)
+    fit = fit_series(t, 5.0 * t + 600.0, "linear")
+    assert np.allclose(fit.first_derivative([0.0, 50.0]), 5.0)
+
+
+def test_first_derivative_exponential():
+    t = np.arange(0.0, 200.0, 10.0)
+    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0,
+                     "exponential")
+    # dy/dt at 0 is A*k = -150
+    assert abs(float(fit.first_derivative(0.0)) + 150.0) < 5.0
+
+
+def test_fastest_change_sigmoid_at_inflection():
+    t = np.arange(0.0, 200.0, 10.0)
+    y = 3000.0 / (1.0 + np.exp(-0.08 * (t - 95.0))) + 500.0
+    fit = fit_series(t, y, "sigmoid")
+    assert abs(fastest_change_time(fit, 0.0, 190.0) - 95.0) < 1.0
+
+
+def test_fastest_change_linear_is_suppressed():
+    t = np.arange(0.0, 100.0, 10.0)
+    fit = fit_series(t, 5.0 * t + 600.0, "linear")
+    assert fastest_change_time(fit, 0.0, 90.0) is None
+
+
+def test_fastest_change_exponential_decay_at_start():
+    t = np.arange(0.0, 200.0, 10.0)
+    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0,
+                     "exponential")
+    assert abs(fastest_change_time(fit, 0.0, 190.0)) < 1.0

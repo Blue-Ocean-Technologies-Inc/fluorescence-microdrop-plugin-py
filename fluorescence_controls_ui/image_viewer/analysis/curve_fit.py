@@ -7,18 +7,21 @@ import math
 
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.special import expit
 from traits.api import Any, Dict, Float, HasTraits, Str
 
 #: Selectable fit models, in dropdown order ("none" = fitting off).
-FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential")
+FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential",
+               "sigmoid")
 
 #: Human labels (fit dropdown + equations table).
 FIT_LABELS = {"none": "No fit", "linear": "Linear",
               "poly2": "Quadratic", "poly3": "Cubic",
-              "exponential": "Exponential"}
+              "exponential": "Exponential", "sigmoid": "Sigmoid"}
 
 #: Fewest finite points each model can be solved on.
-_MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4}
+_MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4,
+               "sigmoid": 5}
 
 
 class FitResult(HasTraits):
@@ -30,6 +33,8 @@ class FitResult(HasTraits):
     r_squared = Float()
     #: Vectorized t -> fitted y.
     predict = Any()
+    #: Vectorized t -> analytic dy/dt.
+    first_derivative = Any()
     #: Vectorized t -> analytic d²y/dt².
     second_derivative = Any()
 
@@ -60,6 +65,9 @@ def _r_squared(values, fitted):
 
 def _fit_polynomial(elapsed, values, degree):
     coeffs = np.polyfit(elapsed, values, degree)
+    d1_coeffs = np.polyder(coeffs, 1)
+    if not len(d1_coeffs):
+        d1_coeffs = np.array([0.0])
     d2_coeffs = np.polyder(coeffs, 2)
     if not len(d2_coeffs):          # degree 1: d² is identically zero
         d2_coeffs = np.array([0.0])
@@ -68,6 +76,8 @@ def _fit_polynomial(elapsed, values, degree):
                 in zip(range(degree, -1, -1), coeffs)},
         equation=_poly_equation(coeffs),
         predict=lambda t, coeffs=coeffs: np.polyval(coeffs, t),
+        first_derivative=lambda t, d1_coeffs=d1_coeffs: np.polyval(
+            d1_coeffs, np.asarray(t, dtype=float)),
         second_derivative=lambda t, d2_coeffs=d2_coeffs: np.polyval(
             d2_coeffs, np.asarray(t, dtype=float)))
 
@@ -93,8 +103,51 @@ def _fit_exponential(elapsed, values):
         params={"amplitude": amplitude, "rate": rate, "offset": offset},
         equation=f"y = {amplitude:.3g}·e^({rate:.3g}·t){_signed(offset)}",
         predict=lambda t: _exponential(t, amplitude, rate, offset),
+        first_derivative=lambda t: amplitude * rate * np.exp(
+            rate * np.asarray(t, dtype=float)),
         second_derivative=lambda t: amplitude * rate * rate * np.exp(
             rate * np.asarray(t, dtype=float)))
+
+
+def _sigmoid(t, amplitude, rate, midpoint, offset):
+    return amplitude * expit(
+        rate * (np.asarray(t, dtype=float) - midpoint)) + offset
+
+
+def _fit_sigmoid(elapsed, values):
+    t_span = float(elapsed[-1] - elapsed[0]) or 1.0
+    offset0 = float(values[0])
+    amplitude0 = float(values[-1] - values[0])
+    if abs(amplitude0) < 1e-12:
+        amplitude0 = float(np.ptp(values)) or 1.0
+    half = offset0 + amplitude0 / 2.0
+    midpoint0 = float(elapsed[int(np.argmin(np.abs(values - half)))])
+    params, _ = curve_fit(_sigmoid, elapsed, values,
+                          p0=(amplitude0, 4.0 / t_span, midpoint0,
+                              offset0),
+                          maxfev=10000)
+    amplitude, rate, midpoint, offset = (float(value)
+                                         for value in params)
+    if not all(math.isfinite(value)
+               for value in (amplitude, rate, midpoint, offset)):
+        return None
+    if rate < 0:      # canonical k>0: L·s(kx)+C == -L·s(-kx)+(L+C)
+        amplitude, rate, offset = -amplitude, -rate, offset + amplitude
+
+    def sig(t):
+        return expit(rate * (np.asarray(t, dtype=float) - midpoint))
+
+    return FitResult(
+        params={"amplitude": amplitude, "rate": rate,
+                "midpoint": midpoint, "offset": offset},
+        equation=(f"y = {amplitude:.3g}/(1+e^(-{rate:.3g}"
+                  f"·(t{_signed(-midpoint)}))){_signed(offset)}"),
+        predict=lambda t: _sigmoid(t, amplitude, rate, midpoint,
+                                   offset),
+        first_derivative=lambda t: amplitude * rate * sig(t)
+        * (1.0 - sig(t)),
+        second_derivative=lambda t: amplitude * rate * rate * sig(t)
+        * (1.0 - sig(t)) * (1.0 - 2.0 * sig(t)))
 
 
 def fit_series(elapsed, values, method):
@@ -112,6 +165,8 @@ def fit_series(elapsed, values, method):
     try:
         if method == "exponential":
             result = _fit_exponential(elapsed, values)
+        elif method == "sigmoid":
+            result = _fit_sigmoid(elapsed, values)
         else:
             result = _fit_polynomial(
                 elapsed, values,
@@ -142,3 +197,19 @@ def second_derivative_extrema(fit, t_start, t_end):
     t_min = float(grid[int(np.argmin(d2))])
     return {"max": (t_max, float(fit.predict(t_max))),
             "min": (t_min, float(fit.predict(t_min)))}
+
+
+def fastest_change_time(fit, t_start, t_end):
+    """The t in [t_start, t_end] where |dy/dt| of the fitted curve
+    peaks — for a sigmoid, its inflection point. None when the speed
+    is flat (linear fits): no meaningful "fastest" moment exists, so
+    callers draw nothing rather than an arbitrary bar."""
+    grid = np.linspace(float(t_start), float(t_end), 512)
+    speed = np.abs(np.asarray(fit.first_derivative(grid), dtype=float))
+    if speed.shape != grid.shape:   # scalar-returning closure
+        speed = np.full_like(grid, float(speed))
+    if not np.all(np.isfinite(speed)):
+        return None
+    if float(np.ptp(speed)) <= 1e-12 * max(1.0, float(np.max(speed))):
+        return None
+    return float(grid[int(np.argmax(speed))])
