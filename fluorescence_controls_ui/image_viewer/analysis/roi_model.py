@@ -12,6 +12,7 @@ from traits.api import (
 )
 
 from ..discovery import capture_timestamp
+from .consts import VIEW_MODES
 from .curve_fit import FIT_METHODS
 
 #: Matches the "ROI N" names next_roi_name() itself produces, to find
@@ -56,6 +57,8 @@ class FigureSettings(HasTraits):
     second_derivative_vline = Bool(True)
     second_derivative_hline = Bool(False)
     second_derivative_coords = Bool(True)
+    #: Which chart the plot pane renders.
+    view_mode = Enum(*VIEW_MODES)
 
 
 class Roi(HasTraits):

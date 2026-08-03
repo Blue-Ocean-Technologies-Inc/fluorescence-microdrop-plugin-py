@@ -376,6 +376,7 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:figure:second_derivative_vline, "
              "analysis_model:session:figure:second_derivative_hline, "
              "analysis_model:session:figure:second_derivative_coords, "
+             "analysis_model:session:figure:view_mode, "
              "analysis_model:session:rois:items:name, "
              "analysis_model:session:rois:items:style:color, "
              "analysis_model:session:rois:items:style:line_style, "

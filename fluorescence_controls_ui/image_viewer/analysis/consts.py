@@ -36,6 +36,13 @@ DEFAULT_ROI_COLORS = (
     "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
 )
 
+#: Plot pane view modes: the intensity chart, the fits' second-
+#: derivative curves, or the per-ROI time-of-fastest-change bars.
+VIEW_MODES = ("intensity", "second_derivative", "fastest_change")
+VIEW_MODE_LABELS = {"intensity": "Intensity",
+                    "second_derivative": "2nd derivative",
+                    "fastest_change": "Fastest change"}
+
 #: Persisted computed-stats store inside ANALYSIS_DIR_NAME.
 ROI_STATS_FILENAME = "roi_stats.json"
 
