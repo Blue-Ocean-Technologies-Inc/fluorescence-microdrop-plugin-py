@@ -10,8 +10,12 @@ Creates ``<output>/fit_demo_experiment/`` holding 20 16-bit frames
   max at the far edge, min at t=0)
 - ``linear`` : mean = 5·t + 600   (flat d² — NO extremum markers may
   appear; their absence is the correct behavior)
+- ``sigmoid``: mean = 3000/(1+e^(-0.08·(t-95))) + 500  (fluorescence
+  onset; fastest change / inflection at t=95, interior d² max/min at
+  ~78.5 / ~111.5 s — markers land mid-plot, and the fastest-change
+  view's bar should read 95)
 
-The ROIs, computed stats and figure settings (exponential fit, corner
+The ROIs, computed stats and figure settings (sigmoid fit, corner
 equations, d² max+min with v-line and coords) are pre-written through
 the app's own persistence/compute functions, so browsing to the folder
 shows the fitted plot immediately — no Calculate needed. The script
@@ -35,7 +39,7 @@ import cv2
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
-    fit_series, second_derivative_extrema,
+    fastest_change_time, fit_series, second_derivative_extrema,
 )
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
     derive_series,
@@ -69,6 +73,9 @@ DEMO_ROIS = (
     ("linear", (260.0, 60.0, 30.0),
      lambda t: 5.0 * t + 600.0,
      "y = 5·t + 600"),
+    ("sigmoid", (60.0, 170.0, 30.0),
+     lambda t: 3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0,
+     "y = 3000/(1+e^(-0.08·(t-95))) + 500"),
 )
 
 
@@ -99,7 +106,7 @@ def build_session(experiment_dir):
             geometry=list(geometry), base_anchor=0.0)
         for name, geometry, _, _ in DEMO_ROIS]
     figure_settings = session.figure
-    figure_settings.fit_method = "exponential"
+    figure_settings.fit_method = "sigmoid"
     figure_settings.show_fit_equations = True
     figure_settings.show_second_derivative_max = True
     figure_settings.show_second_derivative_min = True
@@ -135,8 +142,9 @@ def verify_and_report(experiment_dir):
         sys.exit(f"expected {len(DEMO_ROIS)} series, got {len(series)}")
     print(f"\nDemo experiment: {experiment_dir}")
     print(f"Browse to: {experiment_dir / 'captures'}\n")
-    print("Expected results (exponential fit is preselected; switch "
-          "the Fit dropdown to try the others):")
+    print("Expected results (sigmoid fit is preselected; switch the "
+          "Fit dropdown to try the others, and the View dropdown for "
+          "the d² and fastest-change charts):")
     for (name, _, _, truth), (roi_id, (_, elapsed, values)) in zip(
             DEMO_ROIS, series.items()):
         gap_count = sum(1 for value in values if math.isnan(value))
@@ -144,7 +152,8 @@ def verify_and_report(experiment_dir):
             sys.exit(f"{name}: {gap_count} NaN points — cache keys "
                      f"did not match, the plot would show gaps")
         print(f"\n  {name}  (truth: {truth})")
-        for method in ("linear", "poly2", "poly3", "exponential"):
+        for method in ("linear", "poly2", "poly3", "exponential",
+                       "sigmoid"):
             fit = fit_series(elapsed, values, method)
             if fit is None:
                 print(f"    {method:12s}: fit failed")
@@ -160,6 +169,11 @@ def verify_and_report(experiment_dir):
                          f"  d²min@({t_min:.3g}, {y_min:.3g})")
             else:
                 line += "  (flat d² -> no markers)"
+            t_fastest = fastest_change_time(
+                fit, min(elapsed), max(elapsed))
+            line += (f"  fastest@{t_fastest:.3g}s"
+                     if t_fastest is not None
+                     else "  (constant rate -> no bar)")
             print(line)
 
 
