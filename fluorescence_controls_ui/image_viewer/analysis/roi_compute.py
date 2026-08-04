@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 from .consts import OUTLINE_PERIMETER_PX, OUTLINE_STATS_PREFIX
-from .roi_geometry import box_polygon, capsule_polygon, normalize
+from .roi_geometry import normalize, outline_of
 
 #: Stats computed for every mask, in column order.
 STAT_NAMES = ("mean", "std", "median", "min", "max", "count")
@@ -40,11 +40,11 @@ def roi_masks(shape, kind, geometry, perimeter_px=OUTLINE_PERIMETER_PX):
             cv2.ellipse(outline, centre, axes, angle, 0, 360, 255,
                         perimeter_px)
     else:
-        polygon = (box_polygon(geometry) if kind == "box"
-                   else capsule_polygon(geometry))
-        points = np.round(polygon).astype(np.int32)
-        cv2.fillPoly(interior, [points], 255)
-        cv2.polylines(outline, [points], True, 255, perimeter_px)
+        polygon = outline_of(kind, geometry)
+        if len(polygon):
+            points = np.round(polygon).astype(np.int32)
+            cv2.fillPoly(interior, [points], 255)
+            cv2.polylines(outline, [points], True, 255, perimeter_px)
     return interior, outline
 
 

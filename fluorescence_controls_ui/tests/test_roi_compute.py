@@ -120,3 +120,20 @@ def test_compute_image_stats_reports_unreadable_file(tmp_path):
         "roi1": ("circle", (5.0, 5.0, 2.0))})
     assert result["error"] is not None
     assert result["stats"] == {}
+
+
+def test_contour_mask_area_matches_the_triangle():
+    interior, outline = roi_masks((200, 200), "polygon",
+                                  (20.0, 20.0, 120.0, 20.0, 20.0, 100.0))
+    expected = 0.5 * 100.0 * 80.0
+    assert abs(np.count_nonzero(interior) - expected) / expected < 0.05
+    assert 0 < np.count_nonzero(outline) < np.count_nonzero(interior)
+
+
+def test_contour_below_minimum_vertices_masks_nothing():
+    array = np.full((50, 50), 7, dtype=np.uint16)
+    interior, _outline = roi_masks((50, 50), "polygon",
+                                   (10.0, 10.0, 20.0, 20.0))
+    stats = masked_stats(array, interior)
+    assert np.count_nonzero(interior) == 0
+    assert stats["count"] == 0.0 and math.isnan(stats["mean"])

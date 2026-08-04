@@ -33,6 +33,13 @@ MIN_ROI_SIZE_PX = 3.0
 #: Rotation-grip snap (degrees) while Shift is held.
 ROTATE_SNAP_DEGREES = 15.0
 
+#: Fewest vertices a contour ROI can close on.
+MIN_POLYGON_POINTS = 3
+
+#: How near (image px) a click must land on a contour's first node to
+#: close it while drawing.
+POLYGON_CLOSE_DISTANCE_PX = 8.0
+
 #: Default per-ROI plot colors, cycled at creation (matplotlib tab10).
 DEFAULT_ROI_COLORS = (
     "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",

@@ -2,7 +2,7 @@
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_geometry import (
-    box_polygon, capsule_polygon, centre_of, normalize,
+    box_polygon, capsule_polygon, centre_of, normalize, outline_of,
 )
 
 
@@ -52,3 +52,32 @@ def test_capsule_polygon_rotation_moves_the_tip():
     turned = capsule_polygon([0.0, 0.0, 10.0, 2.0, 90.0], samples=64)
     assert flat[:, 0].max() > 11.0 and abs(flat[:, 1].max() - 2.0) < 0.01
     assert turned[:, 1].max() > 11.0 and abs(turned[:, 0].max() - 2.0) < 0.01
+
+
+def test_normalize_passes_a_contour_through():
+    kind, geometry = normalize("polygon", [0.0, 0.0, 10.0, 0.0, 0.0, 8.0])
+    assert kind == "polygon"
+    assert geometry == [0.0, 0.0, 10.0, 0.0, 0.0, 8.0]
+
+
+def test_normalize_drops_a_contours_stray_value():
+    _kind, geometry = normalize("polygon", [0.0, 0.0, 10.0, 0.0, 5.0])
+    assert geometry == [0.0, 0.0, 10.0, 0.0]
+
+
+def test_centre_of_contour_is_its_mean_vertex():
+    centre = centre_of("polygon", [0.0, 0.0, 10.0, 0.0, 5.0, 9.0])
+    assert centre == (5.0, 3.0)
+
+
+def test_outline_of_answers_for_every_polygon_shaped_kind():
+    box = outline_of("box", [0.0, 0.0, 10.0, 20.0, 0.0])
+    capsule = outline_of("capsule", [0.0, 0.0, 10.0, 2.0, 0.0])
+    contour = outline_of("polygon", [0.0, 0.0, 10.0, 0.0, 0.0, 8.0])
+    assert box.shape == (4, 2)
+    assert capsule.shape[1] == 2 and len(capsule) > 4
+    assert contour.tolist() == [[0.0, 0.0], [10.0, 0.0], [0.0, 8.0]]
+
+
+def test_outline_of_is_empty_below_the_minimum_vertices():
+    assert len(outline_of("polygon", [0.0, 0.0, 10.0, 0.0])) == 0
