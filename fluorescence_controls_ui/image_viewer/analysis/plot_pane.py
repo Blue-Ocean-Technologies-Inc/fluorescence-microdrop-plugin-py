@@ -27,7 +27,9 @@ from traits.api import Any, Instance
 from traitsui.api import EnumEditor, HGroup, Item, UItem, VGroup, View
 
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
-from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
+from microdrop_utils.traitsui_qt_helpers import (
+    IconButtonEditor, InPlaceToggleEditor,
+)
 
 from ...consts import PKG
 from .consts import (
@@ -92,38 +94,67 @@ _plot_controls_view = View(
                 tooltip="Save the plot to the experiment's analysis "
                         "folder at the chosen format and DPI")),
         ),
+        # Toggles carry their own label and show their state in colour
+        # (green on, grey off), so they take UItem — a separate Item
+        # label would repeat the button's text.
         HGroup(
             Item("figure.fit_method", label="Fit",
                  editor=EnumEditor(values=list(FIT_METHODS),
                                    format_func=FIT_LABELS.get)),
-            Item("figure.trim_poor_fit", label="Trim poor tail",
-                 tooltip="Refit on a shorter leading slice while R² is "
-                         "below 0.99, for series whose tail the model "
-                         "does not describe (a bleached plateau). The "
-                         "dropped span is shaded.",
-                 enabled_when="figure.fit_method != 'none'"),
-            Item("figure.show_legend", label="Legend"),
-            Item("figure.show_fit_equations", label="Equations on figure",
-                 enabled_when="figure.fit_method != 'none'"),
+            UItem("figure.trim_poor_fit",
+                  editor=InPlaceToggleEditor(on_label="Trim tail",
+                                             off_label="Trim tail"),
+                  tooltip="Refit on a shorter leading slice while R² is "
+                          "below 0.99, for series whose tail the model "
+                          "does not describe (a bleached plateau). The "
+                          "dropped span is shaded.",
+                  enabled_when="figure.fit_method != 'none'"),
+            UItem("figure.show_legend",
+                  editor=InPlaceToggleEditor(on_label="Legend",
+                                             off_label="Legend"),
+                  tooltip="Show the ROI legend on the figure"),
+            UItem("figure.show_fit_equations",
+                  editor=InPlaceToggleEditor(on_label="Equations",
+                                             off_label="Equations"),
+                  tooltip="Write each ROI's fitted equation into the "
+                          "figure's corner",
+                  enabled_when="figure.fit_method != 'none'"),
             UItem("model.fit_equations_button", editor=IconButtonEditor(
                 glyph=ICON_FUNCTION,
                 tooltip="Show the fitted equation for every ROI in a "
                         "table")),
         ),
         HGroup(
-            Item("figure.show_second_derivative_max", label="d² max",
-                 enabled_when="figure.fit_method != 'none'"),
-            Item("figure.show_second_derivative_min", label="d² min",
-                 enabled_when="figure.fit_method != 'none'"),
-            Item("figure.second_derivative_vline", label="V-line",
-                 enabled_when="figure.show_second_derivative_max or "
-                              "figure.show_second_derivative_min"),
-            Item("figure.second_derivative_hline", label="H-line",
-                 enabled_when="figure.show_second_derivative_max or "
-                              "figure.show_second_derivative_min"),
-            Item("figure.second_derivative_coords", label="Coords",
-                 enabled_when="figure.show_second_derivative_max or "
-                              "figure.show_second_derivative_min"),
+            UItem("figure.show_second_derivative_max",
+                  editor=InPlaceToggleEditor(on_label="d² max",
+                                             off_label="d² max"),
+                  tooltip="Mark where the fitted curve's second "
+                          "derivative peaks",
+                  enabled_when="figure.fit_method != 'none'"),
+            UItem("figure.show_second_derivative_min",
+                  editor=InPlaceToggleEditor(on_label="d² min",
+                                             off_label="d² min"),
+                  tooltip="Mark where the fitted curve's second "
+                          "derivative troughs",
+                  enabled_when="figure.fit_method != 'none'"),
+            UItem("figure.second_derivative_vline",
+                  editor=InPlaceToggleEditor(on_label="V-line",
+                                             off_label="V-line"),
+                  tooltip="Drop a vertical line through each marker",
+                  enabled_when="figure.show_second_derivative_max or "
+                               "figure.show_second_derivative_min"),
+            UItem("figure.second_derivative_hline",
+                  editor=InPlaceToggleEditor(on_label="H-line",
+                                             off_label="H-line"),
+                  tooltip="Run a horizontal line through each marker",
+                  enabled_when="figure.show_second_derivative_max or "
+                               "figure.show_second_derivative_min"),
+            UItem("figure.second_derivative_coords",
+                  editor=InPlaceToggleEditor(on_label="Coords",
+                                             off_label="Coords"),
+                  tooltip="Annotate each marker with its coordinates",
+                  enabled_when="figure.show_second_derivative_max or "
+                               "figure.show_second_derivative_min"),
         ),
     ),
 )
