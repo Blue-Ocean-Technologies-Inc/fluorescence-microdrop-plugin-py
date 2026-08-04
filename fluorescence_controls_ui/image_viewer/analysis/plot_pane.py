@@ -32,6 +32,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 from ...consts import PKG
+from ..scale_bar import area_unit
 from .consts import (
     ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
     ROI_PLOT_COALESCE_MS, VIEW_MODE_LABELS, VIEW_MODES,
@@ -54,7 +55,29 @@ PLOT_STAT_LABELS = {
     "min": "Min intensity",
     "max": "Max intensity",
     "outline_mean": "Outline ring mean",
+    "integrated": "Integrated",
+    "bg_integrated": "Integrated (bg-corrected)",
+    "per_area": "Per area",
+    "bg_per_area": "Per area (bg-corrected)",
 }
+
+#: Y-axis wording for the stats whose numbers mean nothing without
+#: their unit; every other stat uses its plain label.
+_Y_LABEL_TEMPLATES = {
+    "per_area": "Intensity per {unit}",
+    "bg_per_area": "Bg-corrected intensity per {unit}",
+}
+
+
+def y_axis_label(plot_stat, scale):
+    """The y-axis text for a stat, with the area unit spliced in where
+    the stat depends on it."""
+    template = _Y_LABEL_TEMPLATES.get(plot_stat)
+    if template is None:
+        return PLOT_STAT_LABELS[plot_stat]
+    return template.format(
+        unit=area_unit(scale.metres_per_pixel, scale.unit))
+
 
 #: matplotlib linestyle codes for RoiStyle.line_style.
 LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":",
@@ -171,6 +194,7 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:rois:items:style:marker_size, "
                "session:rois:items:style:visible, "
                "session:rois:items:style:alpha, "
+               "session:scale:metres_per_pixel, session:scale:unit, "
                "filtered_paths.items, "
                "session:figure:x_auto, session:figure:x_min, "
                "session:figure:x_max, session:figure:y_auto, "
@@ -275,8 +299,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self.draw_idle()
 
     def _refresh_intensity(self, series, figure_settings):
-        self._axes.set_ylabel(
-            PLOT_STAT_LABELS[self._model.session.plot_stat])
+        session = self._model.session
+        self._axes.set_ylabel(y_axis_label(session.plot_stat,
+                                           session.scale))
         for roi_id in list(self._lines):
             if roi_id not in series:
                 self._lines.pop(roi_id).remove()
