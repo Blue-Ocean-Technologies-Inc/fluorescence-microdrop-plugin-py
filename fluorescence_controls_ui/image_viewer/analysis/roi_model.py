@@ -47,6 +47,9 @@ class FigureSettings(HasTraits):
     export_format = Enum("png", "svg", "pdf", "tiff")
     export_dpi = Enum(300, 150, 600)
     fit_method = Enum(*FIT_METHODS)
+    #: Refit on a shorter leading slice when R² is poor, for series
+    #: whose tail the model does not describe (a bleached plateau).
+    trim_poor_fit = Bool(False)
     show_legend = Bool(True)
     #: Corner box with each ROI's fitted equation.
     show_fit_equations = Bool(False)
@@ -134,7 +137,7 @@ class AnalysisSession(HasTraits):
 
     #: Bumped after every drain absorption and after a store load — Dict
     #: item writes don't notify, so observers watch this instead.
-    stats_revision = Int(0)
+    stats_revision = Int(0) #TODO: convert to Event trait
 
     #: Which stat the plot shows.
     plot_stat = Enum(*PLOT_STATS)

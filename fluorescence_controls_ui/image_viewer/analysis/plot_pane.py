@@ -36,7 +36,7 @@ from .consts import (
 )
 from .curve_fit import (
     FIT_LABELS, FIT_METHODS, fastest_change_time, fit_series,
-    second_derivative_extrema,
+    second_derivative_extrema, trimmed_note,
 )
 from .fit_equations import FitEquationsTable, fit_equation_rows
 from .plot_series import derive_series
@@ -96,6 +96,12 @@ _plot_controls_view = View(
             Item("figure.fit_method", label="Fit",
                  editor=EnumEditor(values=list(FIT_METHODS),
                                    format_func=FIT_LABELS.get)),
+            Item("figure.trim_poor_fit", label="Trim poor tail",
+                 tooltip="Refit on a shorter leading slice while R² is "
+                         "below 0.99, for series whose tail the model "
+                         "does not describe (a bleached plateau). The "
+                         "dropped span is shaded.",
+                 enabled_when="figure.fit_method != 'none'"),
             Item("figure.show_legend", label="Legend"),
             Item("figure.show_fit_equations", label="Equations on figure",
                  enabled_when="figure.fit_method != 'none'"),
@@ -136,7 +142,9 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:x_auto, session:figure:x_min, "
                "session:figure:x_max, session:figure:y_auto, "
                "session:figure:y_min, session:figure:y_max, "
-               "session:figure:fit_method, session:figure:show_legend, "
+               "session:figure:fit_method, "
+               "session:figure:trim_poor_fit, "
+               "session:figure:show_legend, "
                "session:figure:show_fit_equations, "
                "session:figure:show_second_derivative_max, "
                "session:figure:show_second_derivative_min, "
@@ -207,14 +215,16 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.xaxis.set_major_formatter(ScalarFormatter())
         self._axes.set_xlabel("Elapsed time (s)")
         if figure_settings.view_mode == "intensity":
-            self._refresh_intensity(series, figure_settings)
+            trim_edges = self._refresh_intensity(series, figure_settings)
         else:
             for roi_id in list(self._lines):
                 self._lines.pop(roi_id).remove()
             if figure_settings.view_mode == "second_derivative":
-                self._draw_second_derivative(series, figure_settings)
+                trim_edges = self._draw_second_derivative(
+                    series, figure_settings)
             else:
-                self._draw_fastest_change(series, figure_settings)
+                trim_edges = self._draw_fastest_change(series,
+                                                       figure_settings)
         self._axes.relim()
         self._axes.autoscale_view()
         if (not figure_settings.x_auto
@@ -224,6 +234,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if not figure_settings.y_auto:
             self._axes.set_ylim(figure_settings.y_min,
                                 figure_settings.y_max)
+        # After the scaling: the band is full-height in axes fractions,
+        # so relim() would read those as data and pin the y limits.
+        self._shade_trimmed_tails(trim_edges)
         self.draw_idle()
 
     def _refresh_intensity(self, series, figure_settings):
@@ -245,10 +258,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none"
                                 else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
+        trim_edges = []
         if figure_settings.fit_method != "none":
-            self._draw_fits(series, figure_settings)
+            trim_edges = self._draw_fits(series, figure_settings)
         self._apply_legend(bool(self._lines)
                            and figure_settings.show_legend)
+        return trim_edges
 
     def _draw_second_derivative(self, series, figure_settings):
         """One curve per ROI: the fitted model's d²y/dt² over the ROI's
@@ -257,17 +272,19 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if figure_settings.fit_method == "none":
             self._apply_legend(False)
             self._draw_hint("Select a fit method to view d²")
-            return
-        drew = False
+            return []
+        drew, trim_edges = False, []
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
                 continue
-            fit = fit_series(elapsed, values, figure_settings.fit_method)
+            fit = fit_series(elapsed, values, figure_settings.fit_method,
+                             figure_settings.trim_poor_fit)
             if fit is None:
                 continue
             finite_t = np.asarray(elapsed, dtype=float)[
                 np.isfinite(np.asarray(values, dtype=float))]
+            trim_edges.append((fit.fitted_end, finite_t.max()))
             dense = np.linspace(finite_t.min(), finite_t.max(), 200)
             d2 = np.asarray(fit.second_derivative(dense), dtype=float)
             if d2.shape != dense.shape:
@@ -291,6 +308,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                         t_star, float(fit.second_derivative(t_star)),
                         roi, figure_settings)
         self._apply_legend(drew and figure_settings.show_legend)
+        return trim_edges
 
     def _draw_fastest_change(self, series, figure_settings):
         """Bar per ROI: seconds until the fitted curve changes fastest
@@ -301,13 +319,14 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._apply_legend(False)
         if figure_settings.fit_method == "none":
             self._draw_hint("Select a fit method to view fastest change")
-            return
+            return []
         labels, times, colors = [], [], []
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
                 continue
-            fit = fit_series(elapsed, values, figure_settings.fit_method)
+            fit = fit_series(elapsed, values, figure_settings.fit_method,
+                             figure_settings.trim_poor_fit)
             if fit is None:
                 continue
             finite_t = np.asarray(elapsed, dtype=float)[
@@ -322,7 +341,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if not labels:
             self._draw_hint("No fastest-change times "
                             "(fits failed or rate is constant)")
-            return
+            return []
         positions = list(range(len(labels)))
         # Keep the container, not its bars: its remove() also drops the
         # axes.containers registration the bars alone would leave behind.
@@ -334,6 +353,20 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 f"{t_star:.3g}", (x, t_star),
                 textcoords="offset points", xytext=(0, 4),
                 ha="center", fontsize="x-small"))
+        return []      # ROI names on x: no time span to shade
+
+    def _shade_trimmed_tails(self, trim_edges):
+        """Grey band over the tail the poor-fit trim kept out of at
+        least one ROI's fit, so the curves drawn across it read as the
+        extrapolation they are. ``trim_edges`` is (fitted_end,
+        series_end) per fitted ROI."""
+        dropped = [edge for edge in trim_edges if edge[0] < edge[1]]
+        if not dropped:
+            return
+        self._fit_artists.append(self._axes.axvspan(
+            min(fitted_end for fitted_end, _ in dropped),
+            max(series_end for _, series_end in dropped),
+            color="gray", alpha=0.12, zorder=0))
 
     def _apply_legend(self, wanted):
         if wanted:
@@ -349,18 +382,21 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     def _draw_fits(self, series, figure_settings):
         """Dashed fit overlay + optional corner equation lines per ROI;
         series that cannot be fitted are silently skipped (the popup
-        table is where failures are reported)."""
-        equation_lines = []
+        table is where failures are reported). Returns the (fitted_end,
+        series_end) pairs the trim shading is drawn from."""
+        equation_lines, trim_edges = [], []
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
                 continue
-            fit = fit_series(elapsed, values, figure_settings.fit_method)
+            fit = fit_series(elapsed, values, figure_settings.fit_method,
+                             figure_settings.trim_poor_fit)
             if fit is None:
                 continue
             # fit_series requires >= 2 finite points, so never empty.
             finite_t = np.asarray(elapsed, dtype=float)[
                 np.isfinite(np.asarray(values, dtype=float))]
+            trim_edges.append((fit.fitted_end, finite_t.max()))
             dense = np.linspace(finite_t.min(), finite_t.max(), 200)
             (overlay,) = self._axes.plot(
                 dense, fit.predict(dense), linestyle="--", alpha=0.8,
@@ -368,7 +404,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._fit_artists.append(overlay)
             equation_lines.append(
                 (roi.style.color,
-                 f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"))
+                 f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"
+                 f"{trimmed_note(fit, finite_t.max())}"))
             self._draw_extrema(fit, finite_t.min(), finite_t.max(),
                                roi, figure_settings)
         if figure_settings.show_fit_equations:
@@ -377,6 +414,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                     0.02, 0.97 - 0.06 * index, text,
                     transform=self._axes.transAxes, va="top",
                     fontsize="x-small", color=color))
+        return trim_edges
 
     def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings):
         """Point (plus optional v/h line and coordinates) on the fitted

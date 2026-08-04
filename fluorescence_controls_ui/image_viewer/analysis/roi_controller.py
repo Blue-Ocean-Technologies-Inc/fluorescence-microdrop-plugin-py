@@ -145,7 +145,7 @@ class RoiAnalysisController(HasTraits):
         result = confirm(
             message="Reset the calculated ROI intensities?",
             cancel=True, yes_label="Cache only",
-            no_label="Cache + drift overrides")
+            no_label="Drift also?")
         if result not in (YES, NO):
             return
         session = self.session
@@ -369,6 +369,7 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:figure:y_min, "
              "analysis_model:session:figure:y_max, "
              "analysis_model:session:figure:fit_method, "
+             "analysis_model:session:figure:trim_poor_fit, "
              "analysis_model:session:figure:show_legend, "
              "analysis_model:session:figure:show_fit_equations, "
              "analysis_model:session:figure:show_second_derivative_max, "

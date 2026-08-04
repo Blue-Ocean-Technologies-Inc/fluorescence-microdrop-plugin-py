@@ -6,7 +6,9 @@ from traits.api import Float, HasTraits, List, Str
 from traitsui.api import Item, TabularEditor, View
 from traitsui.tabular_adapter import TabularAdapter
 
-from .curve_fit import FIT_LABELS, fit_series
+import numpy as np
+
+from .curve_fit import FIT_LABELS, fit_series, trimmed_note
 from .plot_series import derive_series
 
 
@@ -54,11 +56,15 @@ def fit_equation_rows(session, filtered_paths):
     rows = []
     for roi_id, (name, elapsed, values) in derive_series(
             session, filtered_paths).items():
-        fit = fit_series(elapsed, values, method)
+        fit = fit_series(elapsed, values, method,
+                         session.figure.trim_poor_fit)
+        finite_t = np.asarray(elapsed, dtype=float)[
+            np.isfinite(np.asarray(values, dtype=float))]
         rows.append(FitEquationRow(
             roi_name=name,
             method_label=FIT_LABELS[method],
-            equation=(fit.equation if fit is not None
+            equation=(fit.equation + trimmed_note(fit, finite_t.max())
+                      if fit is not None
                       else "no fit selected" if method == "none"
                       else "fit failed"),
             r_squared_text=(f"{fit.r_squared:.4f}"
