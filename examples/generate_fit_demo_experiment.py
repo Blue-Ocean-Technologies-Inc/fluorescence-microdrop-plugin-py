@@ -2,7 +2,7 @@
 features against known ground truth.
 
 Creates ``<output>/fit_demo_experiment/`` holding 20 16-bit frames
-(10 s apart) whose three uniform disks follow known curves:
+(10 s apart) whose five uniform disks follow known curves:
 
 - ``decay``  : mean = 3000·e^(-0.05·t) + 500   (exponential; d² max at
   t=0, min at the end — both markers should appear at the span edges)
@@ -14,6 +14,11 @@ Creates ``<output>/fit_demo_experiment/`` holding 20 16-bit frames
   onset; fastest change / inflection at t=95, interior d² max/min at
   ~78.5 / ~111.5 s — markers land mid-plot, and the fastest-change
   view's bar should read 95)
+- ``bleached``: that same sigmoid times e^(-0.015·(t-120)) past t=120
+  (photobleached plateau). It exists to exercise "Trim poor tail":
+  with the box off the fit lands ~12 s early on an R² of ~0.75, with
+  it on the fit retreats to the leading points, R² clears 0.99, the
+  bar returns to ~95, and the dropped tail is shaded
 
 The ROIs, computed stats and figure settings (sigmoid fit, corner
 equations, d² max+min with v-line and coords) are pre-written through
@@ -40,6 +45,7 @@ import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
     fastest_change_time, fit_series, second_derivative_extrema,
+    trimmed_note,
 )
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
     derive_series,
@@ -76,6 +82,10 @@ DEMO_ROIS = (
     ("sigmoid", (60.0, 170.0, 30.0),
      lambda t: 3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0,
      "y = 3000/(1+e^(-0.08·(t-95))) + 500"),
+    ("bleached", (160.0, 170.0, 30.0),
+     lambda t: (3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0)
+     * math.exp(-0.015 * max(t - 120.0, 0.0)),
+     "the same sigmoid, bleaching at 1.5%/s past t=120"),
 )
 
 
@@ -107,6 +117,7 @@ def build_session(experiment_dir):
         for name, geometry, _, _ in DEMO_ROIS]
     figure_settings = session.figure
     figure_settings.fit_method = "sigmoid"
+    figure_settings.trim_poor_fit = True
     figure_settings.show_fit_equations = True
     figure_settings.show_second_derivative_max = True
     figure_settings.show_second_derivative_min = True
@@ -142,9 +153,9 @@ def verify_and_report(experiment_dir):
         sys.exit(f"expected {len(DEMO_ROIS)} series, got {len(series)}")
     print(f"\nDemo experiment: {experiment_dir}")
     print(f"Browse to: {experiment_dir / 'captures'}\n")
-    print("Expected results (sigmoid fit is preselected; switch the "
-          "Fit dropdown to try the others, and the View dropdown for "
-          "the d² and fastest-change charts):")
+    print("Expected results (sigmoid fit and 'Trim poor tail' are "
+          "preselected; switch the Fit dropdown to try the others, and "
+          "the View dropdown for the d² and fastest-change charts):")
     for (name, _, _, truth), (roi_id, (_, elapsed, values)) in zip(
             DEMO_ROIS, series.items()):
         gap_count = sum(1 for value in values if math.isnan(value))
@@ -154,11 +165,13 @@ def verify_and_report(experiment_dir):
         print(f"\n  {name}  (truth: {truth})")
         for method in ("linear", "poly2", "poly3", "exponential",
                        "sigmoid"):
-            fit = fit_series(elapsed, values, method)
+            fit = fit_series(elapsed, values, method,
+                             session.figure.trim_poor_fit)
             if fit is None:
                 print(f"    {method:12s}: fit failed")
                 continue
-            line = f"    {method:12s}: {fit.equation}  " \
+            line = f"    {method:12s}: {fit.equation}" \
+                   f"{trimmed_note(fit, max(elapsed))}  " \
                    f"R²={fit.r_squared:.4f}"
             extrema = second_derivative_extrema(
                 fit, min(elapsed), max(elapsed))
@@ -178,6 +191,8 @@ def verify_and_report(experiment_dir):
 
 
 def main():
+    # The report is full of ·, ², ≤; a cp1252 console would die on it.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(
         description="Generate the curve-fitting demo experiment.")
     parser.add_argument(
