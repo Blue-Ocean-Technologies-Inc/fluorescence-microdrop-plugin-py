@@ -419,7 +419,12 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:rois:items:style:marker, "
              "analysis_model:session:rois:items:style:marker_size, "
              "analysis_model:session:rois:items:style:visible, "
-             "analysis_model:session:rois:items:style:alpha")
+             "analysis_model:session:rois:items:style:alpha, "
+             # show_bar is written by _on_show_scale_bar instead, so a
+             # toggle does not save the config twice.
+             "analysis_model:session:scale:metres_per_pixel, "
+             "analysis_model:session:scale:value, "
+             "analysis_model:session:scale:unit")
     def _on_plot_settings_changed(self, event):
         self._save_config()
 

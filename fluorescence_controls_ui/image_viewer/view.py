@@ -2,11 +2,12 @@
 and the image canvas editor (zoom/pan QGraphicsView rendering the model's
 ``array`` through the display window, reporting the hovered pixel back).
 """
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QSizePolicy,
 )
+from traits.api import Enum, Float, HasTraits
 from traitsui.api import (
     BasicEditorFactory, HGroup, HSplit, Item, Label, RangeEditor, UItem,
     VGroup, View,
@@ -27,6 +28,28 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ..cameras.asi_thread import frame_to_qimage
 from .analysis.roi_canvas_layer import RoiCanvasLayer
 from .display import stretch_to_8bit
+from .scale_bar import (
+    DEFAULT_UNIT, UNITS, metres_per_pixel, nice_scale,
+)
+from .scale_layer import ScaleCanvasLayer
+
+#: Inset of the scale bar from the viewport's bottom-left corner.
+SCALE_BAR_MARGIN_PX = 12
+
+
+class ScaleEntry(HasTraits):
+    """Modal form asking what the drawn line measures. The dialogs
+    wrapper covers message dialogs only, so a two-field form is a
+    plain TraitsUI livemodal view."""
+
+    value = Float(1.0)
+    unit = Enum(DEFAULT_UNIT, UNITS)
+
+    traits_view = View(
+        Item("value", label="Length"),
+        Item("unit", label="Units"),
+        title="Set image scale", buttons=["OK", "Cancel"],
+        kind="livemodal", width=260)
 
 
 class _ImageView(QGraphicsView):
@@ -40,6 +63,8 @@ class _ImageView(QGraphicsView):
         self._on_hover = on_hover
         self._roi_layer = roi_layer
         self._scale_layer = scale_layer
+        self._metres_per_pixel = 0.0
+        self._show_scale_bar = True
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
@@ -108,6 +133,42 @@ class _ImageView(QGraphicsView):
         if self._auto_fit:
             self.fit()
 
+    def set_scale(self, metres_per_pixel_value, show_bar):
+        self._metres_per_pixel = metres_per_pixel_value
+        self._show_scale_bar = show_bar
+        self.viewport().update()
+
+    def drawForeground(self, painter, rect):
+        """Paint the scale bar as a HUD: reset to viewport pixels, then
+        ask nice_scale what a bar of about SCALE_BAR_TARGET_PX should
+        read at the current zoom."""
+        super().drawForeground(painter, rect)
+        if not self._show_scale_bar or self._metres_per_pixel <= 0:
+            return
+        zoom = self.transform().m11()
+        if zoom <= 0:
+            return
+        scale = nice_scale(self._metres_per_pixel / zoom)
+        if scale is None:
+            return
+        bar_px, label = scale
+        painter.save()
+        painter.resetTransform()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        viewport = self.viewport().rect()
+        left = viewport.left() + SCALE_BAR_MARGIN_PX
+        bottom = viewport.bottom() - SCALE_BAR_MARGIN_PX
+        painter.fillRect(QRectF(left - 6, bottom - 26, bar_px + 12, 32),
+                         QColor(0, 0, 0, 110))
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.drawLine(left, bottom, int(left + bar_px), bottom)
+        painter.drawLine(left, bottom - 5, left, bottom)
+        painter.drawLine(int(left + bar_px), bottom - 5,
+                         int(left + bar_px), bottom)
+        painter.drawText(QRectF(left, bottom - 24, bar_px, 18),
+                         Qt.AlignmentFlag.AlignCenter, label)
+        painter.restore()
+
     def fit(self):
         if self.scene() is not None and not self.scene().sceneRect().isEmpty():
             self._auto_fit = True
@@ -138,8 +199,10 @@ class _ImageCanvasEditor(QtEditor):
             analysis.trait_set(canvas_roi_edited=(roi_id, geometry)))
         self._roi_layer.on_roi_selected = (
             lambda roi_id: analysis.trait_set(selected_roi_id=roi_id))
+        self._scale_layer = ScaleCanvasLayer(self._scene)
+        self._scale_layer.on_line_drawn = self._on_scale_line_drawn
         self.control = _ImageView(self._scene, self._on_hover,
-                                  self._roi_layer)
+                                  self._roi_layer, self._scale_layer)
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max")
         self.object.observe(self._on_fit_request, "fit_request")
@@ -150,6 +213,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
             "roi_analysis:session:rois:items:name, "
+            "roi_analysis:session:scale:metres_per_pixel, "
+            "roi_analysis:session:scale:show_bar, "
             "roi_analysis:selected_roi_id")
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode")
@@ -166,6 +231,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois:items:geometry, "
             "roi_analysis:session:rois:items:overrides.items, "
             "roi_analysis:session:rois:items:name, "
+            "roi_analysis:session:scale:metres_per_pixel, "
+            "roi_analysis:session:scale:show_bar, "
             "roi_analysis:selected_roi_id",
             remove=True)
         self.object.observe(self._on_interaction_mode_changed,
@@ -195,10 +262,37 @@ class _ImageCanvasEditor(QtEditor):
         self._roi_layer.sync(
             model.roi_analysis.session.effective_for(model.current_path),
             model.roi_analysis.selected_roi_id)
+        self._push_scale()
+
+    def _push_scale(self):
+        """One path for a session swap, a fresh calibration and the
+        show/hide toggle."""
+        scale = self.object.roi_analysis.session.scale
+        self.control.set_scale(scale.metres_per_pixel, scale.show_bar)
+
+    def _on_scale_line_drawn(self, length_px):
+        """Ask what the line measures, store the calibration on the
+        session, and remember it as the seed for the next experiment."""
+        analysis = self.object.roi_analysis
+        scale = analysis.session.scale
+        entry = ScaleEntry(value=scale.value or 1.0, unit=scale.unit)
+        calibration = None
+        if entry.edit_traits().result:
+            calibration = metres_per_pixel(length_px, entry.value,
+                                           entry.unit)
+        if calibration is not None:
+            scale.trait_set(metres_per_pixel=calibration,
+                            value=entry.value, unit=entry.unit)
+            preferences = self.object.preferences
+            preferences.fluorescence_last_scale_metres_per_px = calibration
+            preferences.fluorescence_last_scale_unit = entry.unit
+            self._push_scale()
+        analysis.interaction_mode = "pan"
 
     def _on_interaction_mode_changed(self, event):
         mode = event.new
         self._roi_layer.set_mode(mode)
+        self._scale_layer.set_mode(mode)
         self.control.setDragMode(
             self.control.DragMode.ScrollHandDrag if mode == "pan"
             else self.control.DragMode.NoDrag)
