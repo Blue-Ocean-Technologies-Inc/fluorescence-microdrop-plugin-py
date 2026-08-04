@@ -25,7 +25,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 from ..cameras.asi_thread import frame_to_qimage
-from .analysis.roi_items import RoiCanvasLayer
+from .analysis.roi_canvas_layer import RoiCanvasLayer
 from .display import stretch_to_8bit
 
 
