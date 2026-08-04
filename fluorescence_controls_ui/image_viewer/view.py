@@ -14,10 +14,11 @@ from traitsui.api import (
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.icons.icons import (
-    ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CIRCLE, ICON_DELETE,
-    ICON_DELETE_SWEEP, ICON_EDIT, ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT,
-    ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH,
-    ICON_RESET_WRENCH, ICON_SAVE, ICON_SHOW_CHART,
+    ICON_CAPSULE, ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CIRCLE,
+    ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT, ICON_FOLDER_OPEN,
+    ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS,
+    ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH, ICON_SAVE,
+    ICON_SHOW_CHART,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
@@ -303,19 +304,27 @@ contrast_group = VGroup(
 # the plot pane's table; batch progress shares the status row under the
 # image.
 analysis_toolbar = VGroup(
-    UItem("object.roi_analysis.draw_circle_button",
+    UItem("object.roi_analysis.draw_ellipse_button",
           editor=IconButtonEditor(
               glyph=ICON_CIRCLE,
-              tooltip="Draw a circular ROI (click-drag on the image)")),
+              tooltip="Draw an elliptical ROI (click-drag from its "
+                      "centre; the grip makes it an ellipse)")),
     UItem("object.roi_analysis.draw_box_button",
           editor=IconButtonEditor(
               glyph=ICON_RECTANGLE,
               tooltip="Draw a rectangular ROI (click-drag on the "
                       "image)")),
+    UItem("object.roi_analysis.draw_capsule_button",
+          editor=IconButtonEditor(
+              glyph=ICON_CAPSULE,
+              tooltip="Draw a capsule ROI (click-drag its axis, then "
+                      "use the grip for its radius)")),
     UItem("object.roi_analysis.edit_mode",
           editor=IconToggleEditor(
               on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
-              tooltip="Edit ROIs: drag to move, grip to resize, "
+              tooltip="Edit ROIs: drag to move, bottom-right grip to "
+                      "resize (Shift keeps an ellipse circular), "
+                      "top-left grip to rotate (Shift snaps to 15°), "
                       "click to select. Editing on a later image "
                       "adds a drift override from there on")),
     UItem("object.roi_analysis.delete_roi_button",
