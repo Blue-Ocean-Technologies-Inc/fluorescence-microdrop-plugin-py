@@ -8,7 +8,7 @@ from pathlib import Path
 
 from traits.api import (
     Bool, Button, Dict, Enum, Event, Float, HasTraits, Instance, Int, List,
-    Str,
+    Range, Str,
 )
 
 from ..discovery import capture_timestamp
@@ -33,6 +33,19 @@ class RoiStyle(HasTraits):
     line_style = Enum("solid", "dashed", "dotted", "dashdot")
     marker = Enum("none", ".", "o", "s", "^", "x")
     marker_size = Float(4.0)
+
+    #: Whether this ROI is drawn on the figure at all, and how opaque —
+    #: the device viewer's eye/alpha pair, as a percentage. Both are
+    #: display-only: a hidden ROI is still computed, still listed in the
+    #: stats table, and still exported to CSV. Range needs the explicit
+    #: default, or it would start every ROI fully transparent.
+    visible = Bool(True)
+    alpha = Range(0, 100, 100, mode="spinner")
+
+    @property
+    def plot_alpha(self):
+        """``alpha`` as the 0-1 fraction matplotlib wants."""
+        return self.alpha / 100.0
 
 
 class FigureSettings(HasTraits):

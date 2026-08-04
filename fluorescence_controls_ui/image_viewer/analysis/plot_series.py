@@ -40,3 +40,16 @@ def derive_series(session, filtered_paths):
             values.append(stat_value(stats, session.plot_stat))
         series[roi.roi_id] = (roi.name, elapsed, values)
     return series
+
+
+def visible_series(session, series):
+    """``series`` less the ROIs whose eye is off (and any entry whose
+    ROI is gone). Applied once per redraw, so every view the figure
+    offers hides the same ROIs; the stats table and the CSV, which are
+    data rather than figure, keep them all."""
+    shown = {}
+    for roi_id, entry in series.items():
+        roi = session.roi_by_id(roi_id)
+        if roi is not None and roi.style.visible:
+            shown[roi_id] = entry
+    return shown

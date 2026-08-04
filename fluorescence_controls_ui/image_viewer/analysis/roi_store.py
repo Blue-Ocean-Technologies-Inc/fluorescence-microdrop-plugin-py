@@ -26,7 +26,8 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
                   "show_second_derivative_min",
                   "second_derivative_vline", "second_derivative_hline",
                   "second_derivative_coords", "view_mode")
-_STYLE_FIELDS = ("color", "line_style", "marker", "marker_size")
+_STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
+                 "visible", "alpha")
 
 
 def analysis_directory(experiment_directory) -> Path:

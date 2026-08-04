@@ -18,7 +18,8 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
               geometry=[1.0, 2.0, 30.0, 40.0, 15.0], base_anchor=100.0,
               overrides={200.0: [5.0, 6.0, 30.0, 40.0, 15.0]},
               style=RoiStyle(color="#d62728", line_style="dashed",
-                             marker="o", marker_size=7.0))
+                             marker="o", marker_size=7.0,
+                             visible=False, alpha=40))
     session = AnalysisSession(directory=str(tmp_path), rois=[roi],
                               plot_stat="bg_corrected")
     session.figure.y_auto = False
@@ -36,6 +37,7 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert back.style.color == "#d62728"
     assert back.style.line_style == "dashed"
     assert back.style.marker == "o" and back.style.marker_size == 7.0
+    assert back.style.visible is False and back.style.alpha == 40
 
 
 def test_figure_fit_settings_round_trip(tmp_path):

@@ -390,7 +390,9 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:rois:items:style:color, "
              "analysis_model:session:rois:items:style:line_style, "
              "analysis_model:session:rois:items:style:marker, "
-             "analysis_model:session:rois:items:style:marker_size")
+             "analysis_model:session:rois:items:style:marker_size, "
+             "analysis_model:session:rois:items:style:visible, "
+             "analysis_model:session:rois:items:style:alpha")
     def _on_plot_settings_changed(self, event):
         self._save_config()
 

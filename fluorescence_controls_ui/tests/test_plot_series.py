@@ -2,10 +2,10 @@
 import math
 
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
-    derive_series, stat_value,
+    derive_series, stat_value, visible_series,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
-    AnalysisSession, Roi,
+    AnalysisSession, Roi, RoiStyle,
 )
 
 
@@ -54,3 +54,31 @@ def test_stat_value_variants():
     assert math.isnan(stat_value(None, "mean"))
     assert math.isnan(stat_value({}, "mean"))
     assert math.isnan(stat_value({"mean": 10.0}, "bg_corrected"))
+
+
+def test_visible_series_drops_the_hidden_rois():
+    shown = Roi(roi_id="a", name="ROI 1", kind="ellipse")
+    hidden = Roi(roi_id="b", name="ROI 2", kind="ellipse",
+                 style=RoiStyle(visible=False))
+    session = AnalysisSession(rois=[shown, hidden])
+    series = {"a": ("ROI 1", [0.0], [1.0]),
+              "b": ("ROI 2", [0.0], [2.0])}
+
+    assert visible_series(session, series) == {"a": ("ROI 1", [0.0], [1.0])}
+
+
+def test_visible_series_keeps_everything_by_default():
+    session = AnalysisSession(rois=[Roi(roi_id="a", name="ROI 1")])
+    series = {"a": ("ROI 1", [0.0], [1.0])}
+    assert visible_series(session, series) == series
+
+
+def test_visible_series_drops_series_without_an_roi():
+    # A stale entry cannot be styled, so it cannot be drawn either.
+    session = AnalysisSession(rois=[])
+    assert visible_series(session, {"gone": ("ROI 9", [], [])}) == {}
+
+
+def test_plot_alpha_is_the_percentage_as_a_fraction():
+    assert RoiStyle().plot_alpha == 1.0
+    assert RoiStyle(alpha=40).plot_alpha == 0.4
