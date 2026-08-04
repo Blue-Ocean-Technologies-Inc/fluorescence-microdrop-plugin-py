@@ -72,6 +72,10 @@ class RoiAnalysisController(HasTraits):
     def _arm_draw_capsule(self, event):
         self.analysis_model.interaction_mode = "draw_capsule"
 
+    @observe("analysis_model:draw_polygon_button")
+    def _arm_draw_polygon(self, event):
+        self.analysis_model.interaction_mode = "draw_polygon"
+
     @observe("analysis_model:edit_mode")
     def _toggle_edit_mode(self, event):
         self.analysis_model.interaction_mode = ("edit" if event.new

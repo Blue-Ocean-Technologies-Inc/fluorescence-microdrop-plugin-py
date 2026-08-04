@@ -182,3 +182,18 @@ def test_write_intensity_csv_layout(tmp_path):
     mean_column = records[0].index("ROI 1_mean")
     assert records[1][mean_column] == "10.0"
     assert records[2][mean_column] == ""
+
+
+def test_contour_round_trips_its_vertex_list(tmp_path):
+    roi = Roi(name="Cell edge", kind="polygon",
+              geometry=[10.0, 10.0, 40.0, 12.0, 35.0, 50.0, 8.0, 44.0],
+              base_anchor=0.0,
+              overrides={90.0: [11.0, 11.0, 41.0, 13.0, 36.0, 51.0,
+                                9.0, 45.0]})
+    save_session(tmp_path, AnalysisSession(directory=str(tmp_path),
+                                           rois=[roi]))
+
+    (back,) = load_session(tmp_path).rois
+    assert back.kind == "polygon"
+    assert back.geometry == roi.geometry
+    assert back.overrides == roi.overrides

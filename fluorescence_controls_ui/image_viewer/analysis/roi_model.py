@@ -78,9 +78,11 @@ class Roi(HasTraits):
     #: Shape, with the geometry lists roi_geometry defines: ellipse
     #: [cx, cy, rx, ry, angle], box [x, y, width, height, angle] with
     #: (x, y) the unrotated top-left corner, capsule [cx, cy,
-    #: half_length, radius, angle]. All values are image-pixel floats
-    #: bar the angle, which is degrees clockwise.
-    kind = Enum("ellipse", "box", "capsule")
+    #: half_length, radius, angle], polygon [x1, y1, x2, y2, ...] (a
+    #: contour's vertex list, with any rotation already applied to the
+    #: coordinates). All values are image-pixel floats bar the angle,
+    #: which is degrees clockwise.
+    kind = Enum("ellipse", "box", "capsule", "polygon")
 
     #: Base geometry, applying to every image without a later override.
     geometry = List(Float)
@@ -208,7 +210,7 @@ class RoiAnalysisModel(HasTraits):
     #: Canvas interaction: pan (normal navigation), one-shot draw modes,
     #: or edit (move/resize/select existing ROIs).
     interaction_mode = Enum("pan", "draw_ellipse", "draw_box",
-                            "draw_capsule", "edit")
+                            "draw_capsule", "draw_polygon", "edit")
 
     #: roi_id of the canvas-selected ROI (edit mode), '' when none.
     selected_roi_id = Str()
@@ -224,6 +226,7 @@ class RoiAnalysisModel(HasTraits):
     draw_ellipse_button = Button()
     draw_box_button = Button()
     draw_capsule_button = Button()
+    draw_polygon_button = Button()
     edit_mode = Bool(False)
     delete_roi_button = Button()
     clear_rois_button = Button()
