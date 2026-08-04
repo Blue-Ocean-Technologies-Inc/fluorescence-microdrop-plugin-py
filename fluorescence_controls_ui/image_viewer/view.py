@@ -15,10 +15,10 @@ from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.icons.icons import (
     ICON_CAPSULE, ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CIRCLE,
-    ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT, ICON_FOLDER_OPEN,
-    ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS,
-    ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH, ICON_SAVE,
-    ICON_SHOW_CHART,
+    ICON_CONTOUR, ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT,
+    ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY,
+    ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH,
+    ICON_SAVE, ICON_SHOW_CHART,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
@@ -43,6 +43,9 @@ class _ImageView(QGraphicsView):
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
         self.setMouseTracking(True)
+        # Keys only reach a focused widget, and contour drawing needs
+        # Enter/Escape/Backspace once the canvas is clicked.
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(1, 1)
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
@@ -74,6 +77,21 @@ class _ImageView(QGraphicsView):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        point = self.mapToScene(event.position().toPoint())
+        if self._roi_layer.mouse_double_click(point):
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def keyPressEvent(self, event):
+        # Contour drawing finishes on Enter and unwinds on Escape /
+        # Backspace; everything else falls through to the view.
+        if self._roi_layer.key_press(event.key()):
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -319,14 +337,21 @@ analysis_toolbar = VGroup(
               glyph=ICON_CAPSULE,
               tooltip="Draw a capsule ROI (click-drag its axis, then "
                       "use the grip for its radius)")),
+    UItem("object.roi_analysis.draw_polygon_button",
+          editor=IconButtonEditor(
+              glyph=ICON_CONTOUR,
+              tooltip="Draw a contour ROI (click to place nodes; "
+                      "close on the first node, double-click, or "
+                      "Enter — Esc cancels, Backspace undoes)")),
     UItem("object.roi_analysis.edit_mode",
           editor=IconToggleEditor(
               on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
               tooltip="Edit ROIs: drag to move, bottom-right grip to "
                       "resize (Shift keeps an ellipse circular), "
                       "top-left grip to rotate (Shift snaps to 15°), "
-                      "click to select. Editing on a later image "
-                      "adds a drift override from there on")),
+                      "drag a node to reshape a contour, click to "
+                      "select. Editing on a later image adds a drift "
+                      "override from there on")),
     UItem("object.roi_analysis.delete_roi_button",
           editor=IconButtonEditor(
               glyph=ICON_DELETE,

@@ -6,22 +6,27 @@ analysis model. The canvas editor points these callbacks at the model's
 canvas_* event traits and the controller reacts."""
 import math
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPainterPath
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsRectItem,
 )
 
-from .consts import MIN_ROI_SIZE_PX
+from .consts import (
+    MIN_POLYGON_POINTS, MIN_ROI_SIZE_PX, POLYGON_CLOSE_DISTANCE_PX,
+)
 from .roi_handles import ROI_SELECTED_PEN
 from .roi_items import (
-    BoxRoiItem, CapsuleRoiItem, EllipseRoiItem, capsule_path,
+    BoxRoiItem, CapsuleRoiItem, EllipseRoiItem, PolygonRoiItem,
+    capsule_path,
 )
 
 
 #: Canvas item per ROI kind, and the kind each draw mode creates.
 ITEM_CLASSES = {"ellipse": EllipseRoiItem, "box": BoxRoiItem,
-                "capsule": CapsuleRoiItem}
+                "capsule": CapsuleRoiItem, "polygon": PolygonRoiItem}
 DRAW_KINDS = {"draw_ellipse": "ellipse", "draw_box": "box",
-              "draw_capsule": "capsule"}
+              "draw_capsule": "capsule", "draw_polygon": "polygon"}
 
 
 class RoiCanvasLayer:
@@ -35,6 +40,7 @@ class RoiCanvasLayer:
         self._items = {}          # roi_id -> item
         self._draft = None        # item being rubber-band drawn
         self._draft_kind = ""
+        self._draft_points = []   # contour vertices placed so far
         self._press_point = None
         self.mode = "pan"
         self.on_roi_created = lambda kind, geometry: None
@@ -43,6 +49,7 @@ class RoiCanvasLayer:
         self._scene.selectionChanged.connect(self._selection_changed)
 
     def set_mode(self, mode):
+        self._discard_contour()   # switching tools abandons a trace
         self.mode = mode
         for item in self._items.values():
             item.set_editable(mode == "edit")
@@ -77,6 +84,7 @@ class RoiCanvasLayer:
             item.set_selected_style(roi_id == selected_roi_id)
 
     def clear_items(self):
+        self._discard_contour()
         for item in self._items.values():
             self._scene.removeItem(item)
         self._items = {}
@@ -86,6 +94,8 @@ class RoiCanvasLayer:
     # Return True when handled (the view then skips its own handling).    #
     # ------------------------------------------------------------------ #
     def mouse_press(self, scene_point):
+        if self.mode == "draw_polygon":
+            return self._press_contour(scene_point)
         if self.mode not in DRAW_KINDS:
             return False
         self._press_point = scene_point
@@ -98,6 +108,11 @@ class RoiCanvasLayer:
         return True
 
     def mouse_move(self, scene_point):
+        if self.mode == "draw_polygon":
+            if not self._draft_points:
+                return False
+            self._draft.setPath(self._contour_path(scene_point))
+            return True
         if self._draft is None:
             return False
         geometry = self._drag_geometry(scene_point)
@@ -114,6 +129,9 @@ class RoiCanvasLayer:
         return True
 
     def mouse_release(self, scene_point):
+        if self.mode == "draw_polygon":
+            # Swallow it so a click that placed a node cannot also pan.
+            return bool(self._draft_points)
         if self._draft is None:
             return False
         geometry = self._drag_geometry(scene_point)
@@ -148,6 +166,80 @@ class RoiCanvasLayer:
         return [press.x() + span_x / 2, press.y() + span_y / 2,
                 length / 2, max(length / 4, MIN_ROI_SIZE_PX),
                 math.degrees(math.atan2(span_y, span_x))]
+
+    # ------------------------------------------------------------------ #
+    # Contour drawing: clicks place vertices, and the loop closes on the  #
+    # first node, a double-click or Enter.                                #
+    # ------------------------------------------------------------------ #
+    def _press_contour(self, scene_point):
+        """Place a vertex, or close the contour when the click lands
+        back on its first one."""
+        if self._draft_points:
+            first = self._draft_points[0]
+            reach = math.hypot(scene_point.x() - first.x(),
+                               scene_point.y() - first.y())
+            if reach <= POLYGON_CLOSE_DISTANCE_PX:
+                self._close_contour()
+                return True
+        else:
+            self._draft_kind = "polygon"
+            self._draft = QGraphicsPathItem()
+            self._draft.setPen(ROI_SELECTED_PEN)
+            self._scene.addItem(self._draft)
+        self._draft_points.append(scene_point)
+        self._draft.setPath(self._contour_path(scene_point))
+        return True
+
+    def _contour_path(self, cursor_point):
+        """The placed vertices, rubber-banded to the cursor."""
+        path = QPainterPath(self._draft_points[0])
+        for point in self._draft_points[1:]:
+            path.lineTo(point)
+        path.lineTo(cursor_point)
+        return path
+
+    def _close_contour(self):
+        """Finish the draft into an ROI, if it has enough vertices."""
+        points = self._draft_points
+        self._discard_contour()
+        if len(points) < MIN_POLYGON_POINTS:
+            return
+        self.on_roi_created("polygon", [value for point in points
+                                        for value in (point.x(),
+                                                      point.y())])
+
+    def _discard_contour(self):
+        if self._draft_kind == "polygon" and self._draft is not None:
+            self._scene.removeItem(self._draft)
+            self._draft = None
+        self._draft_points = []
+
+    def mouse_double_click(self, scene_point):
+        """Close the contour on the vertices already placed."""
+        if self.mode != "draw_polygon" or not self._draft_points:
+            return False
+        self._close_contour()
+        return True
+
+    def key_press(self, key):
+        """Enter closes the contour, Escape discards it, Backspace
+        takes back the last vertex."""
+        if self.mode != "draw_polygon" or not self._draft_points:
+            return False
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._close_contour()
+        elif key == Qt.Key.Key_Escape:
+            self._discard_contour()
+        elif key == Qt.Key.Key_Backspace:
+            self._draft_points.pop()
+            if self._draft_points:
+                self._draft.setPath(
+                    self._contour_path(self._draft_points[-1]))
+            else:
+                self._discard_contour()
+        else:
+            return False
+        return True
 
     def _selection_changed(self):
         for roi_id, item in self._items.items():
