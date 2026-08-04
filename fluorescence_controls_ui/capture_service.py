@@ -62,7 +62,7 @@ def wait_applied(timeout: float) -> bool:
     """Block (off the GUI thread) for the next applied ack."""
     return _APPLIED.wait(timeout)
 
-
+#TODO: check for existing utc time method.
 def utc_stamp() -> str:
     """UTC timestamp in the shared capture-filename format."""
     return time.strftime(CAPTURE_TIMESTAMP_FORMAT, time.gmtime())
