@@ -102,9 +102,10 @@ the shared behaviour:
   15°. It shares `_ResizeHandle`'s press/commit protocol (set the
   parent's `_dragging`, commit on release), so `sync()` keeps skipping
   a shape mid-drag and one edit still produces one drift override.
-- Both grips and the name label are children of a rotated item and so
-  inherit its rotation. That is wanted for the grips; the label is
-  counter-rotated by `-angle` to stay upright.
+- Both grips and the name label carry `ItemIgnoresTransformations`,
+  which ignores an *inherited* rotation as well as the view's zoom: a
+  smoke run at 30° and 45° shows their positions riding the rotation
+  while they each stay upright, so no counter-rotation is needed.
 
 `CircleRoiItem` becomes `EllipseRoiItem`; `CapsuleRoiItem` is a
 `QGraphicsPathItem` whose path is the stadium (two arcs plus flanks).

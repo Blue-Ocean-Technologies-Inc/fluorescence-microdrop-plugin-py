@@ -30,6 +30,9 @@ ROI_PLOT_CANVAS_MIN_HEIGHT = 200
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0
 
+#: Rotation-grip snap (degrees) while Shift is held.
+ROTATE_SNAP_DEGREES = 15.0
+
 #: Default per-ROI plot colors, cycled at creation (matplotlib tab10).
 DEFAULT_ROI_COLORS = (
     "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
