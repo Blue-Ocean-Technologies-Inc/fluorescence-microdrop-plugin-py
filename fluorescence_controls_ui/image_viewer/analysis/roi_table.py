@@ -135,12 +135,20 @@ class RoiStatsTable(QTableWidget):
                                           - len(_STAT_COLUMNS)):
                 value = stat_value(stats, stat,
                                    area_per_pixel)
-                text = "" if value != value else f"{value:.1f}"
+                text = self._cell_text(stat, value)
                 value_item = QTableWidgetItem(text)
                 value_item.setFlags(value_item.flags()
                                     & ~Qt.ItemFlag.ItemIsEditable)
                 self.setItem(row, column, value_item)
         self._rebuilding = False
+
+    def _cell_text(self, stat, value):
+        """Area spans decades with the unit chosen (0.28 mm² is 2.8e+05
+        µm²), so it takes a significant-figure format where the
+        intensity columns keep their fixed decimal."""
+        if value != value:
+            return ""
+        return f"{value:.4g}" if stat == "area" else f"{value:.1f}"
 
     def _area_per_pixel(self):
         """One pixel's area in the session's unit (1.0 = px²)."""
@@ -172,7 +180,7 @@ class RoiStatsTable(QTableWidget):
                                           - len(_STAT_COLUMNS)):
                 value = stat_value(stats, stat,
                                    area_per_pixel)
-                text = "" if value != value else f"{value:.1f}"
+                text = self._cell_text(stat, value)
                 item = self.item(row, column)
                 if item is not None:
                     item.setText(text)
