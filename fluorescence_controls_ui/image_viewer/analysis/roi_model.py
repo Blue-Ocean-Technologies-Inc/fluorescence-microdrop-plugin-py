@@ -12,6 +12,7 @@ from traits.api import (
 )
 
 from ..discovery import capture_timestamp
+from ..scale_bar import DEFAULT_UNIT, UNITS
 from .consts import VIEW_MODES
 from .curve_fit import FIT_METHODS
 
@@ -75,6 +76,22 @@ class FigureSettings(HasTraits):
     second_derivative_coords = Bool(True)
     #: Which chart the plot pane renders.
     view_mode = Enum(*VIEW_MODES)
+
+
+class ScaleCalibration(HasTraits):
+    """Image scale for the on-canvas bar (persisted per experiment).
+    Display-only: nothing computed from the images depends on it."""
+
+    #: Metres one image pixel spans; 0.0 means not calibrated.
+    metres_per_pixel = Float(0.0)
+    #: What the user typed, kept for the readout and for re-editing.
+    value = Float(0.0)
+    #: Enum's first argument is the default, so mm wins over m.
+    unit = Enum(DEFAULT_UNIT, UNITS)
+    show_bar = Bool(True)
+
+    def calibrated(self):
+        return self.metres_per_pixel > 0.0
 
 
 class Roi(HasTraits):
@@ -161,6 +178,9 @@ class AnalysisSession(HasTraits):
 
     figure = Instance(FigureSettings, ())
 
+    #: Image scale for the canvas bar (display-only).
+    scale = Instance(ScaleCalibration, ())
+
     def roi_by_id(self, roi_id):
         for roi in self.rois:
             if roi.roi_id == roi_id:
@@ -223,7 +243,8 @@ class RoiAnalysisModel(HasTraits):
     #: Canvas interaction: pan (normal navigation), one-shot draw modes,
     #: or edit (move/resize/select existing ROIs).
     interaction_mode = Enum("pan", "draw_ellipse", "draw_box",
-                            "draw_capsule", "draw_polygon", "edit")
+                            "draw_capsule", "draw_polygon", "draw_scale",
+                            "edit")
 
     #: roi_id of the canvas-selected ROI (edit mode), '' when none.
     selected_roi_id = Str()
@@ -240,6 +261,11 @@ class RoiAnalysisModel(HasTraits):
     draw_box_button = Button()
     draw_capsule_button = Button()
     draw_polygon_button = Button()
+    calibrate_scale_button = Button()
+
+    #: Live mirror of session.scale.show_bar — the toolbar is built
+    #: once against this model while sessions swap underneath it.
+    show_scale_bar = Bool(True)
     edit_mode = Bool(False)
     delete_roi_button = Button()
     clear_rois_button = Button()

@@ -12,7 +12,9 @@ from .consts import ANALYSIS_DIR_NAME, OUTLINE_STATS_PREFIX, \
     ROI_CONFIG_FILENAME, ROI_STATS_FILENAME
 from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
-from .roi_model import AnalysisSession, FigureSettings, Roi, RoiStyle
+from .roi_model import (
+    AnalysisSession, FigureSettings, Roi, RoiStyle, ScaleCalibration,
+)
 
 logger = get_logger(__name__)
 
@@ -29,6 +31,10 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
                  "visible", "alpha")
 
+#: Persisted ScaleCalibration fields (tolerated-missing on load, so a
+#: config written before the scale bar opens uncalibrated).
+_SCALE_FIELDS = ("metres_per_pixel", "value", "unit", "show_bar")
+
 
 def analysis_directory(experiment_directory) -> Path:
     """The experiment's analysis output folder, created on demand."""
@@ -43,6 +49,8 @@ def save_session(experiment_directory, session):
         "plot_stat": session.plot_stat,
         "figure": {name: getattr(session.figure, name)
                    for name in _FIGURE_FIELDS},
+        "scale": {name: getattr(session.scale, name)
+                  for name in _SCALE_FIELDS},
         "rois": [{
             "roi_id": roi.roi_id,
             "name": roi.name,
@@ -116,6 +124,15 @@ def load_session(experiment_directory) -> AnalysisSession:
             session.figure = figure
         except Exception as error:
             logger.warning(f"Ignoring invalid figure settings in "
+                           f"{path}: {error}")
+        try:
+            scale = ScaleCalibration()
+            scale.trait_set(**{name: payload.get("scale", {})[name]
+                               for name in _SCALE_FIELDS
+                               if name in payload.get("scale", {})})
+            session.scale = scale
+        except Exception as error:
+            logger.warning(f"Ignoring invalid scale settings in "
                            f"{path}: {error}")
     return session
 

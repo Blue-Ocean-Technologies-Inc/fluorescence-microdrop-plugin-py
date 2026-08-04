@@ -21,6 +21,7 @@ from .cameras.consts import (
     DISPLAY_BRIGHTNESS_DEFAULT, DISPLAY_CONTRAST_DEFAULT,
     DISPLAY_GAMMA_DEFAULT,
 )
+from .image_viewer.scale_bar import DEFAULT_UNIT
 from .consts import (
     LED_WAVELENGTHS,
     INTENSITY_DEFAULT, FREQUENCY_DEFAULT,
@@ -46,6 +47,15 @@ class FluorescencePreferences(PreferencesHelper):
     # don't-show-again checkbox clears this).
     fluorescence_show_stream_off_warning = Bool(
         True, desc="Warn when a lighting edit is staged because the stream is off"
+    )
+
+    # Last scale calibration, used to seed an experiment that has none
+    # (the seeded value is written into that experiment on first use).
+    fluorescence_last_scale_metres_per_px = Float(
+        0.0, desc="Metres per image pixel from the last calibration"
+    )
+    fluorescence_last_scale_unit = Str(
+        DEFAULT_UNIT, desc="Unit the last calibration was entered in"
     )
 
     # Root of the ZWO ASI SDK (the directory holding Win/ and Unix/).

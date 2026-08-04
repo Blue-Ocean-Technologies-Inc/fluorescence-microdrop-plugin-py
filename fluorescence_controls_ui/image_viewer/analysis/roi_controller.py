@@ -76,6 +76,18 @@ class RoiAnalysisController(HasTraits):
     def _arm_draw_polygon(self, event):
         self.analysis_model.interaction_mode = "draw_polygon"
 
+    @observe("analysis_model:calibrate_scale_button")
+    def _arm_calibrate_scale(self, event):
+        self.analysis_model.interaction_mode = "draw_scale"
+
+    @observe("analysis_model:show_scale_bar")
+    def _on_show_scale_bar(self, event):
+        """Mirror the toolbar toggle onto the session that persists it
+        (the toolbar outlives any one session)."""
+        if self.session.scale.show_bar != event.new:
+            self.session.scale.show_bar = event.new
+            self._save_config()
+
     @observe("analysis_model:edit_mode")
     def _toggle_edit_mode(self, event):
         self.analysis_model.interaction_mode = ("edit" if event.new
@@ -364,7 +376,22 @@ class RoiAnalysisController(HasTraits):
         if directory is not None:
             session.stats = load_roi_stats(directory)
             session.stats_revision += 1
+        preferences = self.viewer_model.preferences
+        seed = preferences.fluorescence_last_scale_metres_per_px
+        if not session.scale.calibrated() and seed > 0:
+            # Seed from the last calibration and write it straight into
+            # this experiment, so its record states what it was measured
+            # with instead of drifting with later calibrations.
+            session.scale.trait_set(
+                metres_per_pixel=seed,
+                unit=preferences.fluorescence_last_scale_unit)
+            if directory is not None:
+                try:
+                    save_session(directory, session)
+                except Exception as error:
+                    logger.warning(f"Could not seed the scale: {error}")
         self.analysis_model.session = session
+        self.analysis_model.show_scale_bar = session.scale.show_bar
         self._dispatched_keys = {}
 
     @observe("analysis_model:session:plot_stat, "
