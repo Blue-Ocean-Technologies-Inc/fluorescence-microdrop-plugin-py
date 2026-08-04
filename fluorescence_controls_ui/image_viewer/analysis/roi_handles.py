@@ -47,6 +47,35 @@ class ResizeHandle(QGraphicsRectItem):
         event.accept()
 
 
+class NodeHandle(QGraphicsRectItem):
+    """Grip on one contour vertex; dragging reshapes that vertex."""
+
+    def __init__(self, parent, index):
+        half = HANDLE_SIZE_PX / 2
+        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX,
+                         parent)
+        self._index = index
+        self.setBrush(HANDLE_BRUSH)
+        self.setPen(QPen(Qt.PenStyle.NoPen))
+        self.setFlag(self.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.setCursor(Qt.CursorShape.SizeAllCursor)
+        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+
+    def mousePressEvent(self, event):
+        self.parentItem()._dragging = True
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        self.parentItem().move_node(self._index, event.scenePos())
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        parent = self.parentItem()
+        parent.commit_geometry()
+        parent._dragging = False
+        event.accept()
+
+
 class RotateHandle(QGraphicsEllipseItem):
     """Round grip riding the parent ROI's top-left; dragging spins it
     about its centre. Shares the resize grip's protocol: mark the

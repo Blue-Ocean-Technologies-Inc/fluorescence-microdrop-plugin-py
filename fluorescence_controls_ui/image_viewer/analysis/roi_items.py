@@ -5,17 +5,17 @@ grip position and resize computation in unrotated local coordinates,
 and reports its geometry back through the layer's edit callback."""
 import math
 
-from PySide6.QtCore import QRectF
-from PySide6.QtGui import QBrush, QPainterPath
+from PySide6.QtCore import QPointF, QRectF
+from PySide6.QtGui import QBrush, QPainterPath, QPolygonF
 from PySide6.QtWidgets import (
-    QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsRectItem,
-    QGraphicsSimpleTextItem,
+    QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsPolygonItem,
+    QGraphicsRectItem, QGraphicsSimpleTextItem,
 )
 
 from .consts import MIN_ROI_SIZE_PX
 from .roi_geometry import centre_of, normalize
 from .roi_handles import (
-    HANDLE_SIZE_PX, ROI_PEN, ROI_SELECTED_PEN, ResizeHandle,
+    HANDLE_SIZE_PX, ROI_PEN, ROI_SELECTED_PEN, NodeHandle, ResizeHandle,
     RotateHandle,
 )
 
@@ -236,3 +236,78 @@ class CapsuleRoiItem(_RoiItemBase, QGraphicsPathItem):
         self._place_grips(self._centre_x, self._centre_y,
                           self._half_length + self._radius,
                           self._radius)
+
+
+class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
+    """Contour ROI: geometry is the flat vertex list
+    [x1, y1, x2, y2, ...], with any rotation already applied to the
+    coordinates. One node grip per vertex, shown while selected."""
+
+    def __init__(self, roi_id, name, geometry, on_edited):
+        QGraphicsPolygonItem.__init__(self)
+        self._node_handles = []
+        self._selected = False
+        self._editable = False
+        self._setup(roi_id, name, on_edited)
+        self.set_geometry(geometry)
+
+    def set_geometry(self, geometry):
+        _, values = normalize("polygon", geometry)
+        points = [QPointF(values[index], values[index + 1])
+                  for index in range(0, len(values), 2)]
+        self.setPos(0, 0)
+        self.setRotation(0)     # a stored contour is already oriented
+        self.setPolygon(QPolygonF(points))
+        self.setTransformOriginPoint(*centre_of("polygon", values))
+        self._rebuild_node_handles()
+        self._place_attachments()
+
+    def geometry(self):
+        # Through the item transform, so a move or a live rotation
+        # lands in the coordinates and never needs storing as an angle.
+        return [value
+                for point in self.polygon()
+                for value in (self.mapToScene(point).x(),
+                              self.mapToScene(point).y())]
+
+    def move_node(self, index, scene_point):
+        points = list(self.polygon())
+        points[index] = self.mapFromScene(scene_point)
+        self.setPolygon(QPolygonF(points))
+        self._node_handles[index].setPos(points[index])
+        self._place_attachments()
+
+    def set_editable(self, editable):
+        super().set_editable(editable)
+        self._editable = editable
+        # Contours are shaped by their nodes, so the resize grip stays
+        # hidden (a hidden item receives no mouse events).
+        self._handle.setVisible(False)
+        self._update_node_visibility()
+
+    def set_selected_style(self, selected):
+        super().set_selected_style(selected)
+        self._selected = selected
+        self._update_node_visibility()
+
+    def _update_node_visibility(self):
+        for handle in self._node_handles:
+            handle.setVisible(self._selected and self._editable)
+
+    def _rebuild_node_handles(self):
+        for handle in self._node_handles:
+            handle.setParentItem(None)
+        self._node_handles = []
+        for index, point in enumerate(self.polygon()):
+            handle = NodeHandle(self, index)
+            handle.setPos(point)
+            self._node_handles.append(handle)
+        self._update_node_visibility()
+
+    def _apply_size(self, point, uniform):
+        """No-op: the resize grip is hidden for contours."""
+
+    def _place_attachments(self):
+        bounds = self.polygon().boundingRect()
+        self._place_grips(bounds.center().x(), bounds.center().y(),
+                          bounds.width() / 2, bounds.height() / 2)
