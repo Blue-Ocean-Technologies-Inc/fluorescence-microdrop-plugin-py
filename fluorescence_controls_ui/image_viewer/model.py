@@ -92,6 +92,9 @@ class FluorescenceImageViewerModel(HasTraits):
     #: "(x, y) = value" readout under the cursor (true stored values).
     pixel_text = Str()
 
+    #: Scale readout for the status row ('' until a session loads).
+    scale_text = Str()
+
     #: Basename choices for the image dropdown (mirrors ``paths``).
     image_names = Property(List(Str), observe="paths.items")
 

@@ -19,7 +19,8 @@ from microdrop_style.icons.icons import (
     ICON_CONTOUR, ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT,
     ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY,
     ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH,
-    ICON_SAVE, ICON_SHOW_CHART,
+    ICON_RULER, ICON_SAVE, ICON_SHOW_CHART, ICON_VISIBILITY,
+    ICON_VISIBILITY_OFF,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
@@ -447,6 +448,15 @@ analysis_toolbar = VGroup(
               tooltip="Draw a contour ROI (click to place nodes; "
                       "close on the first node, double-click, or "
                       "Enter — Esc cancels, Backspace undoes)")),
+    UItem("object.roi_analysis.calibrate_scale_button",
+          editor=IconButtonEditor(
+              glyph=ICON_RULER,
+              tooltip="Set the image scale: drag a line of known "
+                      "length, then type what it measures")),
+    UItem("object.roi_analysis.show_scale_bar",
+          editor=IconToggleEditor(
+              on_glyph=ICON_VISIBILITY, off_glyph=ICON_VISIBILITY_OFF,
+              tooltip="Show or hide the scale bar on the image")),
     UItem("object.roi_analysis.edit_mode",
           editor=IconToggleEditor(
               on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
@@ -511,6 +521,7 @@ ImageViewerView = View(
                       resizable=True),
                 HGroup(
                     UItem("pixel_text", style="readonly"),
+                    UItem("scale_text", style="readonly"),
                     UItem("object.roi_analysis.progress_text",
                           style="readonly"),
                 ),

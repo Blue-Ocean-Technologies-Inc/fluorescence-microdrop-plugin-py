@@ -19,6 +19,7 @@ from ...consts import CAPTURE_TIMESTAMP_FORMAT
 from ..discovery import UNGROUPED_BURST, capture_timestamp, \
     detect_wavelength
 from ..model import FluorescenceImageViewerModel
+from ..scale_bar import format_length
 from .consts import DEFAULT_ROI_COLORS, STATS_SAVE_DEBOUNCE_S
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
@@ -79,6 +80,16 @@ class RoiAnalysisController(HasTraits):
     @observe("analysis_model:calibrate_scale_button")
     def _arm_calibrate_scale(self, event):
         self.analysis_model.interaction_mode = "draw_scale"
+
+    @observe("analysis_model:session, "
+             "analysis_model:session:scale:metres_per_pixel")
+    def _on_scale_changed(self, event):
+        """Keep the status-row readout current: the bar alone cannot
+        say whether a calibration was measured here or seeded."""
+        scale = self.session.scale
+        self.viewer_model.scale_text = (
+            f"1 px = {format_length(scale.metres_per_pixel)}"
+            if scale.calibrated() else "Scale: not set")
 
     @observe("analysis_model:show_scale_bar")
     def _on_show_scale_bar(self, event):
