@@ -35,10 +35,11 @@ class _ImageView(QGraphicsView):
     dock pane (a full-resolution scene would otherwise dictate a huge size
     hint) and keeps the image fitted on resize until the user zooms."""
 
-    def __init__(self, scene, on_hover, roi_layer):
+    def __init__(self, scene, on_hover, roi_layer, scale_layer):
         super().__init__(scene)
         self._on_hover = on_hover
         self._roi_layer = roi_layer
+        self._scale_layer = scale_layer
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
@@ -58,6 +59,9 @@ class _ImageView(QGraphicsView):
 
     def mousePressEvent(self, event):
         point = self.mapToScene(event.position().toPoint())
+        if self._scale_layer.mouse_press(point):
+            event.accept()
+            return
         if self._roi_layer.mouse_press(point):
             event.accept()
             return
@@ -66,6 +70,9 @@ class _ImageView(QGraphicsView):
     def mouseMoveEvent(self, event):
         point = self.mapToScene(event.position().toPoint())
         self._on_hover(int(point.x()), int(point.y()))
+        if self._scale_layer.mouse_move(point):
+            event.accept()
+            return
         if self._roi_layer.mouse_move(point):
             event.accept()
             return
@@ -73,6 +80,9 @@ class _ImageView(QGraphicsView):
 
     def mouseReleaseEvent(self, event):
         point = self.mapToScene(event.position().toPoint())
+        if self._scale_layer.mouse_release(point):
+            event.accept()
+            return
         if self._roi_layer.mouse_release(point):
             event.accept()
             return
