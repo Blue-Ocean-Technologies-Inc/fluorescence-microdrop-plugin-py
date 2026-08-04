@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from .consts import OUTLINE_PERIMETER_PX, OUTLINE_STATS_PREFIX
+from .roi_geometry import box_polygon, capsule_polygon, normalize
 
 #: Stats computed for every mask, in column order.
 STAT_NAMES = ("mean", "std", "median", "min", "max", "count")
@@ -15,20 +16,25 @@ STAT_NAMES = ("mean", "std", "median", "min", "max", "count")
 
 def roi_masks(shape, kind, geometry, perimeter_px=OUTLINE_PERIMETER_PX):
     """(interior, outline) uint8 masks (255 inside) for one ROI on an
-    image of ``shape`` (height, width); cv2 clips to the image bounds."""
+    image of ``shape`` (height, width); cv2 clips to the image bounds.
+    Geometry is normalized first, so a pre-rotation config still
+    computes the same pixels it always did."""
     interior = np.zeros(shape, dtype=np.uint8)
     outline = np.zeros(shape, dtype=np.uint8)
-    if kind == "circle":
-        center_x, center_y, radius = geometry
-        center = (int(round(center_x)), int(round(center_y)))
-        cv2.circle(interior, center, int(round(radius)), 255, -1)
-        cv2.circle(outline, center, int(round(radius)), 255, perimeter_px)
+    kind, geometry = normalize(kind, geometry)
+    if kind == "ellipse":
+        centre_x, centre_y, radius_x, radius_y, angle = geometry
+        centre = (int(round(centre_x)), int(round(centre_y)))
+        axes = (int(round(radius_x)), int(round(radius_y)))
+        cv2.ellipse(interior, centre, axes, angle, 0, 360, 255, -1)
+        cv2.ellipse(outline, centre, axes, angle, 0, 360, 255,
+                    perimeter_px)
     else:
-        x, y, width, height = geometry
-        top_left = (int(round(x)), int(round(y)))
-        bottom_right = (int(round(x + width)), int(round(y + height)))
-        cv2.rectangle(interior, top_left, bottom_right, 255, -1)
-        cv2.rectangle(outline, top_left, bottom_right, 255, perimeter_px)
+        polygon = (box_polygon(geometry) if kind == "box"
+                   else capsule_polygon(geometry))
+        points = np.round(polygon).astype(np.int32)
+        cv2.fillPoly(interior, [points], 255)
+        cv2.polylines(outline, [points], True, 255, perimeter_px)
     return interior, outline
 
 
