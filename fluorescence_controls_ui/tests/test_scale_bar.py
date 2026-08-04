@@ -1,6 +1,7 @@
 """Unit tests for the Qt-free scale-bar maths."""
 from fluorescence_controls_ui.image_viewer.scale_bar import (
-    DEFAULT_UNIT, format_length, metres_per_pixel, nice_scale,
+    DEFAULT_UNIT, area_unit, format_length, metres_per_pixel,
+    nice_scale, pixel_area,
 )
 
 
@@ -49,3 +50,21 @@ def test_format_length_picks_the_readable_unit():
     assert format_length(1e-9) == "1 nm"
     # Below a nanometre it clamps rather than reading "0 nm".
     assert format_length(1e-12).endswith("nm")
+
+
+def test_pixel_area_squares_the_calibration():
+    # 10 µm per pixel, reported in mm: (0.01 mm)^2 = 1e-4 mm^2.
+    assert abs(pixel_area(1e-5, "mm") - 1e-4) < 1e-12
+    # The same calibration in µm: 10 µm x 10 µm = 100 µm^2.
+    assert abs(pixel_area(1e-5, "µm") - 100.0) < 1e-9
+
+
+def test_pixel_area_without_a_calibration_is_one_square_pixel():
+    assert pixel_area(0.0, "mm") == 1.0
+    assert pixel_area(-1.0, "mm") == 1.0
+
+
+def test_area_unit_says_pixels_until_calibrated():
+    assert area_unit(1e-5, "mm") == "mm²"
+    assert area_unit(1e-5, "µm") == "µm²"
+    assert area_unit(0.0, "mm") == "px²"

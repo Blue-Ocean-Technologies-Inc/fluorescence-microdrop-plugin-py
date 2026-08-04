@@ -53,3 +53,17 @@ def nice_scale(metres_per_screen_px, target_px=SCALE_BAR_TARGET_PX):
         if step * decade <= span:
             length_m = step * decade
     return length_m / metres_per_screen_px, format_length(length_m)
+
+
+def pixel_area(metres_per_pixel_value, unit):
+    """One pixel's area in ``unit`` squared; 1.0 (that is, px²) when
+    there is no calibration, so every size-aware stat still
+    computes."""
+    if metres_per_pixel_value <= 0:
+        return 1.0
+    return (metres_per_pixel_value / UNIT_METRES[unit]) ** 2
+
+
+def area_unit(metres_per_pixel_value, unit):
+    """'mm²' when calibrated, 'px²' when not."""
+    return f"{unit}²" if metres_per_pixel_value > 0 else "px²"
