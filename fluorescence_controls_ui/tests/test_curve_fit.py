@@ -5,6 +5,7 @@ import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
     fastest_change_time, fit_series, second_derivative_extrema,
+    trimmed_note,
 )
 
 
@@ -91,8 +92,8 @@ def test_sigmoid_recovers_known_params():
 
 
 def test_sigmoid_canonicalizes_negative_rate():
-    # A falling sigmoid must still report a positive rate (the
-    # (L, k, C) -> (-L, -k, L+C) identity).
+    # A falling sigmoid must still report a positive rate (fitted
+    # asymptotes swapped, since s(-x) == 1 - s(x)).
     t = np.arange(0.0, 200.0, 10.0)
     y = 3000.0 / (1.0 + np.exp(0.08 * (t - 95.0))) + 500.0
     fit = fit_series(t, y, "sigmoid")
@@ -126,6 +127,78 @@ def test_fastest_change_linear_is_suppressed():
     t = np.arange(0.0, 100.0, 10.0)
     fit = fit_series(t, 5.0 * t + 600.0, "linear")
     assert fastest_change_time(fit, 0.0, 90.0) is None
+
+
+def test_fastest_change_uses_the_fitted_inflection_exactly():
+    # Not the nearest sample of the search grid: the sigmoid knows its
+    # own inflection, so the bar reads the fitted midpoint.
+    t = np.arange(0.0, 200.0, 10.0)
+    y = 3000.0 / (1.0 + np.exp(-0.08 * (t - 95.0))) + 500.0
+    fit = fit_series(t, y, "sigmoid")
+    assert fastest_change_time(fit, 0.0, 190.0) == fit.params["midpoint"]
+
+
+def test_fastest_change_falls_back_when_inflection_is_outside():
+    # Fitted on the rise alone, the inflection sits past the window;
+    # inside it the rate only grows, so the window edge is the answer.
+    t = np.arange(0.0, 60.0, 5.0)
+    y = 3000.0 / (1.0 + np.exp(-0.08 * (t - 95.0))) + 500.0
+    fit = fit_series(t, y, "sigmoid")
+    assert fit.params["midpoint"] > 55.0
+    assert abs(fastest_change_time(fit, 0.0, 55.0) - 55.0) < 1e-6
+
+
+def _bleached_series():
+    """A clean sigmoid (inflection at 95 s) whose plateau then decays,
+    as photobleaching does — the 4PL misfits and reports the crossing
+    early unless the tail is dropped."""
+    t = np.arange(0.0, 200.0, 10.0)
+    rise = 3000.0 / (1.0 + np.exp(-0.08 * (t - 95.0))) + 500.0
+    return t, rise * np.exp(-0.015 * np.maximum(t - 120.0, 0.0))
+
+
+def test_bleached_tail_biases_the_inflection_when_kept():
+    t, y = _bleached_series()
+    fit = fit_series(t, y, "sigmoid")
+    assert fit.r_squared < 0.99
+    assert fit.params["midpoint"] < 90.0        # dragged early
+    assert fit.fitted_end == t[-1]              # nothing dropped
+
+
+def test_trim_tail_refits_on_the_leading_slice():
+    t, y = _bleached_series()
+    fit = fit_series(t, y, "sigmoid", trim_tail=True)
+    assert fit.r_squared >= 0.99
+    assert fit.fitted_start == t[0] and fit.fitted_end < t[-1]
+    assert abs(fit.params["midpoint"] - 95.0) < 5.0
+    # The bar reports the inflection over the whole series, not the
+    # edge of the shorter span the fit was solved on.
+    assert fastest_change_time(fit, t[0], t[-1]) == fit.params["midpoint"]
+
+
+def test_trim_tail_keeps_the_full_fit_when_trimming_cannot_reach_target():
+    # Pure noise never reaches R² 0.99, so the untrimmed fit stands.
+    t = np.arange(0.0, 200.0, 10.0)
+    y = np.random.default_rng(1).normal(500.0, 50.0, size=t.shape)
+    fit = fit_series(t, y, "poly3", trim_tail=True)
+    assert fit is not None
+    assert fit.fitted_end == t[-1]
+
+
+def test_trim_tail_leaves_a_good_fit_alone():
+    t = np.arange(0.0, 200.0, 10.0)
+    y = 3000.0 / (1.0 + np.exp(-0.08 * (t - 95.0))) + 500.0
+    fit = fit_series(t, y, "sigmoid", trim_tail=True)
+    assert fit.fitted_end == t[-1]
+    assert trimmed_note(fit, t[-1]) == ""
+
+
+def test_trimmed_note_reports_the_domain_actually_fitted():
+    t, y = _bleached_series()
+    fit = fit_series(t, y, "sigmoid", trim_tail=True)
+    note = trimmed_note(fit, t[-1])
+    assert note.startswith(" (fit to t ≤ ")
+    assert f"{fit.fitted_end:.4g}" in note
 
 
 def test_fastest_change_exponential_decay_at_start():

@@ -23,6 +23,13 @@ FIT_LABELS = {"none": "No fit", "linear": "Linear",
 _MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4,
                "sigmoid": 5}
 
+#: Poor-fit tail trim (opt-in, see fit_series): R² a fit must reach to
+#: be accepted, the share of points each retry keeps, and the fewest
+#: points worth fitting however poor R² stays.
+TRIM_TARGET_R_SQUARED = 0.99
+_TRIM_KEEP_FRACTION = 0.9
+_TRIM_MIN_POINTS = 10
+
 
 class FitResult(HasTraits):
     """One fitted model over one ROI's series."""
@@ -37,6 +44,13 @@ class FitResult(HasTraits):
     first_derivative = Any()
     #: Vectorized t -> analytic d²y/dt².
     second_derivative = Any()
+    #: t of peak |dy/dt| where the model carries it as a parameter
+    #: (the sigmoid's inflection); None when it has to be searched for.
+    inflection = Any()
+    #: The t-range actually solved on — narrower than the series when
+    #: the poor-fit tail trim dropped trailing points.
+    fitted_start = Float()
+    fitted_end = Float()
 
 
 def _signed(value):
@@ -114,25 +128,40 @@ def _sigmoid(t, amplitude, rate, midpoint, offset):
         rate * (np.asarray(t, dtype=float) - midpoint)) + offset
 
 
+def _logistic_4p(t, initial, final, midpoint, rate):
+    """Four-parameter logistic, the standard melt-curve form:
+    y = initial + (final - initial) / (1 + e^(-rate·(t - midpoint))),
+    where ``initial``/``final`` are the plateaus approached as t runs
+    to -inf/+inf (the classic 4PL lower/upper asymptotes a and k, in
+    that order only while the curve rises) and ``midpoint`` is the
+    inflection point (Tm). Fitting the plateaus directly keeps both of
+    them in the parameter set, where an amplitude-on-offset form hides
+    the far one behind a sum."""
+    return _sigmoid(t, final - initial, rate, midpoint, initial)
+
+
 def _fit_sigmoid(elapsed, values):
     t_span = float(elapsed[-1] - elapsed[0]) or 1.0
-    offset0 = float(values[0])
-    amplitude0 = float(values[-1] - values[0])
-    if abs(amplitude0) < 1e-12:
-        amplitude0 = float(np.ptp(values)) or 1.0
-    half = offset0 + amplitude0 / 2.0
+    initial0 = float(values[0])
+    final0 = float(values[-1])
+    if abs(final0 - initial0) < 1e-12:
+        final0 = initial0 + (float(np.ptp(values)) or 1.0)
+    half = (initial0 + final0) / 2.0
     midpoint0 = float(elapsed[int(np.argmin(np.abs(values - half)))])
-    params, _ = curve_fit(_sigmoid, elapsed, values,
-                          p0=(amplitude0, 4.0 / t_span, midpoint0,
-                              offset0),
+    params, _ = curve_fit(_logistic_4p, elapsed, values,
+                          p0=(initial0, final0, midpoint0,
+                              4.0 / t_span),
                           maxfev=10000)
-    amplitude, rate, midpoint, offset = (float(value)
-                                         for value in params)
+    initial, final, midpoint, rate = (float(value) for value in params)
     if not all(math.isfinite(value)
-               for value in (amplitude, rate, midpoint, offset)):
+               for value in (initial, final, midpoint, rate)):
         return None
-    if rate < 0:      # canonical k>0: L·s(kx)+C == -L·s(-kx)+(L+C)
-        amplitude, rate, offset = -amplitude, -rate, offset + amplitude
+    # Canonical rate > 0: since s(-x) == 1 - s(x), swapping the
+    # plateaus and negating the rate is the very same curve (a decay
+    # then reads as a positive rate with a negative amplitude).
+    if rate < 0:
+        initial, final, rate = final, initial, -rate
+    amplitude, offset = final - initial, initial
 
     def sig(t):
         return expit(rate * (np.asarray(t, dtype=float) - midpoint))
@@ -140,6 +169,7 @@ def _fit_sigmoid(elapsed, values):
     return FitResult(
         params={"amplitude": amplitude, "rate": rate,
                 "midpoint": midpoint, "offset": offset},
+        inflection=midpoint,
         equation=(f"y = {amplitude:.3g}/(1+e^(-{rate:.3g}"
                   f"·(t{_signed(-midpoint)}))){_signed(offset)}"),
         predict=lambda t: _sigmoid(t, amplitude, rate, midpoint,
@@ -150,18 +180,10 @@ def _fit_sigmoid(elapsed, values):
         * (1.0 - sig(t)) * (1.0 - 2.0 * sig(t)))
 
 
-def fit_series(elapsed, values, method):
-    """Fit one series. None when fitting is off, too few finite points
-    remain after NaN filtering, or the optimizer fails — callers render
-    that as "fit failed", never a traceback."""
-    if method not in _MIN_POINTS:
-        return None
-    elapsed = np.asarray(elapsed, dtype=float)
-    values = np.asarray(values, dtype=float)
-    finite = np.isfinite(elapsed) & np.isfinite(values)
-    elapsed, values = elapsed[finite], values[finite]
-    if len(elapsed) < _MIN_POINTS[method]:
-        return None
+def _solve(elapsed, values, method):
+    """One fit over exactly the points given (already finite-filtered),
+    scored and stamped with the domain it used. None when the model
+    cannot be solved on them."""
     try:
         if method == "exponential":
             result = _fit_exponential(elapsed, values)
@@ -177,7 +199,56 @@ def fit_series(elapsed, values, method):
         return None
     result.method = method
     result.r_squared = _r_squared(values, result.predict(elapsed))
+    result.fitted_start = float(elapsed[0])
+    result.fitted_end = float(elapsed[-1])
     return result
+
+
+def fit_series(elapsed, values, method, trim_tail=False):
+    """Fit one series. None when fitting is off, too few finite points
+    remain after NaN filtering, or the optimizer fails — callers render
+    that as "fit failed", never a traceback.
+
+    ``trim_tail`` retries a fit that misses TRIM_TARGET_R_SQUARED on
+    successively shorter leading slices, the qPCR trick for a tail the
+    model does not describe (a bleaching plateau drags a sigmoid's
+    inflection early). The first slice reaching the target wins; when
+    none does, the full-series fit stands rather than paying data for
+    nothing. Read ``fitted_start``/``fitted_end`` for what was used —
+    everything past it is extrapolation."""
+    if method not in _MIN_POINTS:
+        return None
+    elapsed = np.asarray(elapsed, dtype=float)
+    values = np.asarray(values, dtype=float)
+    finite = np.isfinite(elapsed) & np.isfinite(values)
+    elapsed, values = elapsed[finite], values[finite]
+    if len(elapsed) < _MIN_POINTS[method]:
+        return None
+    result = _solve(elapsed, values, method)
+    if (result is None or not trim_tail
+            or result.r_squared >= TRIM_TARGET_R_SQUARED):
+        return result
+    floor = max(_MIN_POINTS[method], _TRIM_MIN_POINTS)
+    kept = len(elapsed)
+    while kept > floor:
+        # min() with kept - 1 keeps short series shrinking at all.
+        kept = min(kept - 1, int(kept * _TRIM_KEEP_FRACTION))
+        if kept < floor:
+            break
+        trimmed = _solve(elapsed[:kept], values[:kept], method)
+        if (trimmed is not None
+                and trimmed.r_squared >= TRIM_TARGET_R_SQUARED):
+            return trimmed
+    return result
+
+
+def trimmed_note(fit, t_end):
+    """' (fit to t ≤ 150 s)' when the trim dropped the tail, '' when
+    the whole series was used — so every readout of an equation says
+    what it was solved on."""
+    if fit.fitted_end >= float(t_end):
+        return ""
+    return f" (fit to t ≤ {fit.fitted_end:.4g} s)"
 
 
 def second_derivative_extrema(fit, t_start, t_end):
@@ -201,9 +272,12 @@ def second_derivative_extrema(fit, t_start, t_end):
 
 def fastest_change_time(fit, t_start, t_end):
     """The t in [t_start, t_end] where |dy/dt| of the fitted curve
-    peaks — for a sigmoid, its inflection point. None when the speed
-    is flat (linear fits): no meaningful "fastest" moment exists, so
-    callers draw nothing rather than an arbitrary bar."""
+    peaks. A sigmoid answers from its own fitted inflection, so a
+    trimmed fit still reports the real crossing instead of the edge of
+    the slice it was solved on; other models are searched on a grid.
+    None when the speed is flat (linear fits): no meaningful "fastest"
+    moment exists, so callers draw nothing rather than an arbitrary
+    bar."""
     grid = np.linspace(float(t_start), float(t_end), 512)
     speed = np.abs(np.asarray(fit.first_derivative(grid), dtype=float))
     if speed.shape != grid.shape:   # scalar-returning closure
@@ -212,4 +286,9 @@ def fastest_change_time(fit, t_start, t_end):
         return None
     if float(np.ptp(speed)) <= 1e-12 * max(1.0, float(np.max(speed))):
         return None
+    # Outside the window the parameter is no answer to "when, in what
+    # we plotted?" — there the rate is monotonic and the edge is.
+    if (fit.inflection is not None
+            and float(t_start) <= fit.inflection <= float(t_end)):
+        return float(fit.inflection)
     return float(grid[int(np.argmax(speed))])
