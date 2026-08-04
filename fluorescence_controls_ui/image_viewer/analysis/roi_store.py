@@ -11,6 +11,7 @@ from logger.logger_service import get_logger
 from .consts import ANALYSIS_DIR_NAME, OUTLINE_STATS_PREFIX, \
     ROI_CONFIG_FILENAME, ROI_STATS_FILENAME
 from .roi_compute import STAT_NAMES
+from .roi_geometry import normalize
 from .roi_model import AnalysisSession, FigureSettings, Roi, RoiStyle
 
 logger = get_logger(__name__)
@@ -62,13 +63,13 @@ def _roi_from(entry):
     style.trait_set(**{name: entry.get("style", {})[name]
                        for name in _STYLE_FIELDS
                        if name in entry.get("style", {})})
+    kind, geometry = normalize(entry["kind"], entry["geometry"])
     return Roi(roi_id=entry["roi_id"], name=entry["name"],
-               kind=entry["kind"],
-               geometry=[float(value) for value in entry["geometry"]],
+               kind=kind, geometry=geometry,
                base_anchor=float(entry["base_anchor"]),
                overrides={
-                   float(anchor): [float(value) for value in geometry]
-                   for anchor, geometry in entry["overrides"].items()},
+                   float(anchor): normalize(kind, override)[1]
+                   for anchor, override in entry["overrides"].items()},
                style=style)
 
 
@@ -129,6 +130,15 @@ def save_roi_stats(experiment_directory, stats):
     path.write_text(json.dumps(payload))
 
 
+def _stats_key(entry):
+    """The cache key a stats entry answers to, migrated the same way
+    the ROI it belongs to is — so intensities computed before shapes
+    could rotate keep matching after."""
+    kind, geometry = normalize(entry["kind"], entry["geometry"])
+    return (entry["path"], float(entry["mtime"]), entry["roi_id"],
+            kind, tuple(geometry))
+
+
 def load_roi_stats(experiment_directory) -> dict:
     """The persisted stats store, {} when absent/unreadable/unknown
     version. Entries that no longer match anything (moved ROI, changed
@@ -142,10 +152,7 @@ def load_roi_stats(experiment_directory) -> dict:
         if payload["version"] != 1:
             logger.warning(f"Unknown ROI stats version in {path}")
             return {}
-        return {(entry["path"], float(entry["mtime"]), entry["roi_id"],
-                 entry["kind"],
-                 tuple(float(value) for value in entry["geometry"])):
-                entry["stats"]
+        return {_stats_key(entry): entry["stats"]
                 for entry in payload["entries"]}
     except Exception as error:
         logger.warning(f"Could not load ROI stats {path}: {error}")

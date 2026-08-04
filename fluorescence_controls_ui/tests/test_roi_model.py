@@ -5,18 +5,19 @@ from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
 
 
 def _roi():
-    return Roi(name="ROI 1", kind="circle", geometry=[50.0, 50.0, 10.0],
+    return Roi(name="ROI 1", kind="ellipse",
+               geometry=[50.0, 50.0, 10.0, 10.0, 0.0],
                base_anchor=100.0)
 
 
 def test_effective_geometry_is_base_without_overrides():
-    assert _roi().effective_geometry(500.0) == [50.0, 50.0, 10.0]
+    assert _roi().effective_geometry(500.0) == [50.0, 50.0, 10.0, 10.0, 0.0]
 
 
 def test_override_applies_from_its_anchor_forward():
     roi = _roi()
     roi.apply_edit(200.0, [60.0, 60.0, 12.0])
-    assert roi.effective_geometry(150.0) == [50.0, 50.0, 10.0]
+    assert roi.effective_geometry(150.0) == [50.0, 50.0, 10.0, 10.0, 0.0]
     assert roi.effective_geometry(200.0) == [60.0, 60.0, 12.0]
     assert roi.effective_geometry(999.0) == [60.0, 60.0, 12.0]
 
@@ -40,7 +41,7 @@ def test_clear_overrides_restores_base_everywhere():
     roi = _roi()
     roi.apply_edit(200.0, [60.0, 60.0, 12.0])
     roi.clear_overrides()
-    assert roi.effective_geometry(999.0) == [50.0, 50.0, 10.0]
+    assert roi.effective_geometry(999.0) == [50.0, 50.0, 10.0, 10.0, 0.0]
 
 
 def test_cache_key_changes_only_with_effective_geometry(tmp_path):

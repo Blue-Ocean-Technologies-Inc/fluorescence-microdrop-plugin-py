@@ -25,10 +25,20 @@ def roi_masks(shape, kind, geometry, perimeter_px=OUTLINE_PERIMETER_PX):
     if kind == "ellipse":
         centre_x, centre_y, radius_x, radius_y, angle = geometry
         centre = (int(round(centre_x)), int(round(centre_y)))
-        axes = (int(round(radius_x)), int(round(radius_y)))
-        cv2.ellipse(interior, centre, axes, angle, 0, 360, 255, -1)
-        cv2.ellipse(outline, centre, axes, angle, 0, 360, 255,
-                    perimeter_px)
+        if radius_x == radius_y and angle == 0.0:
+            # cv2 does not rasterize the same disk both ways (~3% more
+            # pixels through ellipse at r=30), so a plain circle keeps
+            # the call every already-cached statistic was computed
+            # with: reopening an experiment cannot shift its numbers,
+            # nor leave one series half in each convention.
+            radius = int(round(radius_x))
+            cv2.circle(interior, centre, radius, 255, -1)
+            cv2.circle(outline, centre, radius, 255, perimeter_px)
+        else:
+            axes = (int(round(radius_x)), int(round(radius_y)))
+            cv2.ellipse(interior, centre, axes, angle, 0, 360, 255, -1)
+            cv2.ellipse(outline, centre, axes, angle, 0, 360, 255,
+                        perimeter_px)
     else:
         polygon = (box_polygon(geometry) if kind == "box"
                    else capsule_polygon(geometry))

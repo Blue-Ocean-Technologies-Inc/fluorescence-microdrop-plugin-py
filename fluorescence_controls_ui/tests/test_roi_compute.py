@@ -74,6 +74,16 @@ def test_capsule_outline_stays_inside_its_bounding_box():
     assert rows.min() >= 100 - 8 - 2 and rows.max() <= 100 + 8 + 2
 
 
+def test_unrotated_equal_radii_reuse_the_legacy_circle_mask():
+    # Pixel-identical, so intensities cached before ellipses existed
+    # stay comparable with anything computed after.
+    legacy = np.zeros((200, 200), dtype=np.uint8)
+    cv2.circle(legacy, (100, 100), 30, 255, -1)
+    interior, _outline = roi_masks((200, 200), "ellipse",
+                                   (100.0, 100.0, 30.0, 30.0, 0.0))
+    assert np.array_equal(interior, legacy)
+
+
 def test_legacy_circle_geometry_still_masks():
     interior, _outline = roi_masks((100, 100), "circle",
                                    (50.0, 50.0, 30.0))

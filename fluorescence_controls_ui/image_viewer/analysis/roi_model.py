@@ -75,10 +75,12 @@ class Roi(HasTraits):
     #: Display name (also the CSV column prefix and plot legend label).
     name = Str()
 
-    #: Shape. Circle geometry is [center_x, center_y, radius]; box
-    #: geometry is [x, y, width, height] with (x, y) the top-left corner.
-    #: All values are image-pixel floats.
-    kind = Enum("circle", "box")
+    #: Shape, with the geometry lists roi_geometry defines: ellipse
+    #: [cx, cy, rx, ry, angle], box [x, y, width, height, angle] with
+    #: (x, y) the unrotated top-left corner, capsule [cx, cy,
+    #: half_length, radius, angle]. All values are image-pixel floats
+    #: bar the angle, which is degrees clockwise.
+    kind = Enum("ellipse", "box", "capsule")
 
     #: Base geometry, applying to every image without a later override.
     geometry = List(Float)
@@ -205,7 +207,8 @@ class RoiAnalysisModel(HasTraits):
 
     #: Canvas interaction: pan (normal navigation), one-shot draw modes,
     #: or edit (move/resize/select existing ROIs).
-    interaction_mode = Enum("pan", "draw_circle", "draw_box", "edit")
+    interaction_mode = Enum("pan", "draw_ellipse", "draw_box",
+                            "draw_capsule", "edit")
 
     #: roi_id of the canvas-selected ROI (edit mode), '' when none.
     selected_roi_id = Str()
@@ -218,8 +221,9 @@ class RoiAnalysisModel(HasTraits):
     batch_running = Bool(False)
 
     # Toolbar buttons (view events; RoiAnalysisController reacts).
-    draw_circle_button = Button()
+    draw_ellipse_button = Button()
     draw_box_button = Button()
+    draw_capsule_button = Button()
     edit_mode = Bool(False)
     delete_roi_button = Button()
     clear_rois_button = Button()

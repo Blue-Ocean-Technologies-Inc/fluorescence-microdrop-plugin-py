@@ -112,8 +112,12 @@ def write_frames(raw_dir):
 def build_session(experiment_dir):
     session = AnalysisSession(directory=str(experiment_dir))
     session.rois = [
-        Roi(roi_id=f"demo-{name}", name=name, kind="circle",
-            geometry=list(geometry), base_anchor=0.0)
+        # DEMO_ROIS keeps the (cx, cy, r) tuples cv2.circle draws the
+        # frames from; the ROI itself takes canonical ellipse geometry.
+        Roi(roi_id=f"demo-{name}", name=name, kind="ellipse",
+            geometry=[geometry[0], geometry[1], geometry[2],
+                      geometry[2], 0.0],
+            base_anchor=0.0)
         for name, geometry, _, _ in DEMO_ROIS]
     figure_settings = session.figure
     figure_settings.fit_method = "sigmoid"

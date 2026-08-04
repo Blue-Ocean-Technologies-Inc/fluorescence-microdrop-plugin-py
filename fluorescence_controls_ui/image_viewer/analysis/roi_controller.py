@@ -60,13 +60,17 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     # Interaction modes                                                    #
     # ------------------------------------------------------------------ #
-    @observe("analysis_model:draw_circle_button")
-    def _arm_draw_circle(self, event):
-        self.analysis_model.interaction_mode = "draw_circle"
+    @observe("analysis_model:draw_ellipse_button")
+    def _arm_draw_ellipse(self, event):
+        self.analysis_model.interaction_mode = "draw_ellipse"
 
     @observe("analysis_model:draw_box_button")
     def _arm_draw_box(self, event):
         self.analysis_model.interaction_mode = "draw_box"
+
+    @observe("analysis_model:draw_capsule_button")
+    def _arm_draw_capsule(self, event):
+        self.analysis_model.interaction_mode = "draw_capsule"
 
     @observe("analysis_model:edit_mode")
     def _toggle_edit_mode(self, event):

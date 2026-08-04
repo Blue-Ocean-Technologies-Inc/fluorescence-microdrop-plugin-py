@@ -15,8 +15,8 @@ from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
 
 def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     roi = Roi(name="Cell body", kind="box",
-              geometry=[1.0, 2.0, 30.0, 40.0], base_anchor=100.0,
-              overrides={200.0: [5.0, 6.0, 30.0, 40.0]},
+              geometry=[1.0, 2.0, 30.0, 40.0, 15.0], base_anchor=100.0,
+              overrides={200.0: [5.0, 6.0, 30.0, 40.0, 15.0]},
               style=RoiStyle(color="#d62728", line_style="dashed",
                              marker="o", marker_size=7.0))
     session = AnalysisSession(directory=str(tmp_path), rois=[roi],
@@ -31,7 +31,8 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert loaded.figure.y_auto is False and loaded.figure.y_max == 4096.0
     (back,) = loaded.rois
     assert back.roi_id == roi.roi_id and back.name == "Cell body"
-    assert back.overrides == {200.0: [5.0, 6.0, 30.0, 40.0]}
+    assert back.geometry == [1.0, 2.0, 30.0, 40.0, 15.0]
+    assert back.overrides == {200.0: [5.0, 6.0, 30.0, 40.0, 15.0]}
     assert back.style.color == "#d62728"
     assert back.style.line_style == "dashed"
     assert back.style.marker == "o" and back.style.marker_size == 7.0
@@ -64,7 +65,7 @@ def test_load_session_accepts_v1_bare_list(tmp_path):
     }]))
     loaded = load_session(tmp_path)
     (roi,) = loaded.rois
-    assert roi.roi_id == "abcd1234" and roi.kind == "circle"
+    assert roi.roi_id == "abcd1234" and roi.kind == "ellipse"
     assert loaded.plot_stat == "mean"          # defaults fill in
     assert roi.style.line_style == "solid"
 
@@ -95,8 +96,8 @@ def test_load_session_missing_or_corrupt_is_empty(tmp_path):
 
 
 def test_stats_store_round_trip_including_nan(tmp_path):
-    key = (str(tmp_path / "a_raw.png"), 123.5, "abcd1234", "circle",
-           (10.0, 10.0, 5.0))
+    key = (str(tmp_path / "a_raw.png"), 123.5, "abcd1234", "ellipse",
+           (10.0, 10.0, 5.0, 5.0, 0.0))
     stats = {"mean": 42.5, "std": float("nan"), "count": 9.0}
     save_roi_stats(tmp_path, {key: stats})
 
@@ -104,6 +105,47 @@ def test_stats_store_round_trip_including_nan(tmp_path):
     assert set(loaded) == {key}
     assert loaded[key]["mean"] == 42.5
     assert math.isnan(loaded[key]["std"])
+
+
+def test_legacy_circle_config_loads_as_a_migrated_ellipse(tmp_path):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text(json.dumps({
+        "version": 2, "plot_stat": "mean", "figure": {},
+        "rois": [{
+            "roi_id": "abcd1234", "name": "ROI 1", "kind": "circle",
+            "geometry": [50.0, 60.0, 10.0], "base_anchor": 0.0,
+            "overrides": {"120.0": [52.0, 61.0, 11.0]}, "style": {},
+        }],
+    }))
+
+    (roi,) = load_session(tmp_path).rois
+    assert roi.kind == "ellipse"
+    assert roi.geometry == [50.0, 60.0, 10.0, 10.0, 0.0]
+    assert roi.overrides == {120.0: [52.0, 61.0, 11.0, 11.0, 0.0]}
+
+
+def test_legacy_stats_keys_migrate_with_their_roi(tmp_path):
+    # The no-recompute guarantee: a store written before rotation must
+    # still resolve against the migrated ROI's cache key.
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_stats.json").write_text(json.dumps({
+        "version": 1, "entries": [{
+            "path": str(tmp_path / "a_raw.png"), "mtime": 123.5,
+            "roi_id": "abcd1234", "kind": "circle",
+            "geometry": [50.0, 60.0, 10.0], "stats": {"mean": 7.0},
+        }],
+    }))
+    session = AnalysisSession(directory=str(tmp_path), rois=[
+        Roi(roi_id="abcd1234", name="ROI 1", kind="ellipse",
+            geometry=[50.0, 60.0, 10.0, 10.0, 0.0])])
+
+    store = load_roi_stats(tmp_path)
+    key = (str(tmp_path / "a_raw.png"), 123.5, "abcd1234", "ellipse",
+           (50.0, 60.0, 10.0, 10.0, 0.0))
+    assert store[key] == {"mean": 7.0}
+    assert session.roi_by_id("abcd1234").kind == "ellipse"
 
 
 def test_load_roi_stats_missing_or_corrupt_is_empty(tmp_path):

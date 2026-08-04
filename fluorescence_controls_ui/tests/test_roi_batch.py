@@ -48,7 +48,7 @@ def test_compute_single_reports_on_queue(tmp_path):
     path = tmp_path / "one_raw.png"
     _write_image(path, 300)
     runner = RoiBatchRunner()
-    runner.compute_single(str(path), {"r1": ("circle", (10.0, 10.0, 4.0))})
+    runner.compute_single(str(path), {"r1": ("ellipse", (10.0, 10.0, 4.0, 4.0, 0.0))})
     messages = _drain_until(runner.results, INSTANT_RESULT, timeout_s=15.0)
     kind, payload = messages[-1]
     assert payload["stats"]["r1"]["mean"] == 300.0
