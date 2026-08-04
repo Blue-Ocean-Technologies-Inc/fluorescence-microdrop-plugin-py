@@ -9,10 +9,15 @@ on stats/current-image change — both scheduled onto the next event-loop
 turn so nothing mutates the table from inside the emitting Qt signal or
 traits notification."""
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QColorDialog, QComboBox, QDoubleSpinBox, QPushButton, QTableWidget,
-    QTableWidgetItem,
+    QColorDialog, QComboBox, QDoubleSpinBox, QPushButton, QSpinBox,
+    QTableWidget, QTableWidgetItem,
+)
+
+from microdrop_style.button_styles import ICON_FONT_FAMILY
+from microdrop_style.icons.icons import (
+    ICON_VISIBILITY, ICON_VISIBILITY_OFF,
 )
 
 from .plot_series import stat_value
@@ -20,7 +25,11 @@ from .plot_series import stat_value
 #: Value columns after the editors, shown for the current image.
 _STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max",
                  "count")
-_HEADERS = ("Name", "Color", "Line", "Marker", "Size") + _STAT_COLUMNS
+#: The eye column's header stays blank, as in the device viewer's
+#: alpha sidebar; Name keeps column 0, where the rename handler
+#: expects it.
+_HEADERS = ("Name", "", "Alpha", "Color", "Line", "Marker",
+            "Size") + _STAT_COLUMNS
 _LINE_CHOICES = ("solid", "dashed", "dotted", "dashdot")
 _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
 
@@ -98,16 +107,18 @@ class RoiStatsTable(QTableWidget):
             name_item = QTableWidgetItem(roi.name)
             name_item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
             self.setItem(row, 0, name_item)
-            self.setCellWidget(row, 1, self._color_button(roi))
+            self.setCellWidget(row, 1, self._visible_button(roi))
+            self.setCellWidget(row, 2, self._alpha_spin(roi))
+            self.setCellWidget(row, 3, self._color_button(roi))
             self.setCellWidget(
-                row, 2, self._combo(_LINE_CHOICES, roi.style.line_style,
+                row, 4, self._combo(_LINE_CHOICES, roi.style.line_style,
                                     lambda value, roi=roi:
                                     roi.style.trait_set(line_style=value)))
             self.setCellWidget(
-                row, 3, self._combo(_MARKER_CHOICES, roi.style.marker,
+                row, 5, self._combo(_MARKER_CHOICES, roi.style.marker,
                                     lambda value, roi=roi:
                                     roi.style.trait_set(marker=value)))
-            self.setCellWidget(row, 4, self._size_spin(roi))
+            self.setCellWidget(row, 6, self._size_spin(roi))
             stats = (session.stats.get(
                 session.cache_key(current, roi, stat_cache))
                 if current else None)
@@ -154,6 +165,36 @@ class RoiStatsTable(QTableWidget):
             item.data(Qt.ItemDataRole.UserRole))
         if roi is not None and item.text().strip():
             roi.name = item.text().strip()
+
+    def _visible_button(self, roi):
+        """Eye toggle over roi.style.visible — the plot skips a hidden
+        ROI entirely, while its stats and CSV columns stay."""
+        button = QPushButton(self)
+        button.setFont(QFont(ICON_FONT_FAMILY))
+        button.setFlat(True)
+        button.setToolTip("Show or hide this ROI on the plot")
+        self._show_visibility(button, roi.style.visible)
+        button.clicked.connect(lambda _=False, roi=roi, button=button:
+                               self._toggle_visible(roi, button))
+        return button
+
+    def _toggle_visible(self, roi, button):
+        roi.style.visible = not roi.style.visible
+        self._show_visibility(button, roi.style.visible)
+
+    def _show_visibility(self, button, visible):
+        button.setText(ICON_VISIBILITY if visible
+                       else ICON_VISIBILITY_OFF)
+
+    def _alpha_spin(self, roi):
+        spin = QSpinBox(self)
+        spin.setRange(0, 100)
+        spin.setSuffix("%")
+        spin.setValue(roi.style.alpha)
+        spin.setToolTip("Opacity of this ROI's line on the plot")
+        spin.valueChanged.connect(
+            lambda value, roi=roi: roi.style.trait_set(alpha=value))
+        return spin
 
     def _color_button(self, roi):
         button = QPushButton(self)

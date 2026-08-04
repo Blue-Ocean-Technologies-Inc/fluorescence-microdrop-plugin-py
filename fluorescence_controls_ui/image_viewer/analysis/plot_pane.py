@@ -39,7 +39,7 @@ from .curve_fit import (
     second_derivative_extrema, trimmed_note,
 )
 from .fit_equations import FitEquationsTable, fit_equation_rows
-from .plot_series import derive_series
+from .plot_series import derive_series, visible_series
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
 from .roi_table import RoiStatsTable
@@ -138,6 +138,8 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:rois:items:style:line_style, "
                "session:rois:items:style:marker, "
                "session:rois:items:style:marker_size, "
+               "session:rois:items:style:visible, "
+               "session:rois:items:style:alpha, "
                "filtered_paths.items, "
                "session:figure:x_auto, session:figure:x_min, "
                "session:figure:x_max, session:figure:y_auto, "
@@ -204,8 +206,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             return
         if not self.isVisible():
             return                # showEvent reschedules
-        series = derive_series(self._model.session,
-                               self._model.filtered_paths)
+        derived = derive_series(self._model.session,
+                                self._model.filtered_paths)
+        # Filtered once here, so every view hides the same ROIs.
+        series = visible_series(self._model.session, derived)
         figure_settings = self._model.session.figure
         for artist in self._fit_artists:
             artist.remove()
@@ -258,6 +262,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 line.set_marker("" if roi.style.marker == "none"
                                 else roi.style.marker)
                 line.set_markersize(roi.style.marker_size)
+                line.set_alpha(roi.style.plot_alpha)
+        if not series and self._model.session.rois:
+            self._draw_hint("All ROIs are hidden (eye icons in the "
+                            "table)")
         trim_edges = []
         if figure_settings.fit_method != "none":
             trim_edges = self._draw_fits(series, figure_settings)
@@ -290,6 +298,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             if d2.shape != dense.shape:
                 d2 = np.full_like(dense, float(d2))
             (curve,) = self._axes.plot(dense, d2, color=roi.style.color,
+                                       alpha=roi.style.plot_alpha,
                                        label=name)
             self._fit_artists.append(curve)
             drew = True
@@ -320,7 +329,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if figure_settings.fit_method == "none":
             self._draw_hint("Select a fit method to view fastest change")
             return []
-        labels, times, colors = [], [], []
+        labels, times, colors, alphas = [], [], [], []
         for roi_id, (name, elapsed, values) in series.items():
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
@@ -338,6 +347,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             labels.append(name)
             times.append(t_star)
             colors.append(roi.style.color)
+            alphas.append(roi.style.plot_alpha)
         if not labels:
             self._draw_hint("No fastest-change times "
                             "(fits failed or rate is constant)")
@@ -345,8 +355,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         positions = list(range(len(labels)))
         # Keep the container, not its bars: its remove() also drops the
         # axes.containers registration the bars alone would leave behind.
-        self._fit_artists.append(
-            self._axes.bar(positions, times, color=colors))
+        bars = self._axes.bar(positions, times, color=colors)
+        for bar, alpha in zip(bars, alphas):
+            bar.set_alpha(alpha)
+        self._fit_artists.append(bars)
         self._axes.set_xticks(positions, labels)
         for x, t_star in zip(positions, times):
             self._fit_artists.append(self._axes.annotate(
@@ -399,21 +411,22 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             trim_edges.append((fit.fitted_end, finite_t.max()))
             dense = np.linspace(finite_t.min(), finite_t.max(), 200)
             (overlay,) = self._axes.plot(
-                dense, fit.predict(dense), linestyle="--", alpha=0.8,
+                dense, fit.predict(dense), linestyle="--",
+                alpha=0.8 * roi.style.plot_alpha,
                 color=roi.style.color, label="_nolegend_")
             self._fit_artists.append(overlay)
             equation_lines.append(
-                (roi.style.color,
+                (roi.style.color, roi.style.plot_alpha,
                  f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"
                  f"{trimmed_note(fit, finite_t.max())}"))
             self._draw_extrema(fit, finite_t.min(), finite_t.max(),
                                roi, figure_settings)
         if figure_settings.show_fit_equations:
-            for index, (color, text) in enumerate(equation_lines):
+            for index, (color, alpha, text) in enumerate(equation_lines):
                 self._fit_artists.append(self._axes.text(
                     0.02, 0.97 - 0.06 * index, text,
                     transform=self._axes.transAxes, va="top",
-                    fontsize="x-small", color=color))
+                    fontsize="x-small", color=color, alpha=alpha))
         return trim_edges
 
     def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings):
@@ -437,24 +450,26 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                               figure_settings):
         """One d²-extremum marker at (t_star, y_star) — on the fitted
         curve in the intensity view, on the d² curve in the d² view."""
+        alpha = roi.style.plot_alpha
         (point,) = self._axes.plot(
-            [t_star], [y_star], marker="o", linestyle="",
+            [t_star], [y_star], marker="o", linestyle="", alpha=alpha,
             color=roi.style.color, markeredgecolor="black",
             label="_nolegend_")
         self._fit_artists.append(point)
         if figure_settings.second_derivative_vline:
             self._fit_artists.append(self._axes.axvline(
                 t_star, color=roi.style.color, linestyle=":",
-                alpha=0.6))
+                alpha=0.6 * alpha))
         if figure_settings.second_derivative_hline:
             self._fit_artists.append(self._axes.axhline(
                 y_star, color=roi.style.color, linestyle=":",
-                alpha=0.6))
+                alpha=0.6 * alpha))
         if figure_settings.second_derivative_coords:
             self._fit_artists.append(self._axes.annotate(
                 f"({t_star:.3g}, {y_star:.3g})", (t_star, y_star),
                 textcoords="offset points", xytext=(6, 6),
-                fontsize="x-small", color=roi.style.color))
+                fontsize="x-small", color=roi.style.color,
+                alpha=alpha))
 
 
 def _save_figure(canvas):
