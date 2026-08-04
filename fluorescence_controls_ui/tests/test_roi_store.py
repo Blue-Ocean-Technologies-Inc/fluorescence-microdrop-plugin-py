@@ -175,7 +175,7 @@ def test_write_intensity_csv_layout(tmp_path):
     }]
     csv_path = tmp_path / "out.csv"
     write_intensity_csv(csv_path, rows, [roi])
-    with open(csv_path, newline="") as handle:
+    with open(csv_path, newline="", encoding="utf-8") as handle:
         records = list(csv.reader(handle))
     assert records[0][:6] == ["index", "time_utc", "elapsed_sec",
                               "filename", "group", "wavelength"]
@@ -225,3 +225,29 @@ def test_config_without_a_scale_loads_uncalibrated(tmp_path):
     assert scale.metres_per_pixel == 0.0
     assert scale.unit == "mm"       # the default, not the first unit
     assert scale.show_bar is True
+
+
+def test_write_intensity_csv_includes_the_derived_columns(tmp_path):
+    roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
+    rows = [{
+        "filename": "img_raw.png", "time_utc": "2026_07_20-17_46_24",
+        "elapsed_sec": 0.0, "group": "burst_a",
+        "wavelength": "Green 540 nm",
+        "stats": {roi.roi_id: {"mean": 10.0, "outline_mean": 4.0,
+                               "count": 25.0}},
+    }]
+    csv_path = tmp_path / "out.csv"
+    write_intensity_csv(csv_path, rows, [roi], pixel_area=1e-4,
+                        area_unit_label="mm²")
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        records = list(csv.reader(handle))
+
+    assert "ROI 1_area_mm²" in records[0]
+    assert "ROI 1_integrated" in records[0]
+    assert "ROI 1_bg_integrated" in records[0]
+    assert "ROI 1_per_area" in records[0]
+    assert "ROI 1_bg_per_area" in records[0]
+    area = records[1][records[0].index("ROI 1_area_mm²")]
+    assert abs(float(area) - 25.0 * 1e-4) < 1e-12
+    integrated = records[1][records[0].index("ROI 1_integrated")]
+    assert float(integrated) == 250.0

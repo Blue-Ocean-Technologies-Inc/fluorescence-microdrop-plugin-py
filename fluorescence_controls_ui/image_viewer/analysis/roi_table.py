@@ -20,11 +20,12 @@ from microdrop_style.icons.icons import (
     ICON_VISIBILITY, ICON_VISIBILITY_OFF,
 )
 
+from ..scale_bar import area_unit, pixel_area
 from .plot_series import stat_value
 
 #: Value columns after the editors, shown for the current image.
 _STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max",
-                 "count")
+                 "count", "area")
 #: The eye column's header stays blank, as in the device viewer's
 #: alpha sidebar; Name keeps column 0, where the rename handler
 #: expects it.
@@ -36,7 +37,9 @@ _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
 #: Row count/editors/cell identities change — triggers a full rebuild.
 _TABLE_STRUCTURE = ("session, session:rois.items, "
                     "session:rois:items:name, "
-                    "session:rois:items:style:color")
+                    "session:rois:items:style:color, "
+                    "session:scale:metres_per_pixel, "
+                    "session:scale:unit")
 #: Only the stat-cell text can be stale — triggers a values-only
 #: refresh. The two geometry clauses close a staleness edge: editing an
 #: ROI back to an already-cached geometry never bumps stats_revision.
@@ -54,7 +57,6 @@ class RoiStatsTable(QTableWidget):
         self._rebuilding = False
         self._detached = False
         self._pending = None   # None | "rebuild" | "values"
-        self.setHorizontalHeaderLabels(_HEADERS)
         self.verticalHeader().setVisible(False)
         self.itemChanged.connect(self._on_item_changed)
         model.observe(self._on_structure_changed, _TABLE_STRUCTURE)
@@ -103,6 +105,12 @@ class RoiStatsTable(QTableWidget):
         self.setRowCount(len(rois))
         current = self._model.current_image_path
         stat_cache = {}
+        area_per_pixel = self._area_per_pixel()
+        # Rebuilt here, not in __init__: the area header names the unit
+        # the session is calibrated in, which can change under us.
+        self.setHorizontalHeaderLabels(
+            [f"Area ({self._area_unit()})" if header == "area"
+             else header for header in _HEADERS])
         for row, roi in enumerate(rois):
             name_item = QTableWidgetItem(roi.name)
             name_item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
@@ -125,13 +133,23 @@ class RoiStatsTable(QTableWidget):
             for column, stat in enumerate(_STAT_COLUMNS,
                                           start=len(_HEADERS)
                                           - len(_STAT_COLUMNS)):
-                value = stat_value(stats, stat)
+                value = stat_value(stats, stat,
+                                   area_per_pixel)
                 text = "" if value != value else f"{value:.1f}"
                 value_item = QTableWidgetItem(text)
                 value_item.setFlags(value_item.flags()
                                     & ~Qt.ItemFlag.ItemIsEditable)
                 self.setItem(row, column, value_item)
         self._rebuilding = False
+
+    def _area_per_pixel(self):
+        """One pixel's area in the session's unit (1.0 = px²)."""
+        scale = self._model.session.scale
+        return pixel_area(scale.metres_per_pixel, scale.unit)
+
+    def _area_unit(self):
+        scale = self._model.session.scale
+        return area_unit(scale.metres_per_pixel, scale.unit)
 
     def _refresh_values(self):
         """Rewrite the read-only stat cells in place — no editors or
@@ -142,6 +160,7 @@ class RoiStatsTable(QTableWidget):
         rois = list(session.rois)
         current = self._model.current_image_path
         stat_cache = {}
+        area_per_pixel = self._area_per_pixel()
         for row, roi in enumerate(rois):
             if row >= self.rowCount():
                 break
@@ -151,7 +170,8 @@ class RoiStatsTable(QTableWidget):
             for column, stat in enumerate(_STAT_COLUMNS,
                                           start=len(_HEADERS)
                                           - len(_STAT_COLUMNS)):
-                value = stat_value(stats, stat)
+                value = stat_value(stats, stat,
+                                   area_per_pixel)
                 text = "" if value != value else f"{value:.1f}"
                 item = self.item(row, column)
                 if item is not None:

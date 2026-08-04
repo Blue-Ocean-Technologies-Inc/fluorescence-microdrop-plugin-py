@@ -10,6 +10,7 @@ from logger.logger_service import get_logger
 
 from .consts import ANALYSIS_DIR_NAME, OUTLINE_STATS_PREFIX, \
     ROI_CONFIG_FILENAME, ROI_STATS_FILENAME
+from .plot_series import stat_value
 from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
 from .roi_model import (
@@ -177,20 +178,37 @@ def load_roi_stats(experiment_directory) -> dict:
         return {}
 
 
-#: Per-ROI CSV columns, in order: interior stats then outline stats.
+#: Per-ROI CSV columns, in order: interior stats, outline stats, then
+#: the values derived from the pixel count and the scale.
 CSV_STAT_COLUMNS = tuple(STAT_NAMES) + tuple(
     OUTLINE_STATS_PREFIX + name for name in STAT_NAMES)
+CSV_DERIVED_COLUMNS = ("area", "integrated", "bg_integrated",
+                       "per_area", "bg_per_area")
 
 
-def write_intensity_csv(csv_path, rows, rois):
+def _csv_cell(stats, stat, pixel_area):
+    """A derived value, blank where the stats cannot supply it — the
+    same empty cell an uncomputed image already writes."""
+    value = stat_value(stats, stat, pixel_area)
+    return "" if value != value else value
+
+
+def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
+                        area_unit_label="px²"):
     """One row per image, blank cells where an (image, ROI) pair has no
     computed stats. ``rows``: [{"filename", "time_utc", "elapsed_sec",
-    "group", "wavelength", "stats": {roi_id: stats_dict}}, ...]."""
+    "group", "wavelength", "stats": {roi_id: stats_dict}}, ...].
+    ``pixel_area`` scales the derived size-aware columns; it is 1.0
+    (px²) for an uncalibrated experiment."""
     header = ["index", "time_utc", "elapsed_sec", "filename", "group",
               "wavelength"]
     for roi in rois:
         header += [f"{roi.name}_{stat}" for stat in CSV_STAT_COLUMNS]
-    with open(csv_path, "w", newline="") as handle:
+        header += [f"{roi.name}_area_{area_unit_label}"]
+        header += [f"{roi.name}_{stat}"
+                   for stat in CSV_DERIVED_COLUMNS[1:]]
+    # utf-8, not the platform default: the area header carries µ and ².
+    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(header)
         for index, row in enumerate(rows):
@@ -200,4 +218,6 @@ def write_intensity_csv(csv_path, rows, rois):
                 stats = row["stats"].get(roi.roi_id, {})
                 record += [stats.get(stat, "")
                            for stat in CSV_STAT_COLUMNS]
+                record += [_csv_cell(stats, stat, pixel_area)
+                           for stat in CSV_DERIVED_COLUMNS]
             writer.writerow(record)

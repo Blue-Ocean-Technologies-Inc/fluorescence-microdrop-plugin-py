@@ -19,7 +19,7 @@ from ...consts import CAPTURE_TIMESTAMP_FORMAT
 from ..discovery import UNGROUPED_BURST, capture_timestamp, \
     detect_wavelength
 from ..model import FluorescenceImageViewerModel
-from ..scale_bar import format_length
+from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import DEFAULT_ROI_COLORS, STATS_SAVE_DEBOUNCE_S
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
@@ -486,8 +486,12 @@ class RoiAnalysisController(HasTraits):
                 f"{sanitize_label(self.viewer_model.selected_wavelength)}_"
                 f"{capture_service.utc_stamp()}.csv")
         csv_path = analysis_directory(directory) / name
+        scale = session.scale
         try:
-            write_intensity_csv(csv_path, rows, session.rois)
+            write_intensity_csv(
+                csv_path, rows, session.rois,
+                pixel_area(scale.metres_per_pixel, scale.unit),
+                area_unit(scale.metres_per_pixel, scale.unit))
         except Exception as error:
             logger.warning(f"CSV export failed: {error}")
             self.analysis_model.progress_text = f"Export failed: {error}"
