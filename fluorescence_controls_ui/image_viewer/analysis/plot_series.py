@@ -3,19 +3,48 @@ and the viewer's filtered paths, so the plot pane owns its own picture
 (observer pattern — nothing pushes series at it). Qt-free."""
 import math
 
+from ..scale_bar import pixel_area
 
-def stat_value(stats, stat):
+
+def _signal(stats, background):
+    """The mean, or the mean less the outline ring when ``background``.
+    NaN when either piece is missing."""
+    mean = stats.get("mean")
+    if mean is None:
+        return math.nan
+    if not background:
+        return mean
+    outline = stats.get("outline_mean")
+    return math.nan if outline is None else mean - outline
+
+
+def _count(stats):
+    """The interior pixel count, or NaN — which then propagates through
+    whatever it is multiplied into."""
+    count = stats.get("count")
+    return math.nan if count is None else count
+
+
+def stat_value(stats, stat, pixel_area=1.0):
     """The plotted value for one (image, ROI) stats dict — NaN when the
-    stats are missing entirely or lack the needed keys.
-    ``bg_corrected`` is interior mean minus outline-ring mean."""
+    stats are missing entirely or lack the pieces a stat needs.
+    ``bg_corrected`` is interior mean minus outline-ring mean.
+    ``pixel_area`` is one pixel's area in the display unit (1.0 = px²),
+    which the size-aware stats scale by."""
     if not stats:
         return math.nan
     if stat == "bg_corrected":
-        mean = stats.get("mean")
-        outline = stats.get("outline_mean")
-        if mean is None or outline is None:
-            return math.nan
-        return mean - outline
+        return _signal(stats, True)
+    if stat == "integrated":
+        return _signal(stats, False) * _count(stats)
+    if stat == "bg_integrated":
+        return _signal(stats, True) * _count(stats)
+    if stat == "per_area":
+        return _signal(stats, False) / pixel_area
+    if stat == "bg_per_area":
+        return _signal(stats, True) / pixel_area
+    if stat == "area":
+        return _count(stats) * pixel_area
     value = stats.get(stat)
     return math.nan if value is None else value
 
@@ -28,6 +57,9 @@ def derive_series(session, filtered_paths):
     if not paths or not session.rois:
         return {}
     stat_cache = {}
+    # Named to leave the imported pixel_area() function reachable.
+    area_per_pixel = pixel_area(session.scale.metres_per_pixel,
+                                session.scale.unit)
     times = [session.stat_info(path, stat_cache)[1] for path in paths]
     start_time = times[0]
     series = {}
@@ -37,7 +69,8 @@ def derive_series(session, filtered_paths):
             stats = session.stats.get(
                 session.cache_key(path, roi, stat_cache))
             elapsed.append(capture_time - start_time)
-            values.append(stat_value(stats, session.plot_stat))
+            values.append(stat_value(stats, session.plot_stat,
+                                     area_per_pixel))
         series[roi.roi_id] = (roi.name, elapsed, values)
     return series
 

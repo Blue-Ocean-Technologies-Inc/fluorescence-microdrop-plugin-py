@@ -82,3 +82,45 @@ def test_visible_series_drops_series_without_an_roi():
 def test_plot_alpha_is_the_percentage_as_a_fraction():
     assert RoiStyle().plot_alpha == 1.0
     assert RoiStyle(alpha=40).plot_alpha == 0.4
+
+
+def test_size_aware_stats_without_a_calibration():
+    stats = {"mean": 10.0, "outline_mean": 4.0, "count": 25.0}
+    # px² units: area is the pixel count and density is the mean.
+    assert stat_value(stats, "area") == 25.0
+    assert stat_value(stats, "integrated") == 250.0
+    assert stat_value(stats, "bg_integrated") == 150.0
+    assert stat_value(stats, "per_area") == 10.0
+    assert stat_value(stats, "bg_per_area") == 6.0
+
+
+def test_size_aware_stats_with_a_calibration():
+    stats = {"mean": 10.0, "outline_mean": 4.0, "count": 25.0}
+    # 1e-4 mm² per pixel: 25 px is 2.5e-3 mm².
+    assert abs(stat_value(stats, "area", 1e-4) - 2.5e-3) < 1e-12
+    assert abs(stat_value(stats, "per_area", 1e-4) - 1e5) < 1e-6
+    assert abs(stat_value(stats, "bg_per_area", 1e-4) - 6e4) < 1e-6
+    # Integrated is a pixel sum, so a calibration cannot change it.
+    assert stat_value(stats, "integrated", 1e-4) == 250.0
+
+
+def test_size_aware_stats_are_nan_when_a_piece_is_missing():
+    assert math.isnan(stat_value({"mean": 10.0}, "integrated"))
+    assert math.isnan(stat_value({"count": 25.0}, "per_area"))
+    assert math.isnan(stat_value({"mean": 10.0, "count": 25.0},
+                                 "bg_integrated"))
+
+
+def test_derive_series_uses_the_sessions_calibration(tmp_path):
+    image = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
+    roi = Roi(name="ROI 1", kind="ellipse",
+              geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    # "area" is table/CSV only, so per_area is what carries the
+    # calibration into a plotted series: 10 / 1e-4 mm^2 = 1e5.
+    session = AnalysisSession(rois=[roi], plot_stat="per_area")
+    session.scale.trait_set(metres_per_pixel=1e-5, unit="mm")
+    session.stats[session.cache_key(image, roi)] = {
+        "mean": 10.0, "outline_mean": 4.0, "count": 25.0}
+
+    _name, _elapsed, values = derive_series(session, [image])[roi.roi_id]
+    assert abs(values[0] - 1e5) < 1e-6

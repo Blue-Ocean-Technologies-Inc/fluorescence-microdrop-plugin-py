@@ -22,9 +22,13 @@ ROI_NAME_PATTERN = re.compile(r"^ROI (\d+)$")
 
 #: Stats the plot can show. "bg_corrected" is interior mean minus the
 #: outline-ring mean — the standard fluorescence background correction
-#: the ring exists for.
+#: the ring exists for. The last four are size-aware: "integrated" is
+#: the ROI's total signal, and "per_area" its density — which is the
+#: mean times a constant, since the pixel counts cancel (see the
+#: area-statistics design note).
 PLOT_STATS = ("mean", "bg_corrected", "median", "min", "max",
-              "outline_mean")
+              "outline_mean", "integrated", "bg_integrated",
+              "per_area", "bg_per_area")
 
 
 class RoiStyle(HasTraits):
