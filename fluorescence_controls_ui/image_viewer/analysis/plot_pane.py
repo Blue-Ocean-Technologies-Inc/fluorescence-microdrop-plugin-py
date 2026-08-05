@@ -314,18 +314,30 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             else:
                 trim_edges = self._draw_fastest_change(series,
                                                        figure_settings)
+        # After the locator reset above (which would fight the log
+        # locators) and before relim, so autoscale sees the final
+        # scale. The bar view keeps linear: its x is ROI names.
+        time_axis = figure_settings.view_mode != "fastest_change"
+        log_x = time_axis and figure_settings.log_x
+        log_y = time_axis and figure_settings.log_y
+        self._axes.set_xscale("log" if log_x else "linear")
+        self._axes.set_yscale("log" if log_y else "linear")
         self._axes.relim()
         self._axes.autoscale_view()
-        if (not figure_settings.x_auto
-                and figure_settings.view_mode != "fastest_change"):
+        # A log axis rejects a limit at or below zero, so a manual one
+        # is skipped there and the autoscaled range stands.
+        if (not figure_settings.x_auto and time_axis
+                and not (log_x and figure_settings.x_min <= 0)):
             self._axes.set_xlim(figure_settings.x_min,
                                 figure_settings.x_max)
-        if not figure_settings.y_auto:
+        if (not figure_settings.y_auto
+                and not (log_y and figure_settings.y_min <= 0)):
             self._axes.set_ylim(figure_settings.y_min,
                                 figure_settings.y_max)
         # After the scaling: the band is full-height in axes fractions,
         # so relim() would read those as data and pin the y limits.
         self._shade_trimmed_tails(trim_edges)
+        self._note_hidden_points(series, log_x, log_y)
         self.draw_idle()
 
     def _refresh_intensity(self, series, figure_settings):
@@ -472,6 +484,29 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             self._axes.legend(loc="best", fontsize="small")
         elif self._axes.get_legend() is not None:
             self._axes.get_legend().remove()
+
+    def _note_hidden_points(self, series, log_x, log_y):
+        """Matplotlib drops non-positive values on a log axis without a
+        word, and two cases are certain rather than hypothetical:
+        elapsed time starts at 0, and a normalised curve's minimum is
+        exactly 0. Count them instead of letting data vanish."""
+        if not (log_x or log_y):
+            return
+        hidden = 0
+        for _name, elapsed, values in series.values():
+            for time, value in zip(elapsed, values):
+                if value != value:
+                    continue        # already a gap, not a casualty
+                if (log_x and time <= 0) or (log_y and value <= 0):
+                    hidden += 1
+        if not hidden:
+            return
+        self._fit_artists.append(self._axes.text(
+            0.5, 0.02,
+            f"Log axis hides {hidden} non-positive "
+            f"{'point' if hidden == 1 else 'points'}",
+            transform=self._axes.transAxes, ha="center",
+            va="bottom", color="gray", fontsize="x-small"))
 
     def _draw_hint(self, message):
         self._fit_artists.append(self._axes.text(
