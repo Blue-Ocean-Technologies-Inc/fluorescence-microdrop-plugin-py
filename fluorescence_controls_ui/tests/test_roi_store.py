@@ -147,12 +147,10 @@ def test_legacy_stats_keys_migrate_with_their_roi(tmp_path):
         Roi(roi_id="abcd1234", name="ROI 1", kind="ellipse",
             geometry=[50.0, 60.0, 10.0, 10.0, 0.0])])
 
-    store = load_roi_stats(tmp_path)
-    # The geometry still migrates, but an entry predating the annulus
-    # carries no ring, so no current key can claim it.
-    (key,) = store
-    assert key[4] == (50.0, 60.0, 10.0, 10.0, 0.0)
-    assert key[5] is None
+    # An entry predating the background annulus is dropped: its
+    # outline stats came from a stroke straddling the boundary, and
+    # keeping it would also break the next save.
+    assert load_roi_stats(tmp_path) == {}
     assert session.roi_by_id("abcd1234").kind == "ellipse"
 
 
@@ -302,3 +300,25 @@ def test_background_ring_round_trips(tmp_path):
     ring = load_session(tmp_path).ring
     assert ring.gap_px == 3 and ring.thickness_px == 7
     assert ring.show_on_canvas is False
+
+
+def test_stats_survive_a_save_after_loading_pre_ring_entries(tmp_path):
+    # Regression: a dropped entry used to reach save_roi_stats with a
+    # None ring, whose list() raised and lost the whole file.
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_stats.json").write_text(json.dumps({
+        "version": 1, "entries": [{
+            "path": str(tmp_path / "old_raw.png"), "mtime": 1.0,
+            "roi_id": "abcd1234", "kind": "ellipse",
+            "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
+            "stats": {"mean": 7.0},
+        }],
+    }))
+    store = load_roi_stats(tmp_path)
+    fresh = (str(tmp_path / "new_raw.png"), 2.0, "abcd1234", "ellipse",
+             (5.0, 5.0, 2.0, 2.0, 0.0), (2, 4))
+    store[fresh] = {"mean": 9.0}
+    save_roi_stats(tmp_path, store)
+
+    assert load_roi_stats(tmp_path)[fresh] == {"mean": 9.0}

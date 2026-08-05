@@ -193,8 +193,13 @@ def load_roi_stats(experiment_directory) -> dict:
         if payload["version"] != 1:
             logger.warning(f"Unknown ROI stats version in {path}")
             return {}
-        return {_stats_key(entry): entry["stats"]
-                for entry in payload["entries"]}
+        keyed = ((_stats_key(entry), entry["stats"])
+                 for entry in payload["entries"])
+        # An entry predating the background annulus can never match a
+        # current key, and carrying it would break the next save (its
+        # ring is None). Drop it here instead.
+        return {key: stats for key, stats in keyed
+                if key[5] is not None}
     except Exception as error:
         logger.warning(f"Could not load ROI stats {path}: {error}")
         return {}
