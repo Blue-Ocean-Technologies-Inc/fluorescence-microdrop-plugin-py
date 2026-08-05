@@ -308,6 +308,18 @@ class RoiAnalysisModel(HasTraits):
     #: View -> controller channels fired by the canvas ROI layer.
     canvas_roi_created = Event()   # (kind, geometry)
     canvas_roi_edited = Event()    # (roi_id, geometry)
+    #: Escape out of an armed draw tool (which now stays armed until
+    #: told otherwise, so that a series of shapes is one trip to the
+    #: toolbar rather than one trip each).
+    canvas_draw_cancelled = Event()
+
+    #: The ROI shape held for pasting: kind and the geometry it had on
+    #: the image it was copied from ('' = nothing copied yet). Not the
+    #: system clipboard, and deliberately not persisted.
+    copy_roi_button = Button()
+    paste_roi_button = Button()
+    clipboard_kind = Str()
+    clipboard_geometry = List(Float)
 
     #: The per-experiment analysis state (swapped on experiment change).
     session = Instance(AnalysisSession, ())

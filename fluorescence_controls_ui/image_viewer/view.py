@@ -17,10 +17,10 @@ from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.icons.icons import (
     ICON_CAPSULE, ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CIRCLE,
-    ICON_CONTOUR, ICON_CROP, ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT,
-    ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY,
-    ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH,
-    ICON_RULER, ICON_SAVE, ICON_SHOW_CHART,
+    ICON_CONTOUR, ICON_COPY, ICON_CROP, ICON_DELETE, ICON_DELETE_SWEEP,
+    ICON_EDIT, ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PASTE,
+    ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH,
+    ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE, ICON_SHOW_CHART,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
@@ -99,6 +99,9 @@ class _ImageView(QGraphicsView):
         self._on_hover = on_hover
         self._roi_layer = roi_layer
         self._scale_layer = scale_layer
+        #: Set by the editor: fires the copy/paste toolbar buttons, so
+        #: the shortcuts and the buttons are the one code path.
+        self.on_clipboard_key = lambda action: None
         self._metres_per_pixel = 0.0
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
@@ -157,10 +160,18 @@ class _ImageView(QGraphicsView):
 
     def keyPressEvent(self, event):
         # Contour drawing finishes on Enter and unwinds on Escape /
-        # Backspace; everything else falls through to the view.
+        # Backspace, and Escape also puts an armed draw tool away;
+        # everything else falls through to the view.
         if self._roi_layer.key_press(event.key()):
             event.accept()
             return
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            action = {Qt.Key.Key_C: "copy",
+                      Qt.Key.Key_V: "paste"}.get(event.key())
+            if action is not None:
+                self.on_clipboard_key(action)
+                event.accept()
+                return
         super().keyPressEvent(event)
 
     def resizeEvent(self, event):
@@ -233,10 +244,15 @@ class _ImageCanvasEditor(QtEditor):
             analysis.trait_set(canvas_roi_edited=(roi_id, geometry)))
         self._roi_layer.on_roi_selected = (
             lambda roi_id: analysis.trait_set(selected_roi_id=roi_id))
+        self._roi_layer.on_draw_cancelled = (
+            lambda: analysis.trait_set(canvas_draw_cancelled=True))
         self._scale_layer = ScaleCanvasLayer(self._scene)
         self._scale_layer.on_line_drawn = self._on_scale_line_drawn
         self.control = _ImageView(self._scene, self._on_hover,
                                   self._roi_layer, self._scale_layer)
+        self.control.on_clipboard_key = (
+            lambda action: analysis.trait_set(
+                **{f"{action}_roi_button": True}))
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max")
         self.object.observe(self._on_fit_request, "fit_request")
@@ -470,23 +486,28 @@ analysis_toolbar = VGroup(
           editor=IconButtonEditor(
               glyph=ICON_CIRCLE,
               tooltip="Draw an elliptical ROI (click-drag from its "
-                      "centre; the grip makes it an ellipse)")),
+                      "centre; the grip makes it an ellipse). Stays "
+                      "armed for the next one — Esc puts it away")),
     UItem("object.roi_analysis.draw_box_button",
           editor=IconButtonEditor(
               glyph=ICON_RECTANGLE,
               tooltip="Draw a rectangular ROI (click-drag on the "
-                      "image)")),
+                      "image). Stays armed for the next one — Esc "
+                      "puts it away")),
     UItem("object.roi_analysis.draw_capsule_button",
           editor=IconButtonEditor(
               glyph=ICON_CAPSULE,
               tooltip="Draw a capsule ROI (click-drag its axis, then "
-                      "use the grip for its radius)")),
+                      "use the grip for its radius). Stays armed "
+                      "for the next one — Esc puts it away")),
     UItem("object.roi_analysis.draw_polygon_button",
           editor=IconButtonEditor(
               glyph=ICON_CONTOUR,
               tooltip="Draw a contour ROI (click to place nodes; "
                       "close on the first node, double-click, or "
-                      "Enter — Esc cancels, Backspace undoes)")),
+                      "Enter — Esc cancels, Backspace undoes). Stays "
+                      "armed for the next one — a second Esc puts "
+                      "it away")),
     UItem("object.roi_analysis.calibrate_scale_button",
           editor=IconButtonEditor(
               glyph=ICON_RULER,
@@ -503,9 +524,19 @@ analysis_toolbar = VGroup(
               tooltip="Edit ROIs: drag to move, bottom-right grip to "
                       "resize (Shift keeps an ellipse circular), "
                       "top-left grip to rotate (Shift snaps to 15°), "
+                      "pink top-right grip to round a box's corners, "
                       "drag a node to reshape a contour, click to "
                       "select. Editing on a later image adds a drift "
                       "override from there on")),
+    UItem("object.roi_analysis.copy_roi_button",
+          editor=IconButtonEditor(
+              glyph=ICON_COPY,
+              tooltip="Copy the selected ROI's shape (Ctrl+C)")),
+    UItem("object.roi_analysis.paste_roi_button",
+          editor=IconButtonEditor(
+              glyph=ICON_PASTE,
+              tooltip="Paste the copied shape as a new ROI, offset "
+                      "from the original (Ctrl+V)")),
     UItem("object.roi_analysis.delete_roi_button",
           editor=IconButtonEditor(
               glyph=ICON_DELETE,

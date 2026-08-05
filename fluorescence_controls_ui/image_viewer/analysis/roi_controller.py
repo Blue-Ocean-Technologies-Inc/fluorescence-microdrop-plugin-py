@@ -20,7 +20,10 @@ from ..discovery import UNGROUPED_BURST, capture_timestamp, \
     detect_wavelength
 from ..model import FluorescenceImageViewerModel
 from ..scale_bar import area_unit, format_length, pixel_area
-from .consts import DEFAULT_ROI_COLORS, STATS_SAVE_DEBOUNCE_S
+from .consts import (
+    DEFAULT_ROI_COLORS, PASTE_OFFSET_PX, STATS_SAVE_DEBOUNCE_S,
+)
+from .roi_geometry import translated
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
     pool_is_warm,
@@ -111,7 +114,18 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     @observe("analysis_model:canvas_roi_created")
     def _on_canvas_roi_created(self, event):
+        # The tool stays armed: drawing a row of ROIs should not mean a
+        # trip to the toolbar between each. Escape puts it away.
         kind, geometry = event.new
+        self._create_roi(kind, geometry)
+
+    @observe("analysis_model:canvas_draw_cancelled")
+    def _on_canvas_draw_cancelled(self, event):
+        self.analysis_model.interaction_mode = self._rest_mode()
+
+    def _create_roi(self, kind, geometry):
+        """Add an ROI anchored at the displayed image and start
+        measuring it — the one path a drawn or pasted shape takes."""
         current = self.viewer_model.current_path
         anchor = capture_timestamp(current) if current else 0.0
         roi = Roi(name=self.session.next_roi_name(), kind=kind,
@@ -120,10 +134,10 @@ class RoiAnalysisController(HasTraits):
                   style=RoiStyle(color=DEFAULT_ROI_COLORS[
                       len(self.session.rois) % len(DEFAULT_ROI_COLORS)]))
         self.session.rois.append(roi)
-        self.analysis_model.interaction_mode = self._rest_mode()
         self._save_config()
         self._restart_batch_if_running()
         self._instant_stats(roi)
+        return roi
 
     @observe("analysis_model:canvas_roi_edited")
     def _on_canvas_roi_edited(self, event):
@@ -137,6 +151,42 @@ class RoiAnalysisController(HasTraits):
         self._save_config()
         self._restart_batch_if_running()
         self._instant_stats(roi)
+
+    # ------------------------------------------------------------------ #
+    # Copy / paste                                                         #
+    # ------------------------------------------------------------------ #
+    @observe("analysis_model:copy_roi_button")
+    def _copy_roi(self, event):
+        """Hold the selected ROI's shape as it stands on the displayed
+        image — the shape the user is looking at, which a drift
+        override may have moved away from the base geometry."""
+        model = self.analysis_model
+        roi = self.session.roi_by_id(model.selected_roi_id)
+        if roi is None:
+            model.progress_text = (
+                "Select an ROI first (edit mode) to copy it")
+            return
+        current = self.viewer_model.current_path
+        model.clipboard_kind = roi.kind
+        model.clipboard_geometry = roi.effective_geometry(
+            capture_timestamp(current) if current else 0.0)
+        model.progress_text = f"Copied {roi.name}"
+
+    @observe("analysis_model:paste_roi_button")
+    def _paste_roi(self, event):
+        """Place a copy, nudged clear of the original so it cannot hide
+        under it. It gets its own name and the next colour in the
+        cycle: two curves in one colour cannot be told apart."""
+        model = self.analysis_model
+        if not model.clipboard_kind:
+            model.progress_text = "Nothing copied yet"
+            return
+        roi = self._create_roi(
+            model.clipboard_kind,
+            translated(model.clipboard_kind, model.clipboard_geometry,
+                       PASTE_OFFSET_PX, PASTE_OFFSET_PX))
+        model.selected_roi_id = roi.roi_id
+        model.progress_text = f"Pasted {roi.name}"
 
     # ------------------------------------------------------------------ #
     # Delete / clear / reset                                               #

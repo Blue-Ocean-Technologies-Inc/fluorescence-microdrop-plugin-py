@@ -52,6 +52,10 @@ MIN_ROI_SIZE_PX = 3.0
 #: Rotation-grip snap (degrees) while Shift is held.
 ROTATE_SNAP_DEGREES = 15.0
 
+#: How far (image px, down and right) a pasted ROI lands from the one
+#: it was copied from, so it cannot hide underneath it.
+PASTE_OFFSET_PX = 12.0
+
 #: Fewest vertices a contour ROI can close on.
 MIN_POLYGON_POINTS = 3
 
