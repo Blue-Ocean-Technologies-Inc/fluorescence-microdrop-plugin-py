@@ -100,6 +100,12 @@ class RoiAnalysisController(HasTraits):
             self.session.scale.show_bar = event.new
             self._save_config()
 
+    @observe("analysis_model:show_background_ring")
+    def _on_show_background_ring(self, event):
+        if self.session.ring.show_on_canvas != event.new:
+            self.session.ring.show_on_canvas = event.new
+            self._save_config()
+
     @observe("analysis_model:edit_mode")
     def _toggle_edit_mode(self, event):
         self.analysis_model.interaction_mode = ("edit" if event.new
@@ -427,6 +433,7 @@ class RoiAnalysisController(HasTraits):
                     logger.warning(f"Could not seed the scale: {error}")
         self.analysis_model.session = session
         self.analysis_model.show_scale_bar = session.scale.show_bar
+        self.analysis_model.show_background_ring =             session.ring.show_on_canvas
         self._dispatched_keys = {}
 
     @observe("analysis_model:session:plot_stat, "

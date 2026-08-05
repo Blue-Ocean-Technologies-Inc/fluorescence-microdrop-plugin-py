@@ -205,6 +205,17 @@ _plot_controls_view = View(
                           "midpoints and R² are unchanged; amplitudes "
                           "become percentages."),
         ),
+        HGroup(
+            Item("session.ring.gap_px", label="BG gap",
+                 tooltip="Pixels between an ROI's edge and the ring its "
+                         "background is read from. Fluorescence bleeds "
+                         "a pixel or two past the boundary and that "
+                         "halo is not background."),
+            Item("session.ring.thickness_px", label="BG width",
+                 tooltip="Thickness of the background ring, in pixels. "
+                         "Changing either value recomputes the "
+                         "statistics."),
+        ),
     ),
 )
 

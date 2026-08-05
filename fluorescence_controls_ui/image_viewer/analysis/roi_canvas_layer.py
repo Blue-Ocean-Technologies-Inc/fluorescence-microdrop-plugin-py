@@ -7,7 +7,7 @@ canvas_* event traits and the controller reacts."""
 import math
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPainterPath
+from PySide6.QtGui import QColor, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsRectItem,
 )
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from .consts import (
     MIN_POLYGON_POINTS, MIN_ROI_SIZE_PX, POLYGON_CLOSE_DISTANCE_PX,
 )
+from .roi_compute import ring_contours
 from .roi_handles import ROI_SELECTED_PEN
 from .roi_items import (
     BoxRoiItem, CapsuleRoiItem, EllipseRoiItem, PolygonRoiItem,
@@ -27,6 +28,11 @@ ITEM_CLASSES = {"ellipse": EllipseRoiItem, "box": BoxRoiItem,
                 "capsule": CapsuleRoiItem, "polygon": PolygonRoiItem}
 DRAW_KINDS = {"draw_ellipse": "ellipse", "draw_box": "box",
               "draw_capsule": "capsule", "draw_polygon": "polygon"}
+
+#: Dashed and half transparent: the ring is context for an ROI, not a
+#: shape to grab.
+RING_ALPHA = 150
+RING_DASH = Qt.PenStyle.DashLine
 
 
 class RoiCanvasLayer:
@@ -42,6 +48,8 @@ class RoiCanvasLayer:
         self._draft_kind = ""
         self._draft_points = []   # contour vertices placed so far
         self._press_point = None
+        self._ring_items = []
+        self._ring = (0, 0, False)   # gap, thickness, visible
         self.mode = "pan"
         self.on_roi_created = lambda kind, geometry: None
         self.on_roi_edited = lambda roi_id, geometry: None
@@ -53,6 +61,48 @@ class RoiCanvasLayer:
         self.mode = mode
         for item in self._items.values():
             item.set_editable(mode == "edit")
+
+    def set_ring(self, gap_px, thickness_px, visible):
+        """The background annulus to draw around each ROI, from the
+        session that also measures with it."""
+        self._ring = (int(gap_px), int(thickness_px), bool(visible))
+
+    def _clear_rings(self):
+        for item in self._ring_items:
+            self._scene.removeItem(item)
+        self._ring_items = []
+
+    def _draw_rings(self, effective):
+        """One dashed outline per ROI, traced from the very mask the
+        background is averaged over — drawn on sync, not on every
+        repaint, and never interactive."""
+        self._clear_rings()
+        gap_px, thickness_px, visible = self._ring
+        bounds = self._scene.sceneRect()
+        if not visible or bounds.isEmpty():
+            return
+        shape = (int(bounds.height()), int(bounds.width()))
+        for roi_id, name, kind, geometry in effective:
+            item = self._items.get(roi_id)
+            if item is None:
+                continue
+            path = QPainterPath()
+            for contour in ring_contours(shape, kind, geometry,
+                                         gap_px, thickness_px):
+                path.moveTo(contour[0][0], contour[0][1])
+                for x, y in contour[1:]:
+                    path.lineTo(x, y)
+                path.closeSubpath()
+            if path.isEmpty():
+                continue
+            colour = QColor(item.pen().color())
+            colour.setAlpha(RING_ALPHA)
+            ring_item = QGraphicsPathItem(path)
+            ring_item.setPen(QPen(colour, 0, RING_DASH))
+            ring_item.setZValue(-1)
+            ring_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self._scene.addItem(ring_item)
+            self._ring_items.append(ring_item)
 
     def sync(self, effective, selected_roi_id):
         """Match the items to ``effective`` ([(roi_id, name, kind,
@@ -82,9 +132,11 @@ class RoiCanvasLayer:
                 item.set_geometry(geometry)
                 item.set_name(name)
             item.set_selected_style(roi_id == selected_roi_id)
+        self._draw_rings(effective)
 
     def clear_items(self):
         self._discard_contour()
+        self._clear_rings()
         for item in self._items.values():
             self._scene.removeItem(item)
         self._items = {}

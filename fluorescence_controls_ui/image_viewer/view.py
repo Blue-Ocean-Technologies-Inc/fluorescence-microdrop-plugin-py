@@ -17,7 +17,7 @@ from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.icons.icons import (
     ICON_CAPSULE, ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CIRCLE,
-    ICON_CONTOUR, ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT,
+    ICON_CONTOUR, ICON_CROP, ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT,
     ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY,
     ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH,
     ICON_RULER, ICON_SAVE, ICON_SHOW_CHART, ICON_VISIBILITY,
@@ -252,6 +252,9 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois:items:name, "
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:scale:show_bar, "
+            "roi_analysis:session:ring:gap_px, "
+            "roi_analysis:session:ring:thickness_px, "
+            "roi_analysis:session:ring:show_on_canvas, "
             "roi_analysis:selected_roi_id")
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode")
@@ -270,6 +273,9 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois:items:name, "
             "roi_analysis:session:scale:metres_per_pixel, "
             "roi_analysis:session:scale:show_bar, "
+            "roi_analysis:session:ring:gap_px, "
+            "roi_analysis:session:ring:thickness_px, "
+            "roi_analysis:session:ring:show_on_canvas, "
             "roi_analysis:selected_roi_id",
             remove=True)
         self.object.observe(self._on_interaction_mode_changed,
@@ -296,6 +302,9 @@ class _ImageCanvasEditor(QtEditor):
         if not model.current_path or model.array is None:
             self._roi_layer.clear_items()
             return
+        ring = model.roi_analysis.session.ring
+        self._roi_layer.set_ring(ring.gap_px, ring.thickness_px,
+                                 ring.show_on_canvas)
         self._roi_layer.sync(
             model.roi_analysis.session.effective_for(model.current_path),
             model.roi_analysis.selected_roi_id)
@@ -493,6 +502,11 @@ analysis_toolbar = VGroup(
           editor=IconToggleEditor(
               on_glyph=ICON_VISIBILITY, off_glyph=ICON_VISIBILITY_OFF,
               tooltip="Show or hide the scale bar on the image")),
+    UItem("object.roi_analysis.show_background_ring",
+          editor=IconToggleEditor(
+              on_glyph=ICON_CROP, off_glyph=ICON_CROP,
+              tooltip="Show the background ring each ROI's correction "
+                      "is measured from")),
     UItem("object.roi_analysis.edit_mode",
           editor=IconToggleEditor(
               on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,

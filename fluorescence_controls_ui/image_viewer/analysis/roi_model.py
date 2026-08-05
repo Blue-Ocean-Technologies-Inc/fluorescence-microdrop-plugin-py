@@ -288,9 +288,11 @@ class RoiAnalysisModel(HasTraits):
     draw_polygon_button = Button()
     calibrate_scale_button = Button()
 
-    #: Live mirror of session.scale.show_bar — the toolbar is built
-    #: once against this model while sessions swap underneath it.
+    #: Live mirrors of session settings the toolbar toggles: the
+    #: toolbar is built once against this model while sessions swap
+    #: underneath it.
     show_scale_bar = Bool(True)
+    show_background_ring = Bool(True)
     edit_mode = Bool(False)
     delete_roi_button = Button()
     clear_rois_button = Button()
