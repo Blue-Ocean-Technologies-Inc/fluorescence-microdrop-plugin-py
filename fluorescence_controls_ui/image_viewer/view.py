@@ -20,8 +20,7 @@ from microdrop_style.icons.icons import (
     ICON_CONTOUR, ICON_CROP, ICON_DELETE, ICON_DELETE_SWEEP, ICON_EDIT,
     ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PAUSE, ICON_PLAY,
     ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_RESET_WRENCH,
-    ICON_RULER, ICON_SAVE, ICON_SHOW_CHART, ICON_VISIBILITY,
-    ICON_VISIBILITY_OFF,
+    ICON_RULER, ICON_SAVE, ICON_SHOW_CHART,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
@@ -101,7 +100,6 @@ class _ImageView(QGraphicsView):
         self._roi_layer = roi_layer
         self._scale_layer = scale_layer
         self._metres_per_pixel = 0.0
-        self._show_scale_bar = True
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
@@ -170,9 +168,8 @@ class _ImageView(QGraphicsView):
         if self._auto_fit:
             self.fit()
 
-    def set_scale(self, metres_per_pixel_value, show_bar):
+    def set_scale(self, metres_per_pixel_value):
         self._metres_per_pixel = metres_per_pixel_value
-        self._show_scale_bar = show_bar
         self.viewport().update()
 
     def drawForeground(self, painter, rect):
@@ -180,7 +177,7 @@ class _ImageView(QGraphicsView):
         ask nice_scale what a bar of about SCALE_BAR_TARGET_PX should
         read at the current zoom."""
         super().drawForeground(painter, rect)
-        if not self._show_scale_bar or self._metres_per_pixel <= 0:
+        if self._metres_per_pixel <= 0:
             return
         zoom = self.transform().m11()
         if zoom <= 0:
@@ -251,7 +248,6 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois:items:overrides.items, "
             "roi_analysis:session:rois:items:name, "
             "roi_analysis:session:scale:metres_per_pixel, "
-            "roi_analysis:session:scale:show_bar, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
             "roi_analysis:session:ring:show_on_canvas, "
@@ -272,7 +268,6 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:rois:items:overrides.items, "
             "roi_analysis:session:rois:items:name, "
             "roi_analysis:session:scale:metres_per_pixel, "
-            "roi_analysis:session:scale:show_bar, "
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
             "roi_analysis:session:ring:show_on_canvas, "
@@ -311,10 +306,9 @@ class _ImageCanvasEditor(QtEditor):
         self._push_scale()
 
     def _push_scale(self):
-        """One path for a session swap, a fresh calibration and the
-        show/hide toggle."""
+        """One path for a session swap and a fresh calibration."""
         scale = self.object.roi_analysis.session.scale
-        self.control.set_scale(scale.metres_per_pixel, scale.show_bar)
+        self.control.set_scale(scale.metres_per_pixel)
 
     def _on_scale_line_drawn(self, length_px):
         """Ask what the line measures, store the calibration on the
@@ -498,10 +492,6 @@ analysis_toolbar = VGroup(
               glyph=ICON_RULER,
               tooltip="Set the image scale: drag a line of known "
                       "length, then type what it measures")),
-    UItem("object.roi_analysis.show_scale_bar",
-          editor=IconToggleEditor(
-              on_glyph=ICON_VISIBILITY, off_glyph=ICON_VISIBILITY_OFF,
-              tooltip="Show or hide the scale bar on the image")),
     UItem("object.roi_analysis.show_background_ring",
           editor=IconToggleEditor(
               on_glyph=ICON_CROP, off_glyph=ICON_CROP,

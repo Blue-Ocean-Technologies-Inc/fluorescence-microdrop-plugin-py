@@ -36,7 +36,7 @@ _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
 
 #: Persisted ScaleCalibration fields (tolerated-missing on load, so a
 #: config written before the scale bar opens uncalibrated).
-_SCALE_FIELDS = ("metres_per_pixel", "value", "unit", "show_bar")
+_SCALE_FIELDS = ("metres_per_pixel", "value", "unit")
 
 #: Persisted BackgroundRing fields (tolerated-missing on load).
 _RING_FIELDS = ("gap_px", "thickness_px", "show_on_canvas")

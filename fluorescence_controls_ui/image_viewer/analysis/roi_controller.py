@@ -92,14 +92,6 @@ class RoiAnalysisController(HasTraits):
             f"1 px = {format_length(scale.metres_per_pixel)}"
             if scale.calibrated() else "Scale: not set")
 
-    @observe("analysis_model:show_scale_bar")
-    def _on_show_scale_bar(self, event):
-        """Mirror the toolbar toggle onto the session that persists it
-        (the toolbar outlives any one session)."""
-        if self.session.scale.show_bar != event.new:
-            self.session.scale.show_bar = event.new
-            self._save_config()
-
     @observe("analysis_model:show_background_ring")
     def _on_show_background_ring(self, event):
         if self.session.ring.show_on_canvas != event.new:
@@ -432,7 +424,6 @@ class RoiAnalysisController(HasTraits):
                 except Exception as error:
                     logger.warning(f"Could not seed the scale: {error}")
         self.analysis_model.session = session
-        self.analysis_model.show_scale_bar = session.scale.show_bar
         self.analysis_model.show_background_ring =             session.ring.show_on_canvas
         self._dispatched_keys = {}
 
@@ -466,8 +457,6 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:rois:items:style:marker_size, "
              "analysis_model:session:rois:items:style:visible, "
              "analysis_model:session:rois:items:style:alpha, "
-             # show_bar is written by _on_show_scale_bar instead, so a
-             # toggle does not save the config twice.
              "analysis_model:session:scale:metres_per_pixel, "
              "analysis_model:session:scale:value, "
              "analysis_model:session:scale:unit, "

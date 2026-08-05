@@ -207,15 +207,13 @@ def test_contour_round_trips_its_vertex_list(tmp_path):
 
 def test_scale_calibration_round_trips(tmp_path):
     session = AnalysisSession(directory=str(tmp_path))
-    session.scale.trait_set(metres_per_pixel=1e-5, value=2.0,
-                            unit="mm", show_bar=False)
+    session.scale.trait_set(metres_per_pixel=1e-5, value=2.0, unit="mm")
     save_session(tmp_path, session)
 
     loaded = load_session(tmp_path)
     assert loaded.scale.metres_per_pixel == 1e-5
     assert loaded.scale.value == 2.0
     assert loaded.scale.unit == "mm"
-    assert loaded.scale.show_bar is False
 
 
 def test_config_without_a_scale_loads_uncalibrated(tmp_path):
@@ -228,7 +226,6 @@ def test_config_without_a_scale_loads_uncalibrated(tmp_path):
     scale = load_session(tmp_path).scale
     assert scale.metres_per_pixel == 0.0
     assert scale.unit == "mm"       # the default, not the first unit
-    assert scale.show_bar is True
 
 
 def test_write_intensity_csv_includes_the_derived_columns(tmp_path):

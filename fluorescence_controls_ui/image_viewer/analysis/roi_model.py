@@ -99,7 +99,6 @@ class ScaleCalibration(HasTraits):
     value = Float(0.0)
     #: Enum's first argument is the default, so mm wins over m.
     unit = Enum(DEFAULT_UNIT, UNITS)
-    show_bar = Bool(True)
 
     def calibrated(self):
         return self.metres_per_pixel > 0.0
@@ -293,7 +292,6 @@ class RoiAnalysisModel(HasTraits):
     #: Live mirrors of session settings the toolbar toggles: the
     #: toolbar is built once against this model while sessions swap
     #: underneath it.
-    show_scale_bar = Bool(True)
     show_background_ring = Bool(True)
     edit_mode = Bool(False)
     delete_roi_button = Button()
