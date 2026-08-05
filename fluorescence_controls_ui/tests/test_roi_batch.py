@@ -36,7 +36,7 @@ def test_batch_computes_all_images_and_finishes(tmp_path):
         paths.append(str(path))
     rois = {"r1": ("box", (2.0, 2.0, 10.0, 10.0))}
     runner = RoiBatchRunner()
-    runner.start([(path, rois) for path in paths])
+    runner.start([(path, rois, (2, 4)) for path in paths])
     messages = _drain_until(runner.results, BATCH_FINISHED)
     payloads = [payload for kind, payload in messages
                 if kind == BATCH_RESULT]
@@ -48,7 +48,9 @@ def test_compute_single_reports_on_queue(tmp_path):
     path = tmp_path / "one_raw.png"
     _write_image(path, 300)
     runner = RoiBatchRunner()
-    runner.compute_single(str(path), {"r1": ("ellipse", (10.0, 10.0, 4.0, 4.0, 0.0))})
+    runner.compute_single(
+        str(path), {"r1": ("ellipse", (10.0, 10.0, 4.0, 4.0, 0.0))},
+        (2, 4))
     messages = _drain_until(runner.results, INSTANT_RESULT, timeout_s=15.0)
     kind, payload = messages[-1]
     assert payload["stats"]["r1"]["mean"] == 300.0

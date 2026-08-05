@@ -13,7 +13,7 @@ from traits.api import (
 
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
-from .consts import VIEW_MODES
+from .consts import RING_GAP_PX, RING_THICKNESS_PX, VIEW_MODES
 from .curve_fit import FIT_METHODS
 
 #: Matches the "ROI N" names next_roi_name() itself produces, to find
@@ -103,6 +103,18 @@ class ScaleCalibration(HasTraits):
         return self.metres_per_pixel > 0.0
 
 
+class BackgroundRing(HasTraits):
+    """The annulus each ROI's background is read from (persisted per
+    experiment). These change what is measured, so they are part of the
+    stats cache key."""
+
+    #: Pixels between the ROI's edge and the ring — fluorescence bleeds
+    #: past the boundary and that halo is not background.
+    gap_px = Range(0, 50, RING_GAP_PX, mode="spinner")
+    thickness_px = Range(1, 50, RING_THICKNESS_PX, mode="spinner")
+    show_on_canvas = Bool(True)
+
+
 class Roi(HasTraits):
     """One region of interest: a shared base geometry applying everywhere,
     plus optional overrides anchored at capture times that apply from
@@ -190,6 +202,9 @@ class AnalysisSession(HasTraits):
     #: Image scale for the canvas bar (display-only).
     scale = Instance(ScaleCalibration, ())
 
+    #: Where each ROI's background is measured (part of the cache key).
+    ring = Instance(BackgroundRing, ())
+
     def roi_by_id(self, roi_id):
         for roi in self.rois:
             if roi.roi_id == roi_id:
@@ -233,7 +248,8 @@ class AnalysisSession(HasTraits):
         same path for every ROI."""
         mtime, capture_time = self.stat_info(path, stat_cache)
         return (str(path), mtime, roi.roi_id, roi.kind,
-                tuple(roi.effective_geometry(capture_time)))
+                tuple(roi.effective_geometry(capture_time)),
+                (self.ring.gap_px, self.ring.thickness_px))
 
     def effective_for(self, path):
         """[(roi_id, name, kind, geometry), ...] in force for ``path`` —

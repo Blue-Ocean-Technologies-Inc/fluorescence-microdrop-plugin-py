@@ -103,7 +103,7 @@ def test_load_session_missing_or_corrupt_is_empty(tmp_path):
 
 def test_stats_store_round_trip_including_nan(tmp_path):
     key = (str(tmp_path / "a_raw.png"), 123.5, "abcd1234", "ellipse",
-           (10.0, 10.0, 5.0, 5.0, 0.0))
+           (10.0, 10.0, 5.0, 5.0, 0.0), (2, 4))
     stats = {"mean": 42.5, "std": float("nan"), "count": 9.0}
     save_roi_stats(tmp_path, {key: stats})
 
@@ -148,9 +148,11 @@ def test_legacy_stats_keys_migrate_with_their_roi(tmp_path):
             geometry=[50.0, 60.0, 10.0, 10.0, 0.0])])
 
     store = load_roi_stats(tmp_path)
-    key = (str(tmp_path / "a_raw.png"), 123.5, "abcd1234", "ellipse",
-           (50.0, 60.0, 10.0, 10.0, 0.0))
-    assert store[key] == {"mean": 7.0}
+    # The geometry still migrates, but an entry predating the annulus
+    # carries no ring, so no current key can claim it.
+    (key,) = store
+    assert key[4] == (50.0, 60.0, 10.0, 10.0, 0.0)
+    assert key[5] is None
     assert session.roi_by_id("abcd1234").kind == "ellipse"
 
 
@@ -289,3 +291,14 @@ def test_write_intensity_csv_omits_the_column_when_not_normalising(
     with open(csv_path, newline="", encoding="utf-8") as handle:
         header = next(csv.reader(handle))
     assert not [name for name in header if name.endswith("_norm_pct")]
+
+
+def test_background_ring_round_trips(tmp_path):
+    session = AnalysisSession(directory=str(tmp_path))
+    session.ring.trait_set(gap_px=3, thickness_px=7,
+                           show_on_canvas=False)
+    save_session(tmp_path, session)
+
+    ring = load_session(tmp_path).ring
+    assert ring.gap_px == 3 and ring.thickness_px == 7
+    assert ring.show_on_canvas is False

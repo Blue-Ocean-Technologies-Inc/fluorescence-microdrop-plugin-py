@@ -14,7 +14,8 @@ from .plot_series import normalized_series, stat_value
 from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
 from .roi_model import (
-    AnalysisSession, FigureSettings, Roi, RoiStyle, ScaleCalibration,
+    AnalysisSession, BackgroundRing, FigureSettings, Roi, RoiStyle,
+    ScaleCalibration,
 )
 
 logger = get_logger(__name__)
@@ -37,6 +38,9 @@ _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
 #: config written before the scale bar opens uncalibrated).
 _SCALE_FIELDS = ("metres_per_pixel", "value", "unit", "show_bar")
 
+#: Persisted BackgroundRing fields (tolerated-missing on load).
+_RING_FIELDS = ("gap_px", "thickness_px", "show_on_canvas")
+
 
 def analysis_directory(experiment_directory) -> Path:
     """The experiment's analysis output folder, created on demand."""
@@ -53,6 +57,8 @@ def save_session(experiment_directory, session):
                    for name in _FIGURE_FIELDS},
         "scale": {name: getattr(session.scale, name)
                   for name in _SCALE_FIELDS},
+        "ring": {name: getattr(session.ring, name)
+                 for name in _RING_FIELDS},
         "rois": [{
             "roi_id": roi.roi_id,
             "name": roi.name,
@@ -136,6 +142,15 @@ def load_session(experiment_directory) -> AnalysisSession:
         except Exception as error:
             logger.warning(f"Ignoring invalid scale settings in "
                            f"{path}: {error}")
+        try:
+            ring = BackgroundRing()
+            ring.trait_set(**{name: payload.get("ring", {})[name]
+                              for name in _RING_FIELDS
+                              if name in payload.get("ring", {})})
+            session.ring = ring
+        except Exception as error:
+            logger.warning(f"Ignoring invalid ring settings in "
+                           f"{path}: {error}")
     return session
 
 
@@ -144,7 +159,8 @@ def save_roi_stats(experiment_directory, stats):
     literal, which Python's parser reads back)."""
     payload = {"version": 1, "entries": [{
         "path": key[0], "mtime": key[1], "roi_id": key[2],
-        "kind": key[3], "geometry": list(key[4]), "stats": value,
+        "kind": key[3], "geometry": list(key[4]),
+        "ring": list(key[5]), "stats": value,
     } for key, value in stats.items()]}
     path = analysis_directory(experiment_directory) / ROI_STATS_FILENAME
     path.write_text(json.dumps(payload))
@@ -155,8 +171,13 @@ def _stats_key(entry):
     the ROI it belongs to is — so intensities computed before shapes
     could rotate keep matching after."""
     kind, geometry = normalize(entry["kind"], entry["geometry"])
+    # An entry without a ring predates the annulus: its outline stats
+    # came from a stroke straddling the boundary, so None here keeps it
+    # from ever matching a current key.
+    ring = entry.get("ring")
     return (entry["path"], float(entry["mtime"]), entry["roi_id"],
-            kind, tuple(geometry))
+            kind, tuple(geometry),
+            tuple(ring) if ring is not None else None)
 
 
 def load_roi_stats(experiment_directory) -> dict:

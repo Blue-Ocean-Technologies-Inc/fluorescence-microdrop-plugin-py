@@ -88,8 +88,9 @@ class RoiBatchRunner(HasTraits):
         return threading.Event()
 
     def start(self, work_items):
-        """``work_items``: [(path, effective_rois), ...] with
-        ``effective_rois`` = roi_id -> (kind, geometry tuple)."""
+        """``work_items``: [(path, effective_rois, ring), ...] with
+        ``effective_rois`` = roi_id -> (kind, geometry tuple) and
+        ``ring`` = (gap_px, thickness_px)."""
         self.cancel()
         self.results = queue.SimpleQueue()
         self._cancel = threading.Event()
@@ -102,13 +103,14 @@ class RoiBatchRunner(HasTraits):
     def cancel(self):
         self._cancel.set()
 
-    def compute_single(self, path, effective_rois):
+    def compute_single(self, path, effective_rois, ring):
         """Instant feedback for a freshly drawn/edited ROI on the shown
         image: one off-thread compute, reported on the same queue."""
         results = self.results
         thread = threading.Thread(
             target=lambda: results.put(
-                (INSTANT_RESULT, compute_image_stats(path, effective_rois))),
+                (INSTANT_RESULT, compute_image_stats(
+                    path, effective_rois, ring[0], ring[1]))),
             daemon=True)
         thread.start()
 
@@ -117,8 +119,9 @@ class RoiBatchRunner(HasTraits):
         # No `with`: this is the shared, persistent executor — it must
         # outlive this batch for the next one to reuse it.
         executor = _shared_executor()
-        futures = [executor.submit(compute_image_stats, path, rois)
-                  for path, rois in work_items]
+        futures = [executor.submit(compute_image_stats, path, rois,
+                                   ring[0], ring[1])
+                   for path, rois, ring in work_items]
         for future in as_completed(futures):
             if cancel.is_set():
                 for pending in futures:
