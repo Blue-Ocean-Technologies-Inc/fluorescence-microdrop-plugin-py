@@ -34,9 +34,6 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 from ...consts import PKG
-from ...theme import (
-    current_theme, follow_app_theme, style_figure, unfollow_app_theme,
-)
 from ..scale_bar import area_unit
 from .consts import (
     PLOT_ZOOM_STEP, ROI_PLOT_BATCH_COALESCE_MS,
@@ -301,9 +298,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.set_xlabel("Elapsed time (s)")
         self._axes.set_ylabel("Mean intensity")
         self._axes.grid(True, alpha=0.3)
-        #: Followed by the pane; re-applied after every redraw, which
-        #: rebuilds the artists that carry these colours.
-        self._theme = current_theme()
         self._figure.tight_layout()
         self._lines = {}
         self._fit_artists = []
@@ -412,14 +406,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._schedule_redraw()   # catch up on anything missed hidden
         super().showEvent(event)
 
-    def apply_theme(self, theme=None):
-        """Paint the chart in the app's theme. Kept as a method rather
-        than done at draw time because a redraw is coalesced and a
-        theme change is not: the chart must follow immediately."""
-        self._theme = theme or current_theme()
-        style_figure(self._figure, self._theme)
-        self.draw_idle()
-
     def _on_plot_state_changed(self, event):
         self._schedule_redraw()
 
@@ -506,9 +492,6 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # so relim() would read those as data and pin the y limits.
         self._shade_trimmed_tails(trim_edges)
         self._note_hidden_points(series, log_x, log_y)
-        # Last: this redraw has just rebuilt the legend and the grid,
-        # which carry the theme's colours.
-        style_figure(self._figure, self._theme)
         self.draw_idle()
 
     def _refresh_intensity(self, series, figure_settings):
@@ -798,17 +781,9 @@ def _save_figure(canvas):
         wildcard=f"*.{extension}")
     if dialog.open() != OK:
         return
-    # Exports go into documents, not onto this screen, so they are
-    # written light whatever the app's theme is — a dark-themed figure
-    # dropped into a paper is a black rectangle, and one saved with a
-    # forced white background would have white text on it.
-    try:
-        style_figure(canvas.figure, "light")
-        canvas.figure.savefig(dialog.path,
-                              dpi=session.figure.export_dpi,
-                              format=extension)
-    finally:
-        canvas.apply_theme()
+    canvas.figure.savefig(dialog.path,
+                          dpi=session.figure.export_dpi,
+                          format=extension)
 
 
 class FluorescenceRoiPlotDockPane(DockPane):
@@ -822,7 +797,6 @@ class FluorescenceRoiPlotDockPane(DockPane):
     _controls_ui = Any()
     _controls_scroll = Any()
     _equations_ui = Any()
-    _theme_slot = Any()
 
     def create_contents(self, parent):
         widget = QWidget(parent)
@@ -871,10 +845,6 @@ class FluorescenceRoiPlotDockPane(DockPane):
         scroll = QScrollArea(parent)
         scroll.setWidgetResizable(True)
         scroll.setWidget(widget)
-        # The chart cannot take a stylesheet, so it is restyled through
-        # the same call that restyles the widgets around it.
-        self._theme_slot = follow_app_theme(
-            scroll, also=lambda theme: self.canvas.apply_theme(theme))
         return scroll
 
     def _build_controls(self, parent):
@@ -915,7 +885,6 @@ class FluorescenceRoiPlotDockPane(DockPane):
         # constructed-but-never-shown pane never ran (pyface's own
         # destroy() guards its teardown the same way).
         if self.control is not None:
-            unfollow_app_theme(self._theme_slot)
             self.canvas.detach()
             self.table.detach()
             self._controls_ui.dispose()

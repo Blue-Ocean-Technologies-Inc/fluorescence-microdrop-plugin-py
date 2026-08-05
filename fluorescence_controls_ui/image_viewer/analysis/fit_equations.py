@@ -5,7 +5,7 @@ that is neither a built-in nor already saved can be added to the
 presets from here."""
 import numpy as np
 from traits.api import (
-    Any, Bool, Button, Float, HasTraits, Instance, Int, List, Str, observe,
+    Bool, Button, Float, HasTraits, Instance, Int, List, Str, observe,
 )
 from traitsui.api import (
     EnumEditor, Handler, HGroup, HSplit, Item, Label, TabularEditor, UItem,
@@ -13,7 +13,6 @@ from traitsui.api import (
 )
 from traitsui.tabular_adapter import TabularAdapter
 
-from ...theme import follow_app_theme, unfollow_app_theme
 from .curve_fit import CUSTOM_METHOD, fit_series, trimmed_note
 from .fit_expression import FitExpressionError, parse_expression
 from .fit_presets import (
@@ -135,8 +134,7 @@ class _GuessAdapter(TabularAdapter):
 
 class _FitEquationsHandler(Handler):
     """Keeps the two table widgets to hand so a refit can force them to
-    repaint in full, and keeps this window in the app's theme — it is
-    a window of its own, so no pane's styling reaches it."""
+    repaint in full."""
 
     def init(self, info):
         controls = [editor.control for editor in
@@ -146,12 +144,7 @@ class _FitEquationsHandler(Handler):
             # letting the previous frame show through the new text.
             control.viewport().setAutoFillBackground(True)
         info.object._table_controls = controls
-        info.object._theme_slot = follow_app_theme(info.ui.control)
         return True
-
-    def closed(self, info, is_ok):
-        unfollow_app_theme(info.object._theme_slot)
-        info.object._theme_slot = None
 
 
 class PresetName(HasTraits):
@@ -202,10 +195,6 @@ class FitEquationsTable(HasTraits):
     #: The two table widgets, handed over by the handler once they
     #: exist — a refit has to repaint them itself (see _repaint_tables).
     _table_controls = List()
-
-    #: The theme-change subscription for this window, dropped when it
-    #: closes so the signal cannot call into a deleted widget.
-    _theme_slot = Any()
 
     def _adapter_default(self):
         return _FitAdapter()

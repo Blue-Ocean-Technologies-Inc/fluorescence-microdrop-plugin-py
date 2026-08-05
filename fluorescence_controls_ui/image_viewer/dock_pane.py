@@ -27,7 +27,6 @@ from logger.logger_service import get_logger
 
 from ..consts import PKG
 from ..consts import DISCOVERY_POLL_INTERVAL_MS, SLIDESHOW_INTERVAL_MS
-from ..theme import follow_app_theme, unfollow_app_theme
 from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
 from .analysis.roi_batch import _shared_executor
 from .analysis.roi_controller import RoiAnalysisController
@@ -66,7 +65,6 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
     controller = Instance(FluorescenceImageViewerController)
     analysis_controller = Instance(RoiAnalysisController)
     _poll_timer = Any()
-    _theme_slot = Any()
     _play_timer = Any()
     _drain_timer = Any()
 
@@ -88,7 +86,6 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
     def destroy(self):
         media_capture_event_model.observe(self._on_media_captured, "captured",
                                           remove=True)
-        unfollow_app_theme(self._theme_slot)
         super().destroy()
 
     def _on_media_captured(self, event):
@@ -98,7 +95,6 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self.ui = self.edit_traits(
             kind="subpanel", parent=parent, handler=self.controller)
         control = self.ui.control
-        self._theme_slot = follow_app_theme(control)
         # Qt schedulers are view-owned: the slideshow tick and the
         # experiment-folder-switch poll (new captures arrive event-driven
         # via media_capture_event_model above).
