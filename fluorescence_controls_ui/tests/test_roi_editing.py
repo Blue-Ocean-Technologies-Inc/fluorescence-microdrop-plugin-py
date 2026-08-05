@@ -36,6 +36,21 @@ def test_a_drawn_roi_leaves_the_tool_armed():
                                                              "ROI 2"]
 
 
+def test_clicking_the_armed_tool_puts_it_away():
+    # Its button shows itself pressed, so a second click must release
+    # it rather than re-arm what is already armed.
+    controller = _controller()
+    model = controller.analysis_model
+    model.draw_capsule_button = True
+    assert model.interaction_mode == "draw_capsule"
+    model.draw_capsule_button = True
+    assert model.interaction_mode == "pan"
+
+    model.draw_capsule_button = True
+    model.draw_box_button = True     # a different tool just switches
+    assert model.interaction_mode == "draw_box"
+
+
 def test_escaping_a_draw_tool_returns_to_the_resting_mode():
     controller = _controller()
     model = controller.analysis_model
@@ -85,6 +100,20 @@ def test_one_copy_seeds_repeated_pastes():
     # paste, so repeated pastes stack in one place by design.
     assert controller.session.rois[1].geometry == \
         controller.session.rois[2].geometry
+
+
+def test_delete_removes_the_selected_roi_and_says_so_when_there_is_none():
+    controller = _controller()
+    model = controller.analysis_model
+    model.canvas_roi_created = ("ellipse", [10.0, 10.0, 5.0, 5.0, 0.0])
+    model.selected_roi_id = controller.session.rois[0].roi_id
+
+    model.delete_roi_button = True
+    assert controller.session.rois == []
+    assert model.selected_roi_id == ""
+
+    model.delete_roi_button = True
+    assert "Select an ROI" in model.progress_text
 
 
 def test_copy_with_nothing_selected_and_paste_with_nothing_copied():

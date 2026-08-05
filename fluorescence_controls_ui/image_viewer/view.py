@@ -23,7 +23,8 @@ from microdrop_style.icons.icons import (
     ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE, ICON_SHOW_CHART,
 )
 from microdrop_utils.traitsui_qt_helpers import (
-    HoverScrollEnumEditor, IconButtonEditor, IconToggleEditor,
+    HoverScrollEnumEditor, IconButtonEditor, IconModeButtonEditor,
+    IconToggleEditor,
 )
 
 from ..cameras.asi_thread import frame_to_qimage
@@ -99,9 +100,9 @@ class _ImageView(QGraphicsView):
         self._on_hover = on_hover
         self._roi_layer = roi_layer
         self._scale_layer = scale_layer
-        #: Set by the editor: fires the copy/paste toolbar buttons, so
-        #: the shortcuts and the buttons are the one code path.
-        self.on_clipboard_key = lambda action: None
+        #: Set by the editor: fires the copy/paste/delete toolbar
+        #: buttons, so the shortcuts and the buttons are one code path.
+        self.on_roi_shortcut = lambda action: None
         self._metres_per_pixel = 0.0
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
@@ -168,10 +169,15 @@ class _ImageView(QGraphicsView):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             action = {Qt.Key.Key_C: "copy",
                       Qt.Key.Key_V: "paste"}.get(event.key())
-            if action is not None:
-                self.on_clipboard_key(action)
-                event.accept()
-                return
+        else:
+            # Delete only, not Backspace: that one takes back a contour
+            # vertex while tracing.
+            action = ("delete" if event.key() == Qt.Key.Key_Delete
+                      else None)
+        if action is not None:
+            self.on_roi_shortcut(action)
+            event.accept()
+            return
         super().keyPressEvent(event)
 
     def resizeEvent(self, event):
@@ -250,7 +256,7 @@ class _ImageCanvasEditor(QtEditor):
         self._scale_layer.on_line_drawn = self._on_scale_line_drawn
         self.control = _ImageView(self._scene, self._on_hover,
                                   self._roi_layer, self._scale_layer)
-        self.control.on_clipboard_key = (
+        self.control.on_roi_shortcut = (
             lambda action: analysis.trait_set(
                 **{f"{action}_roi_button": True}))
         self.object.observe(self._on_window_changed,
@@ -483,34 +489,34 @@ contrast_group = VGroup(
 # image.
 analysis_toolbar = VGroup(
     UItem("object.roi_analysis.draw_ellipse_button",
-          editor=IconButtonEditor(
-              glyph=ICON_CIRCLE,
+          editor=IconModeButtonEditor(
+              glyph=ICON_CIRCLE, mode="draw_ellipse",
               tooltip="Draw an elliptical ROI (click-drag from its "
                       "centre; the grip makes it an ellipse). Stays "
                       "armed for the next one — Esc puts it away")),
     UItem("object.roi_analysis.draw_box_button",
-          editor=IconButtonEditor(
-              glyph=ICON_RECTANGLE,
+          editor=IconModeButtonEditor(
+              glyph=ICON_RECTANGLE, mode="draw_box",
               tooltip="Draw a rectangular ROI (click-drag on the "
                       "image). Stays armed for the next one — Esc "
                       "puts it away")),
     UItem("object.roi_analysis.draw_capsule_button",
-          editor=IconButtonEditor(
-              glyph=ICON_CAPSULE,
+          editor=IconModeButtonEditor(
+              glyph=ICON_CAPSULE, mode="draw_capsule",
               tooltip="Draw a capsule ROI (click-drag its axis, then "
                       "use the grip for its radius). Stays armed "
                       "for the next one — Esc puts it away")),
     UItem("object.roi_analysis.draw_polygon_button",
-          editor=IconButtonEditor(
-              glyph=ICON_CONTOUR,
+          editor=IconModeButtonEditor(
+              glyph=ICON_CONTOUR, mode="draw_polygon",
               tooltip="Draw a contour ROI (click to place nodes; "
                       "close on the first node, double-click, or "
                       "Enter — Esc cancels, Backspace undoes). Stays "
                       "armed for the next one — a second Esc puts "
                       "it away")),
     UItem("object.roi_analysis.calibrate_scale_button",
-          editor=IconButtonEditor(
-              glyph=ICON_RULER,
+          editor=IconModeButtonEditor(
+              glyph=ICON_RULER, mode="draw_scale",
               tooltip="Set the image scale: drag a line of known "
                       "length, then type what it measures")),
     UItem("object.roi_analysis.show_background_ring",
@@ -540,7 +546,7 @@ analysis_toolbar = VGroup(
     UItem("object.roi_analysis.delete_roi_button",
           editor=IconButtonEditor(
               glyph=ICON_DELETE,
-              tooltip="Delete the selected ROI")),
+              tooltip="Delete the selected ROI (Del)")),
     UItem("object.roi_analysis.clear_rois_button",
           editor=IconButtonEditor(
               glyph=ICON_DELETE_SWEEP,

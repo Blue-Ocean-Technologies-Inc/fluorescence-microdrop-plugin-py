@@ -65,25 +65,34 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     # Interaction modes                                                    #
     # ------------------------------------------------------------------ #
+    def _arm(self, mode):
+        """Arm a drawing tool, or put it away if it is the one already
+        armed — its button shows itself pressed, so a second click
+        releasing it is what that appearance promises."""
+        model = self.analysis_model
+        model.interaction_mode = (self._rest_mode()
+                                  if model.interaction_mode == mode
+                                  else mode)
+
     @observe("analysis_model:draw_ellipse_button")
     def _arm_draw_ellipse(self, event):
-        self.analysis_model.interaction_mode = "draw_ellipse"
+        self._arm("draw_ellipse")
 
     @observe("analysis_model:draw_box_button")
     def _arm_draw_box(self, event):
-        self.analysis_model.interaction_mode = "draw_box"
+        self._arm("draw_box")
 
     @observe("analysis_model:draw_capsule_button")
     def _arm_draw_capsule(self, event):
-        self.analysis_model.interaction_mode = "draw_capsule"
+        self._arm("draw_capsule")
 
     @observe("analysis_model:draw_polygon_button")
     def _arm_draw_polygon(self, event):
-        self.analysis_model.interaction_mode = "draw_polygon"
+        self._arm("draw_polygon")
 
     @observe("analysis_model:calibrate_scale_button")
     def _arm_calibrate_scale(self, event):
-        self.analysis_model.interaction_mode = "draw_scale"
+        self._arm("draw_scale")
 
     @observe("analysis_model:session, "
              "analysis_model:session:scale:metres_per_pixel")
