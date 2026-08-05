@@ -32,7 +32,8 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
                   "show_second_derivative_min",
                   "second_derivative_vline", "second_derivative_hline",
                   "second_derivative_coords", "view_mode",
-                  "log_x", "log_y", "normalize", "subtract_first")
+                  "log_x", "log_y", "normalize", "subtract_first",
+                  "subtract_standard")
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
                  "visible", "alpha")
 
@@ -71,6 +72,7 @@ def save_session(experiment_directory, session):
                           for anchor, geometry in roi.overrides.items()},
             "style": {name: getattr(roi.style, name)
                       for name in _STYLE_FIELDS},
+            "is_standard": roi.is_standard,
         } for roi in session.rois],
     }
     path = analysis_directory(experiment_directory) / ROI_CONFIG_FILENAME
@@ -89,6 +91,9 @@ def _roi_from(entry):
                overrides={
                    float(anchor): normalize(kind, override)[1]
                    for anchor, override in entry["overrides"].items()},
+               # Absent in configs written before standards existed,
+               # where no ROI was one.
+               is_standard=bool(entry.get("is_standard", False)),
                style=style)
 
 

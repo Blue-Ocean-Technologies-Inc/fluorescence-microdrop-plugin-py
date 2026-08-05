@@ -2,7 +2,8 @@
 import math
 
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
-    derive_series, normalized_series, stat_value, subtracted_series,
+    derive_series, normalized_series, standard_baseline,
+    standard_corrected_series, stat_value, subtracted_series,
     visible_series,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
@@ -175,3 +176,90 @@ def test_subtracted_series_uses_the_first_finite_value():
 def test_subtracted_series_passes_an_all_nan_curve_through():
     series = {"a": ("ROI 1", [0.0], [math.nan])}
     assert math.isnan(subtracted_series(series)["a"][2][0])
+
+
+def _standards_session():
+    """Two samples and two standards, on a series of three images."""
+    rois = [
+        Roi(roi_id="s1", name="Sample 1", kind="ellipse"),
+        Roi(roi_id="s2", name="Sample 2", kind="ellipse"),
+        Roi(roi_id="b1", name="Blank 1", kind="ellipse",
+            is_standard=True),
+        Roi(roi_id="b2", name="Blank 2", kind="ellipse",
+            is_standard=True),
+    ]
+    series = {
+        "s1": ("Sample 1", [0.0, 1.0, 2.0], [100.0, 200.0, 300.0]),
+        "s2": ("Sample 2", [0.0, 1.0, 2.0], [150.0, 250.0, 350.0]),
+        "b1": ("Blank 1", [0.0, 1.0, 2.0], [10.0, 20.0, 30.0]),
+        "b2": ("Blank 2", [0.0, 1.0, 2.0], [30.0, 40.0, 50.0]),
+    }
+    return AnalysisSession(rois=rois), series
+
+
+def test_the_standard_baseline_is_the_mean_of_the_marked_rois():
+    session, series = _standards_session()
+    assert standard_baseline(session, series) == [20.0, 30.0, 40.0]
+
+
+def test_standard_correction_subtracts_that_baseline_from_every_roi():
+    session, series = _standards_session()
+    corrected = standard_corrected_series(session, series)
+    assert corrected["s1"][2] == [80.0, 170.0, 260.0]
+    assert corrected["s2"][2] == [130.0, 220.0, 310.0]
+    # The standards are corrected too, and straddle zero — a flat pair
+    # about zero is the visible evidence the control behaved.
+    assert corrected["b1"][2] == [-10.0, -10.0, -10.0]
+    assert corrected["b2"][2] == [10.0, 10.0, 10.0]
+
+
+def test_nothing_marked_leaves_the_series_untouched():
+    session, series = _standards_session()
+    for roi in session.rois:
+        roi.is_standard = False
+    assert standard_baseline(session, series) is None
+    assert standard_corrected_series(session, series) == series
+
+
+def test_a_standard_missing_a_value_averages_the_others():
+    session, series = _standards_session()
+    series["b1"] = ("Blank 1", [0.0, 1.0, 2.0],
+                    [math.nan, 20.0, math.nan])
+    series["b2"] = ("Blank 2", [0.0, 1.0, 2.0],
+                    [30.0, 40.0, math.nan])
+    baseline = standard_baseline(session, series)
+    assert baseline[0] == 30.0      # only the one that has a value
+    assert baseline[1] == 30.0      # both
+    assert baseline[2] != baseline[2]   # neither: a gap, not a guess
+    corrected = standard_corrected_series(session, series)["s1"][2]
+    assert corrected[0] == 70.0 and corrected[1] == 170.0
+    assert corrected[2] != corrected[2]
+
+
+def test_a_hidden_standard_still_corrects():
+    # The standards are exactly the curves a user hides once they are
+    # flat; that click must not switch the correction off.
+    session, series = _standards_session()
+    session.roi_by_id("b1").style = RoiStyle(visible=False)
+    session.roi_by_id("b2").style = RoiStyle(visible=False)
+    corrected = standard_corrected_series(session, series)
+    assert corrected["s1"][2] == [80.0, 170.0, 260.0]
+    # Hiding is applied after, and drops only what is drawn.
+    shown = visible_series(session, corrected)
+    assert set(shown) == {"s1", "s2"}
+
+
+def test_standard_and_subtract_first_stack_and_commute():
+    session, series = _standards_session()
+    stacked = subtracted_series(standard_corrected_series(session,
+                                                          series))
+    # Sample 1 corrected is [80, 170, 260]; less its own first value.
+    assert stacked["s1"][2] == [0.0, 90.0, 180.0]
+    # Both are subtractions of a constant per point, so on complete
+    # data the order they are applied in cannot change the answer —
+    # ticking the two boxes in either order gives the same curve.
+    # (Only where a curve's first finite value falls on a different
+    # image can they diverge.)
+    other_way = standard_corrected_series(session,
+                                          subtracted_series(series))
+    assert other_way["s1"][2] == stacked["s1"][2]

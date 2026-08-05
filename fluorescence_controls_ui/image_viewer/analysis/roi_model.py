@@ -90,6 +90,9 @@ class FigureSettings(HasTraits):
     normalize = Bool(False)
     #: Each curve less its own first value: change from baseline.
     subtract_first = Bool(False)
+    #: Subtract the mean of the ROIs marked as background standards,
+    #: per image. Stacks with the ring correction and subtract_first.
+    subtract_standard = Bool(False)
     show_legend = Bool(True)
     #: Corner box with each ROI's fitted equation.
     show_fit_equations = Bool(False)
@@ -164,6 +167,11 @@ class Roi(HasTraits):
 
     #: Plot styling (line color/style/marker); persisted with the ROI.
     style = Instance(RoiStyle, ())
+
+    #: A region that should hold no signal, used as an internal
+    #: control: the marked ROIs' mean is subtracted from every ROI when
+    #: the standard correction is on (see standard_corrected_series).
+    is_standard = Bool(False)
 
     def _roi_id_default(self):
         return uuid.uuid4().hex[:8]

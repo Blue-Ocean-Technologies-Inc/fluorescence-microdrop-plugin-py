@@ -35,11 +35,15 @@ _STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max",
 #: expects it.
 _VISIBLE_COLUMN = 1
 
+#: Ticking this marks the ROI as a background standard — an internal
+#: control whose mean the plot can subtract from every ROI.
+_STANDARD_COLUMN = 2
+
 #: Point size of the eye glyph, matching the device viewer's own
 #: visibility column.
 EYE_GLYPH_POINT_SIZE = 15
 
-_HEADERS = ("Name", "", "Alpha", "Color", "Line", "Marker",
+_HEADERS = ("Name", "", "Std", "Alpha", "Color", "Line", "Marker",
             "Size") + _STAT_COLUMNS
 _LINE_CHOICES = ("solid", "dashed", "dotted", "dashdot")
 _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
@@ -47,6 +51,7 @@ _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
 #: Row count/editors/cell identities change — triggers a full rebuild.
 _TABLE_STRUCTURE = ("session, session:rois.items, "
                     "session:rois:items:name, "
+                    "session:rois:items:is_standard, "
                     "session:rois:items:style:color, "
                     "session:scale:metres_per_pixel, "
                     "session:scale:unit")
@@ -127,17 +132,18 @@ class RoiStatsTable(QTableWidget):
             name_item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
             self.setItem(row, 0, name_item)
             self.setItem(row, _VISIBLE_COLUMN, self._visible_item(roi))
-            self.setCellWidget(row, 2, self._alpha_spin(roi))
-            self.setCellWidget(row, 3, self._color_button(roi))
+            self.setItem(row, _STANDARD_COLUMN, self._standard_item(roi))
+            self.setCellWidget(row, 3, self._alpha_spin(roi))
+            self.setCellWidget(row, 4, self._color_button(roi))
             self.setCellWidget(
-                row, 4, self._combo(_LINE_CHOICES, roi.style.line_style,
+                row, 5, self._combo(_LINE_CHOICES, roi.style.line_style,
                                     lambda value, roi=roi:
                                     roi.style.trait_set(line_style=value)))
             self.setCellWidget(
-                row, 5, self._combo(_MARKER_CHOICES, roi.style.marker,
+                row, 6, self._combo(_MARKER_CHOICES, roi.style.marker,
                                     lambda value, roi=roi:
                                     roi.style.trait_set(marker=value)))
-            self.setCellWidget(row, 6, self._size_spin(roi))
+            self.setCellWidget(row, 7, self._size_spin(roi))
             stats = (session.stats.get(
                 session.cache_key(current, roi, stat_cache))
                 if current else None)
@@ -198,7 +204,16 @@ class RoiStatsTable(QTableWidget):
         self._rebuilding = False
 
     def _on_item_changed(self, item):
-        if self._rebuilding or item.column() != 0:
+        if self._rebuilding:
+            return
+        if item.column() == _STANDARD_COLUMN:
+            roi = self._model.session.roi_by_id(
+                item.data(Qt.ItemDataRole.UserRole))
+            if roi is not None:
+                roi.is_standard = (
+                    item.checkState() == Qt.CheckState.Checked)
+            return
+        if item.column() != 0:
             return
         roi = self._model.session.roi_by_id(
             item.data(Qt.ItemDataRole.UserRole))
@@ -223,6 +238,20 @@ class RoiStatsTable(QTableWidget):
                       | Qt.ItemFlag.ItemIsSelectable)
         item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
         item.setToolTip("Show or hide this ROI on the plot")
+        return item
+
+    def _standard_item(self, roi):
+        """Tick to make this ROI a background standard: the marked
+        ROIs' mean is what the standard correction subtracts."""
+        item = QTableWidgetItem()
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled
+                      | Qt.ItemFlag.ItemIsSelectable
+                      | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked if roi.is_standard
+                           else Qt.CheckState.Unchecked)
+        item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
+        item.setToolTip("Use this ROI as a background standard — the "
+                        "plot can subtract the marked ROIs' mean")
         return item
 
     def _on_cell_clicked(self, row, column):

@@ -48,7 +48,8 @@ from .curve_fit import (
 from .fit_equations import FitEquationsTable
 from .fit_presets import fit_arguments, method_label
 from .plot_series import (
-    derive_series, normalized_series, subtracted_series, visible_series,
+    derive_series, normalized_series, standard_corrected_series,
+    subtracted_series, visible_series,
 )
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
@@ -77,7 +78,7 @@ _Y_LABEL_TEMPLATES = {
 
 
 def y_axis_label(plot_stat, scale, normalize=False,
-                 subtract_first=False):
+                 subtract_first=False, subtract_standard=False):
     """The y-axis text for a stat, with the area unit spliced in where
     the stat depends on it and each transform noted where it
     applies."""
@@ -85,6 +86,9 @@ def y_axis_label(plot_stat, scale, normalize=False,
     label = (PLOT_STAT_LABELS[plot_stat] if template is None
              else template.format(
                  unit=area_unit(scale.metres_per_pixel, scale.unit)))
+    # In the order they were applied, so the axis reads as the recipe.
+    if subtract_standard:
+        label = f"{label} (standard-corrected)"
     if subtract_first:
         label = f"{label} (change from first)"
     return f"{label} (% of range)" if normalize else label
@@ -209,6 +213,13 @@ _plot_controls_view = View(
                   tooltip="Logarithmic value axis. Zero and negative "
                           "values cannot be drawn on it and are "
                           "counted in a note on the figure."),
+            UItem("figure.subtract_standard",
+                  editor=InPlaceToggleEditor(on_label="Standard",
+                                             off_label="Standard"),
+                  tooltip="Subtract the mean of the ROIs ticked as Std "
+                          "in the table — an internal control measured "
+                          "in the same frame. Stacks with the ring "
+                          "correction and with Subtract first."),
             UItem("figure.subtract_first",
                   editor=InPlaceToggleEditor(on_label="Subtract first",
                                              off_label="Subtract first"),
@@ -274,7 +285,9 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:view_mode, "
                "session:figure:log_x, session:figure:log_y, "
                "session:figure:normalize, "
-               "session:figure:subtract_first")
+               "session:figure:subtract_first, "
+               "session:figure:subtract_standard, "
+               "session:rois:items:is_standard")
 
 #: Changes that mean "show me everything again", releasing a view the
 #: user zoomed or panned into.
@@ -426,11 +439,17 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             return
         if not self.isVisible():
             return                # showEvent reschedules
-        derived = derive_series(self._model.session,
-                                self._model.filtered_paths)
+        session = self._model.session
+        derived = derive_series(session, self._model.filtered_paths)
+        figure_settings = session.figure
+        if figure_settings.subtract_standard:
+            # Before the visibility filter: the standards are the very
+            # curves a user hides once they are flat, and reading the
+            # baseline from the filtered set would let that click turn
+            # the correction off.
+            derived = standard_corrected_series(session, derived)
         # Filtered once here, so every view hides the same ROIs.
-        series = visible_series(self._model.session, derived)
-        figure_settings = self._model.session.figure
+        series = visible_series(session, derived)
         if figure_settings.subtract_first:
             series = subtracted_series(series)
         if figure_settings.normalize:
@@ -499,7 +518,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._axes.set_ylabel(
             y_axis_label(session.plot_stat, session.scale,
                          figure_settings.normalize,
-                         figure_settings.subtract_first))
+                         figure_settings.subtract_first,
+                         figure_settings.subtract_standard))
         for roi_id in list(self._lines):
             if roi_id not in series:
                 self._lines.pop(roi_id).remove()
@@ -520,6 +540,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if not series and self._model.session.rois:
             self._draw_hint("All ROIs are hidden (eye icons in the "
                             "table)")
+        elif (figure_settings.subtract_standard
+                and not any(roi.is_standard for roi in session.rois)):
+            # Asked of the session, not the drawn series: a standard
+            # that is merely hidden still corrects, and saying it does
+            # not would be worse than saying nothing.
+            self._draw_hint("No ROI is ticked as Std, so there is no "
+                            "standard to subtract")
         trim_edges = []
         if figure_settings.fit_method != "none":
             trim_edges = self._draw_fits(series, figure_settings)

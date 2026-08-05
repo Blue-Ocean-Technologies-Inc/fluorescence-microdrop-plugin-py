@@ -88,6 +88,51 @@ def subtracted_series(series):
     return shifted
 
 
+def standard_baseline(session, series):
+    """The per-image background from the ROIs marked as standards: the
+    mean of their values at each point, over whichever of them have
+    one. None when no ROI is marked — the caller reports that rather
+    than correcting by nothing.
+
+    NaN where no standard has a value for an image, so the correction
+    gaps there instead of quietly leaving that image uncorrected among
+    corrected ones."""
+    columns = [values for roi_id, (_name, _elapsed, values)
+               in series.items()
+               if (session.roi_by_id(roi_id) is not None
+                   and session.roi_by_id(roi_id).is_standard)]
+    if not columns:
+        return None
+    baseline = []
+    for index in range(max((len(values) for values in columns),
+                           default=0)):
+        present = [values[index] for values in columns
+                   if index < len(values) and values[index] == values[index]]
+        baseline.append(sum(present) / len(present) if present
+                        else math.nan)
+    return baseline
+
+
+def standard_corrected_series(session, series):
+    """``series`` less the standards' mean at each image — an internal
+    control measured in the same frame as the samples.
+
+    Pass the FULL series, before hidden ROIs are dropped: the standards
+    are exactly the curves a user hides once they have served their
+    purpose, and reading the baseline from the filtered set would let
+    that click switch the correction off."""
+    baseline = standard_baseline(session, series)
+    if baseline is None:
+        return series
+    corrected = {}
+    for roi_id, (name, elapsed, values) in series.items():
+        corrected[roi_id] = (name, elapsed, [
+            value - baseline[index]
+            if index < len(baseline) else math.nan
+            for index, value in enumerate(values)])
+    return corrected
+
+
 def normalized_series(series):
     """``series`` with each ROI stretched to 0-100% of its own finite
     range, so curves of wildly different brightness can be compared for
