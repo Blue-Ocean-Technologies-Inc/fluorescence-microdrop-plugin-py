@@ -5,7 +5,8 @@ and the image canvas editor (zoom/pan QGraphicsView rendering the model's
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QSizePolicy,
+    QGraphicsPixmapItem, QGraphicsScene, QGraphicsView, QProgressBar,
+    QSizePolicy,
 )
 from traits.api import Enum, Float, HasTraits
 from traitsui.api import (
@@ -36,6 +37,41 @@ from .scale_layer import ScaleCanvasLayer
 
 #: Inset of the scale bar from the viewport's bottom-left corner.
 SCALE_BAR_MARGIN_PX = 12
+
+#: Keeps the status row's progress bar from bulking up the row.
+PROGRESS_BAR_HEIGHT_PX = 16
+
+
+class _ProgressReadoutEditor(QtEditor):
+    """The batch readout as a progress bar whose text is the model's
+    progress_text. It repaints itself on every change: results arrive
+    faster than the event loop would otherwise paint, and the point of
+    the readout is to be watched while that happens."""
+
+    def init(self, parent):
+        self.control = QProgressBar()
+        self.control.setTextVisible(True)
+        self.control.setMaximumHeight(PROGRESS_BAR_HEIGHT_PX)
+        self.update_editor()
+
+    def update_editor(self):
+        # TraitsUI resolves a dotted item name down to the object that
+        # owns the trait, so this is the RoiAnalysisModel itself.
+        analysis = self.object
+        total = analysis.batch_total
+        self.control.setVisible(bool(self.value))
+        # An unknown total (a message rather than a count) shows an
+        # empty trough behind the text instead of a bogus fraction.
+        self.control.setRange(0, total if total else 1)
+        self.control.setValue(analysis.batch_done if total else 0)
+        self.control.setFormat(self.value)
+        self.control.repaint()
+
+
+class ProgressReadoutEditor(BasicEditorFactory):
+    """Factory for the batch progress readout over a Str trait."""
+
+    klass = _ProgressReadoutEditor
 
 
 class ScaleEntry(HasTraits):
@@ -523,7 +559,7 @@ ImageViewerView = View(
                     UItem("pixel_text", style="readonly"),
                     UItem("scale_text", style="readonly"),
                     UItem("object.roi_analysis.progress_text",
-                          style="readonly"),
+                          editor=ProgressReadoutEditor()),
                 ),
             ),
         ),
