@@ -1,9 +1,11 @@
 """Unit tests for the typed-equation parser and the preset store."""
+import warnings
+
 import numpy as np
 import pytest
 
 from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
-    FIT_TEMPLATES, fit_series,
+    FIT_TEMPLATES, fit_series, user_seed,
 )
 from fluorescence_controls_ui.image_viewer.analysis.fit_expression import (
     FitExpressionError, is_valid, parse_expression,
@@ -182,3 +184,76 @@ def test_a_deleted_preset_stays_selectable():
     choices = choices_for([], current="preset:Gone")
     assert choices[-1] == "preset:Gone"
     assert expression_for("preset:Gone", []) == ""
+
+
+def test_starting_values_are_all_or_nothing():
+    # A seed is a vector: filling the gaps with invented numbers would
+    # be a different starting point than the one that was asked for.
+    assert user_seed(["a", "b"], {"a": 1.0, "b": 2.0}) == [1.0, 2.0]
+    assert user_seed(["b", "a"], {"a": 1.0, "b": 2.0}) == [2.0, 1.0]
+    assert user_seed(["a", "b"], {"a": 1.0}) is None
+    assert user_seed(["a"], {}) is None
+    assert user_seed(["a"], None) is None
+    assert user_seed(["a"], {"a": "nonsense"}) is None
+    assert user_seed(["a"], {"a": float("inf")}) is None
+
+
+def test_starting_values_steer_a_fit_the_automatic_seeds_miss():
+    # Two plateaus an order of magnitude apart: the uniform ladder has
+    # no seed near both, and the user's do.
+    t = np.linspace(0.0, 100.0, 40)
+    y = 0.002 + 5000.0 / (1.0 + np.exp(-0.5 * (t - 50.0)))
+    expression = "a + b/(1 + exp(-c*(x - d)))"
+    guided = fit_series(t, y, "custom", expression=expression,
+                        initial_guesses={"a": 0.0, "b": 5000.0,
+                                         "c": 0.5, "d": 50.0})
+    assert guided.r_squared > 0.9999
+    assert not guided.auto_seeded
+    assert abs(guided.params["d"] - 50.0) < 1.0
+
+
+def test_a_poor_but_usable_start_is_obeyed_rather_than_overridden():
+    # The whole point of typing starting values is that they are used;
+    # a bad fit from them is honest feedback, and its R² shows it.
+    t = np.linspace(0.0, 200.0, 60)
+    y = 100.0 + 800.0 / (1.0 + np.exp(-0.06 * (t - 95.0)))
+    expression = "a + b/(1 + exp(-c*(x - d)))"
+    poor = fit_series(t, y, "custom", expression=expression,
+                      initial_guesses={name: 1e12 for name in "abcd"})
+    automatic = fit_series(t, y, "custom", expression=expression)
+    assert automatic.r_squared > 0.9999
+    assert poor.r_squared < 0.5          # obeyed, not quietly replaced
+    assert not poor.auto_seeded
+
+
+def test_a_start_that_reaches_nothing_falls_back_and_says_so():
+    t = np.linspace(1.0, 50.0, 30)
+    y = 3.0 * np.log(t + 2.0)
+    # b = -1e6 puts log() of a negative number at the initial point, so
+    # the solver has no residuals to work from at all.
+    fit = fit_series(t, y, "custom", expression="a*log(x + b)",
+                     initial_guesses={"a": 1.0, "b": -1e6})
+    assert fit.r_squared > 0.9999        # rescued by the ladder
+    assert fit.auto_seeded               # and the popup reports it
+    # Built-ins have their own seeding and ignore the guesses entirely.
+    assert not fit_series(t, y, "linear",
+                          initial_guesses={"c1": 1e9}).auto_seeded
+
+
+def test_an_overflowing_equation_survives_warnings_as_errors():
+    # Numpy issuing a warning from inside the evaluated equation sends
+    # CPython's warnings machinery looking for __import__ in globals
+    # that deliberately have none, which surfaced as KeyError rather
+    # than anything a caller could handle.
+    expression = parse_expression("a*exp(b*x)")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = expression(np.array([0.0, 1e6]), 1.0, 1e6)
+    assert not np.all(np.isfinite(result))
+
+    t = np.linspace(0.0, 200.0, 60)
+    y = 5.0 * np.exp(-0.02 * t) + 2.0
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        fit = fit_series(t, y, "custom", expression="a*exp(b*x) + c")
+    assert fit.r_squared > 0.9999

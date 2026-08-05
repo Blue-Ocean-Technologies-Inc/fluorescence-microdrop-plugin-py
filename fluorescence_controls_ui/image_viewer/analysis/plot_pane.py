@@ -543,7 +543,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             method, expression = fit_arguments(figure_settings,
                                                self._model.fit_presets)
             fit = fit_series(elapsed, values, method,
-                             figure_settings.trim_poor_fit, expression)
+                             figure_settings.trim_poor_fit, expression,
+                             figure_settings.initial_guesses)
             if fit is None:
                 continue
             finite_t = np.asarray(elapsed, dtype=float)[
@@ -593,7 +594,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             method, expression = fit_arguments(figure_settings,
                                                self._model.fit_presets)
             fit = fit_series(elapsed, values, method,
-                             figure_settings.trim_poor_fit, expression)
+                             figure_settings.trim_poor_fit, expression,
+                             figure_settings.initial_guesses)
             if fit is None:
                 continue
             finite_t = np.asarray(elapsed, dtype=float)[
@@ -685,7 +687,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             method, expression = fit_arguments(figure_settings,
                                                self._model.fit_presets)
             fit = fit_series(elapsed, values, method,
-                             figure_settings.trim_poor_fit, expression)
+                             figure_settings.trim_poor_fit, expression,
+                             figure_settings.initial_guesses)
             if fit is None:
                 continue
             # fit_series requires >= 2 finite points, so never empty.

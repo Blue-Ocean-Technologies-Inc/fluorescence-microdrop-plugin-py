@@ -75,6 +75,11 @@ class FigureSettings(HasTraits):
     #: experiment so reopening one reproduces its fit whether or not
     #: the equation was ever saved as a preset.
     custom_expression = Str()
+
+    #: {parameter: starting value} for the typed equation. Empty means
+    #: seed it automatically; a complete set steers the optimizer where
+    #: the automatic seeds land somewhere useless.
+    initial_guesses = Dict(Str, Float)
     #: Refit on a shorter leading slice when R² is poor, for series
     #: whose tail the model does not describe (a bleached plateau).
     trim_poor_fit = Bool(False)

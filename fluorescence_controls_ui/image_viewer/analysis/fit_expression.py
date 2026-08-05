@@ -50,8 +50,8 @@ def _describe(node):
     return {ast.Attribute: "attribute access", ast.Subscript: "indexing",
             ast.Lambda: "a lambda", ast.IfExp: "a conditional",
             ast.Compare: "a comparison", ast.BoolOp: "and/or",
-            ast.Str: "a string", ast.List: "a list",
-            ast.Dict: "a dict", ast.Tuple: "a tuple",
+            ast.List: "a list", ast.Dict: "a dict",
+            ast.Tuple: "a tuple", ast.Starred: "*args",
             }.get(type(node), type(node).__name__)
 
 
@@ -96,9 +96,11 @@ def _check(node, parameters):
         if name not in parameters:
             parameters.append(name)
     elif isinstance(node, ast.Constant):
-        if not isinstance(node.value, (int, float)):
+        # Numbers only: a quoted string or a None is not arithmetic.
+        if isinstance(node.value, bool) or not isinstance(
+                node.value, (int, float)):
             raise FitExpressionError(
-                f"{_describe(node)} is not allowed in an equation")
+                f"{node.value!r} is not a number")
     else:
         raise FitExpressionError(
             f"{_describe(node)} is not allowed in an equation")
@@ -124,9 +126,18 @@ class FitExpression:
         for name in VARIABLE_NAMES:
             namespace[name] = variable
         namespace.update(zip(self.parameters, values))
+        # Overflow and invalid values are routine here — an optimizer
+        # tries parameters that put exp() past the float ceiling — and
+        # the callers check whether the RESULT is finite. Silencing
+        # them at the source also avoids a trap: numpy issuing a
+        # warning from this frame sends CPython's warnings machinery
+        # looking for __import__ in these globals, which raises
+        # KeyError rather than any warning the caller could handle.
+        #
         # No builtins: nothing outside the namespace above is reachable,
         # which the parse has already restricted to arithmetic anyway.
-        return eval(self._code, {"__builtins__": {}}, namespace)
+        with np.errstate(all="ignore"):
+            return eval(self._code, {"__builtins__": {}}, namespace)
 
 
 def parse_expression(text):

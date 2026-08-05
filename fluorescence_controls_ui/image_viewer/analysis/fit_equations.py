@@ -8,7 +8,8 @@ from traits.api import (
     Bool, Button, Float, HasTraits, Instance, Int, List, Str, observe,
 )
 from traitsui.api import (
-    EnumEditor, HGroup, Item, Label, TabularEditor, UItem, View,
+    EnumEditor, HGroup, HSplit, Item, Label, TabularEditor, UItem, VGroup,
+    View,
 )
 from traitsui.tabular_adapter import TabularAdapter
 
@@ -39,6 +40,8 @@ class FitEquationRow(HasTraits):
     fit_range_text = Str()
     #: Why there are no values, shown under the first parameter.
     note = Str()
+    #: The user's starting values were given but did not converge.
+    auto_seeded = Bool(False)
 
 
 class _FitAdapter(TabularAdapter):
@@ -84,7 +87,8 @@ def fit_rows(session, filtered_paths, presets):
     for roi_id, (name, elapsed, values) in derive_series(
             session, filtered_paths).items():
         fit = fit_series(elapsed, values, method,
-                         session.figure.trim_poor_fit, expression)
+                         session.figure.trim_poor_fit, expression,
+                         session.figure.initial_guesses)
         row = FitEquationRow(roi_name=name)
         if fit is None:
             row.note = ("no fit selected" if method == "none"
@@ -95,12 +99,37 @@ def fit_rows(session, filtered_paths, presets):
             row.values = [f"{value:.4g}"
                           for value in fit.params.values()]
             row.r_squared_text = f"{fit.r_squared:.4f}"
+            row.auto_seeded = fit.auto_seeded
             finite_t = np.asarray(elapsed, dtype=float)[
                 np.isfinite(np.asarray(values, dtype=float))]
             row.fit_range_text = trimmed_note(
                 fit, finite_t.max()).strip(" ()")
         rows.append(row)
     return parameters, rows
+
+
+class GuessRow(HasTraits):
+    """One parameter's starting value, as text so that empty can mean
+    "seed this automatically" rather than zero."""
+
+    name = Str()
+    text = Str()
+
+    def value(self):
+        """The number typed, or None when it is blank or not one."""
+        try:
+            return float(self.text)
+        except ValueError:
+            return None
+
+
+class _GuessAdapter(TabularAdapter):
+    columns = [("Parameter", "name"), ("Start value", "text")]
+    name_width = Float(0.45)
+    text_width = Float(0.55)
+
+    def get_can_edit(self, object, trait, row):
+        return self.columns[self.column][1] == "text"
 
 
 class PresetName(HasTraits):
@@ -127,17 +156,26 @@ class FitEquationsTable(HasTraits):
     rows = List(FitEquationRow)
     adapter = Instance(TabularAdapter)
 
+    #: One per parameter of the current fit; blank text = seed it
+    #: automatically. Only a complete set is used (see user_seed).
+    guesses = List(GuessRow)
+
     #: The equation as typed, and why it cannot be used ('' when fine).
     expression = Str()
     error = Str()
 
     add_preset_button = Button("Add to presets")
     can_add_preset = Bool(False)
+    seed_from_fit_button = Button("Seed from fit")
+    clear_guesses_button = Button("Auto")
 
     #: Set while one of the two-way observers below is writing the
     #: other's trait, so the dropdown and the field cannot chase each
     #: other around.
     _syncing = Bool(False)
+
+    #: Parameter names of the current fit, in fitted order.
+    _parameters = List(Str)
 
     def _adapter_default(self):
         return _FitAdapter()
@@ -165,11 +203,29 @@ class FitEquationsTable(HasTraits):
             ),
             UItem("error", style="readonly",
                   visible_when="error != ''"),
-            UItem("rows",
-                  editor=TabularEditor(adapter=self.adapter,
-                                       editable=False,
-                                       stretch_last_section=False)),
-            title="Fit equations", width=640, height=340,
+            HSplit(
+                VGroup(
+                    HGroup(
+                        UItem("seed_from_fit_button",
+                              enabled_when="len(guesses) > 0",
+                              tooltip="Fill the starting values with "
+                                      "what the fit just found, to "
+                                      "nudge from there"),
+                        UItem("clear_guesses_button",
+                              tooltip="Clear them and let the fit "
+                                      "choose its own starting values"),
+                    ),
+                    UItem("guesses",
+                          editor=TabularEditor(adapter=_GuessAdapter(),
+                                               editable=True,
+                                               auto_update=True)),
+                    label="Start values", show_border=True),
+                UItem("rows",
+                      editor=TabularEditor(adapter=self.adapter,
+                                           editable=False,
+                                           stretch_last_section=False)),
+            ),
+            title="Fit equations", width=760, height=340,
             resizable=True)
 
     def _method_label(self, key):
@@ -240,6 +296,58 @@ class FitEquationsTable(HasTraits):
         self._update_can_add()
 
     # ------------------------------------------------------------------ #
+    # Starting values                                                     #
+    # ------------------------------------------------------------------ #
+    @observe("guesses:items:text")
+    def _on_guess_edited(self, event):
+        """Store what is typed and refit. A partial set is kept as
+        typed — the fit falls back to its own seeds until every
+        parameter has one, which is what the hint says."""
+        if self._syncing:
+            return
+        self.session.figure.initial_guesses = {
+            row.name: row.value() for row in self.guesses
+            if row.value() is not None}
+        self.refresh()
+
+    @observe("seed_from_fit_button")
+    def _seed_from_fit(self, event):
+        """Fill every starting value from the fit just made, so the
+        user nudges from where it landed instead of typing a whole
+        vector from nothing."""
+        fitted = self._fitted_parameters()
+        if not fitted:
+            return
+        self._syncing = True
+        try:
+            for row in self.guesses:
+                if row.name in fitted:
+                    row.text = f"{fitted[row.name]:.6g}"
+        finally:
+            self._syncing = False
+        self._on_guess_edited(None)
+
+    @observe("clear_guesses_button")
+    def _clear_guesses(self, event):
+        self._syncing = True
+        try:
+            for row in self.guesses:
+                row.text = ""
+        finally:
+            self._syncing = False
+        self.session.figure.initial_guesses = {}
+        self.refresh()
+
+    def _fitted_parameters(self):
+        """The first ROI's fitted values, by name — the natural seed to
+        offer, every ROI being fitted with the same model."""
+        for row in self.rows:
+            if row.values:
+                return {name: float(value) for name, value
+                        in zip(self._parameters, row.values)}
+        return {}
+
+    # ------------------------------------------------------------------ #
     def refresh(self):
         """Refit every ROI and rebuild the table around the parameters
         the fit reports."""
@@ -258,6 +366,35 @@ class FitEquationsTable(HasTraits):
         # rebuilt around it.
         self.adapter.columns = columns
         self.rows = rows
+        self._parameters = parameters
+        self._sync_guess_rows(parameters)
+        # Reached only with an equation that parsed, so the field is
+        # free to report on the fit instead.
+        self.error = ("Those starting values did not converge — fitted "
+                      "from automatic ones instead"
+                      if any(row.auto_seeded for row in rows) else "")
+
+    def _sync_guess_rows(self, parameters):
+        """One row per parameter of the current fit, keeping whatever
+        was already typed for a parameter of the same name (editing an
+        equation usually keeps most of its parameters)."""
+        if [row.name for row in self.guesses] == list(parameters):
+            # Same parameters: leave the rows themselves alone. Every
+            # keystroke refits, and replacing the list under the editor
+            # would take the cursor out of the cell being typed in.
+            return
+        typed = {row.name: row.text for row in self.guesses}
+        stored = self.session.figure.initial_guesses
+        self._syncing = True
+        try:
+            self.guesses = [
+                GuessRow(name=name,
+                         text=typed.get(name)
+                         or (f"{stored[name]:.6g}" if name in stored
+                             else ""))
+                for name in parameters]
+        finally:
+            self._syncing = False
 
 
 def _parses(text):

@@ -75,8 +75,23 @@ The ±1/span pair was added after measuring: a rate seeded at 1.0 puts
 decay** — the shape a bleaching fluorescence series actually has. The
 first draft of this design omitted it and fitted that case at R² 0.80.
 
-Per-parameter initial guesses would beat this and are the obvious next
-step; they are deliberately out of scope here.
+**Per-parameter starting values** sit beside the table, one row per
+parameter of the current fit — parameters as *rows*, so no dynamic
+columns are involved. Blank means "seed this one automatically", and a
+set is used only when every parameter has a number: a seed is a
+vector, and filling the gaps with invented values would be a different
+starting point than the one asked for. **Seed from fit** fills them
+all with what the fit just found, so nudging never means typing a
+whole vector from nothing; **Auto** clears them.
+
+They are honoured rather than second-guessed. A complete set is tried
+first and stands if it reaches any usable fit — even a poor one, since
+a bad fit from the values you asked for is honest feedback with its R²
+next to it, where silently substituting a better automatic fit would
+make the field look broken. Only a seed that reaches *nothing* usable
+(no finite R² at all) is abandoned, and then the automatic ladder runs
+and the popup says it did. The values are stored per experiment with
+the equation.
 
 **Solving is insulated from ambient warning filters.** An optimizer
 exploring a typed equation overflows `exp` routinely, which numpy
@@ -87,6 +102,13 @@ favour of a worse one that happened not to trip a warning. The solve
 therefore runs under `np.errstate(all="ignore")` and suppressed
 warnings; whether the *result* is finite is what decides it, and that
 is checked explicitly.
+
+Evaluating the equation carries the same guard for a sharper reason:
+numpy issuing a warning from inside code eval'd with no builtins sends
+CPython's warnings machinery looking for `__import__` in those
+globals, and it surfaces as `KeyError: '__import__'` — not something
+any caller could have handled. Every consumer of `predict()`, the plot
+included, is covered by silencing it at the source.
 
 **Derivatives are numeric** for custom equations — central differences
 on the fitted domain — where the built-ins carry analytic ones. This

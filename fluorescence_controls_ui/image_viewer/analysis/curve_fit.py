@@ -10,7 +10,7 @@ import warnings
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.special import expit
-from traits.api import Any, Dict, Float, HasTraits, Str
+from traits.api import Any, Bool, Dict, Float, HasTraits, Str
 
 from .fit_expression import FitExpressionError, parse_expression
 
@@ -83,6 +83,9 @@ class FitResult(HasTraits):
     #: the poor-fit tail trim dropped trailing points.
     fitted_start = Float()
     fitted_end = Float()
+    #: True when the user gave starting values and they did not
+    #: converge, so this fit came from the automatic seeds instead.
+    auto_seeded = Bool(False)
 
 
 def _signed(value):
@@ -260,27 +263,72 @@ def _custom_seeds(elapsed, values, count):
     return [[magnitude] * count for magnitude in magnitudes]
 
 
-def _fit_custom(elapsed, values, expression):
-    """Solve a typed equation, keeping the seed that fits best."""
-    span = float(elapsed[-1] - elapsed[0]) or 1.0
-    seeds = _custom_seeds(elapsed, values,
-                          len(expression.parameters))
-    best = None
-    for seed in seeds:
+def _solve_from(expression, elapsed, values, seed):
+    """(R², parameters) for one starting point, or None when it does
+    not converge to something finite."""
+    try:
+        solved, _ = curve_fit(expression, elapsed, values, p0=seed,
+                              maxfev=10000)
+    except Exception:
+        return None
+    solved = [float(value) for value in solved]
+    if not all(math.isfinite(value) for value in solved):
+        return None
+    fitted = np.asarray(expression(elapsed, *solved), dtype=float)
+    if not np.all(np.isfinite(fitted)):
+        return None
+    score = _r_squared(values, fitted)
+    # A curve so far from the data that the score overflows is not a
+    # fit; without this it would out-rank nothing and still be shown.
+    if not math.isfinite(score):
+        return None
+    return score, solved
+
+
+def user_seed(parameters, initial_guesses):
+    """The user's starting point as a p0 list, or None when they have
+    not given one for every parameter. All or nothing on purpose: a
+    seed is a vector, and filling the gaps with invented numbers would
+    be a different starting point than the one they asked for."""
+    if not initial_guesses:
+        return None
+    seed = []
+    for name in parameters:
         try:
-            solved, _ = curve_fit(expression, elapsed, values, p0=seed,
-                                  maxfev=10000)
-        except Exception:
-            continue
-        solved = [float(value) for value in solved]
-        if not all(math.isfinite(value) for value in solved):
-            continue
-        fitted = np.asarray(expression(elapsed, *solved), dtype=float)
-        if not np.all(np.isfinite(fitted)):
-            continue
-        score = _r_squared(values, fitted)
-        if best is None or score > best[0]:
-            best = (score, solved)
+            value = float(initial_guesses[name])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not math.isfinite(value):
+            return None
+        seed.append(value)
+    return seed
+
+
+def _fit_custom(elapsed, values, expression, initial_guesses=None):
+    """Solve a typed equation. The user's own starting values, when
+    they have given a complete set, are tried first and stand if they
+    reach any usable fit — a manual seed is an instruction, and quietly
+    replacing it with a better-scoring automatic one would make the
+    field look like it did nothing. A poor fit from the values asked
+    for is honest feedback, and its R² is on display beside it.
+
+    Only a seed that reaches nothing usable at all is abandoned, and
+    then the automatic ladder runs and the result says so, rather than
+    silently showing a curve the given values never produced."""
+    span = float(elapsed[-1] - elapsed[0]) or 1.0
+    seed = user_seed(expression.parameters, initial_guesses)
+    auto_seeded = False
+    best = _solve_from(expression, elapsed, values, seed) if seed else None
+    if seed is not None and best is None:
+        # Say so rather than silently fitting something else.
+        auto_seeded = True
+    if best is None:
+        for candidate in _custom_seeds(elapsed, values,
+                                       len(expression.parameters)):
+            scored = _solve_from(expression, elapsed, values, candidate)
+            if scored is not None and (best is None
+                                       or scored[0] > best[0]):
+                best = scored
     if best is None:
         return None
     params = dict(zip(expression.parameters, best[1]))
@@ -293,10 +341,11 @@ def _fit_custom(elapsed, values, expression):
     return FitResult(params=params,
                      equation=_custom_equation_text(expression, params),
                      predict=predict, first_derivative=first,
-                     second_derivative=second)
+                     second_derivative=second, auto_seeded=auto_seeded)
 
 
-def _solve(elapsed, values, method, expression=None):
+def _solve(elapsed, values, method, expression=None,
+           initial_guesses=None):
     """One fit over exactly the points given (already finite-filtered),
     scored and stamped with the domain it used. None when the model
     cannot be solved on them."""
@@ -312,7 +361,8 @@ def _solve(elapsed, values, method, expression=None):
         with np.errstate(all="ignore"), warnings.catch_warnings():
             warnings.simplefilter("ignore")
             if method == CUSTOM_METHOD:
-                result = _fit_custom(elapsed, values, expression)
+                result = _fit_custom(elapsed, values, expression,
+                                     initial_guesses)
             elif method == "exponential":
                 result = _fit_exponential(elapsed, values)
             elif method == "sigmoid":
@@ -332,12 +382,16 @@ def _solve(elapsed, values, method, expression=None):
     return result
 
 
-def fit_series(elapsed, values, method, trim_tail=False, expression=""):
+def fit_series(elapsed, values, method, trim_tail=False,
+               expression="", initial_guesses=None):
     """Fit one series. None when fitting is off, too few finite points
     remain after NaN filtering, or the optimizer fails — callers render
     that as "fit failed", never a traceback. ``expression`` is the typed
     equation, used when ``method`` is CUSTOM_METHOD and ignored
     otherwise; one that does not parse fits nothing.
+    ``initial_guesses`` is {parameter: starting value} for that
+    equation — see _fit_custom for how a partial or failing one is
+    treated.
 
     ``trim_tail`` retries a fit that misses TRIM_TARGET_R_SQUARED on
     successively shorter leading slices, the qPCR trick for a tail the
@@ -365,7 +419,8 @@ def fit_series(elapsed, values, method, trim_tail=False, expression=""):
     elapsed, values = elapsed[finite], values[finite]
     if len(elapsed) < minimum:
         return None
-    result = _solve(elapsed, values, method, parsed)
+    result = _solve(elapsed, values, method, parsed,
+                    initial_guesses)
     if (result is None or not trim_tail
             or result.r_squared >= TRIM_TARGET_R_SQUARED):
         return result
@@ -377,7 +432,7 @@ def fit_series(elapsed, values, method, trim_tail=False, expression=""):
         if kept < floor:
             break
         trimmed = _solve(elapsed[:kept], values[:kept], method,
-                         parsed)
+                         parsed, initial_guesses)
         if (trimmed is not None
                 and trimmed.r_squared >= TRIM_TARGET_R_SQUARED):
             return trimmed
