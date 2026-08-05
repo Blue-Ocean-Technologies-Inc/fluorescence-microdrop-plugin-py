@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_compute import (
-    compute_image_stats, masked_stats, roi_masks,
+    compute_image_stats, masked_stats, ring_contours, roi_masks,
 )
 
 
@@ -22,11 +22,11 @@ def test_box_interior_stats_on_uniform_patch():
 
 
 def test_circle_mask_is_filled_disk():
-    interior, outline = roi_masks((100, 100), "circle",
-                                  [50.0, 50.0, 10.0])
+    interior, ring = roi_masks((100, 100), "circle",
+                               [50.0, 50.0, 10.0])
     area = np.count_nonzero(interior)
     assert abs(area - math.pi * 10 ** 2) / area < 0.15
-    assert 0 < np.count_nonzero(outline) < area
+    assert np.count_nonzero(ring) > 0
 
 
 # cv2 fills the boundary ring as well as the interior, so a rasterized
@@ -66,12 +66,14 @@ def test_capsule_mask_area_matches_the_analytic_value():
     assert abs(np.count_nonzero(interior) - expected) / expected < 0.05
 
 
-def test_capsule_outline_stays_inside_its_bounding_box():
-    _interior, outline = roi_masks((200, 200), "capsule",
-                                   (100.0, 100.0, 30.0, 8.0, 0.0))
-    rows, columns = np.nonzero(outline)
-    assert columns.min() >= 100 - 38 - 2 and columns.max() <= 100 + 38 + 2
-    assert rows.min() >= 100 - 8 - 2 and rows.max() <= 100 + 8 + 2
+def test_capsule_ring_hugs_its_bounding_box():
+    _interior, ring = roi_masks((200, 200), "capsule",
+                                (100.0, 100.0, 30.0, 8.0, 0.0),
+                                gap_px=2, thickness_px=4)
+    rows, columns = np.nonzero(ring)
+    # The ring reaches gap + thickness beyond the capsule's extent.
+    assert columns.max() <= 100 + 38 + 6 + 1
+    assert rows.max() <= 100 + 8 + 6 + 1
 
 
 def test_unrotated_equal_radii_reuse_the_legacy_circle_mask():
@@ -137,3 +139,67 @@ def test_contour_below_minimum_vertices_masks_nothing():
     stats = masked_stats(array, interior)
     assert np.count_nonzero(interior) == 0
     assert stats["count"] == 0.0 and math.isnan(stats["mean"])
+
+
+def test_ring_never_touches_the_interior():
+    interior, ring = roi_masks((200, 200), "ellipse",
+                               (100.0, 100.0, 30.0, 30.0, 0.0))
+    assert np.count_nonzero((interior == 255) & (ring == 255)) == 0
+
+
+def test_ring_area_matches_the_annulus():
+    gap, thickness = 2, 4
+    _interior, ring = roi_masks((300, 300), "ellipse",
+                                (150.0, 150.0, 40.0, 40.0, 0.0),
+                                gap, thickness)
+    inner, outer = 40.0 + gap, 40.0 + gap + thickness
+    expected = math.pi * (outer ** 2 - inner ** 2)
+    assert abs(np.count_nonzero(ring) - expected) / expected < 0.10
+
+
+def test_gap_pushes_the_ring_outwards():
+    centre = (150.0, 150.0, 40.0, 40.0, 0.0)
+    _interior, tight = roi_masks((300, 300), "ellipse", centre, 0, 3)
+    _interior, spaced = roi_masks((300, 300), "ellipse", centre, 6, 3)
+    rows, columns = np.nonzero(tight)
+    tight_inner = np.min(np.hypot(columns - 150.0, rows - 150.0))
+    rows, columns = np.nonzero(spaced)
+    spaced_inner = np.min(np.hypot(columns - 150.0, rows - 150.0))
+    assert abs(tight_inner - 40.0) < 2.0
+    assert abs(spaced_inner - 46.0) < 2.0
+
+
+def test_background_correction_recovers_the_true_signal():
+    # The regression this cycle exists for: the old boundary-stroke
+    # ring read 1569 where the answer is 2900.
+    image = np.full((200, 200), 100, dtype=np.uint16)
+    cv2.circle(image, (100, 100), 30, 3000, -1)
+    interior, ring = roi_masks((200, 200), "ellipse",
+                               (100.0, 100.0, 30.0, 30.0, 0.0))
+    corrected = (masked_stats(image, interior)["mean"]
+                 - masked_stats(image, ring)["mean"])
+    assert abs(corrected - 2900.0) < 30.0
+
+
+def test_ring_excludes_a_neighbouring_roi(tmp_path):
+    array = np.full((200, 200), 100, dtype=np.uint16)
+    cv2.circle(array, (100, 100), 20, 3000, -1)
+    cv2.circle(array, (135, 100), 20, 3000, -1)   # neighbour, close by
+    path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
+    cv2.imwrite(str(path), array)
+    result = compute_image_stats(str(path), {
+        "a": ("ellipse", (100.0, 100.0, 20.0, 20.0, 0.0)),
+        "b": ("ellipse", (135.0, 100.0, 20.0, 20.0, 0.0))})
+    # Without the exclusion the neighbour's 3000 would drag this up.
+    assert result["stats"]["a"]["outline_mean"] < 200.0
+
+
+def test_ring_contours_trace_the_annulus():
+    contours = ring_contours((300, 300), "ellipse",
+                             (150.0, 150.0, 40.0, 40.0, 0.0), 2, 4)
+    assert len(contours) == 2          # an outer and an inner boundary
+    extents = sorted(np.max(np.hypot(points[:, 0] - 150.0,
+                                     points[:, 1] - 150.0))
+                     for points in contours)
+    assert abs(extents[0] - 42.0) < 2.0    # inner edge: radius + gap
+    assert abs(extents[1] - 46.0) < 2.0    # outer: + thickness

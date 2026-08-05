@@ -1,8 +1,10 @@
 """Constants for the ROI intensity-analysis subpackage."""
 
-#: Outline-ring thickness (px) for the perimeter stats — the standalone
-#: app's ROIManager default.
-OUTLINE_PERIMETER_PX = 2
+#: Background annulus: how far outside the ROI edge it starts, and how
+#: thick it is, in pixels. The gap exists because fluorescence bleeds a
+#: pixel or two past the boundary and that halo is not background.
+RING_GAP_PX = 2
+RING_THICKNESS_PX = 4
 
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).
 OUTLINE_STATS_PREFIX = "outline_"
