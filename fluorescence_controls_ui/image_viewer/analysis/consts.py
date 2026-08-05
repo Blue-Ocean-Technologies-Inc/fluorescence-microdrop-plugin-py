@@ -42,9 +42,15 @@ PLOT_ZOOM_STEP = 0.8
 ROI_PLOT_CANVAS_MIN_WIDTH = 300
 ROI_PLOT_CANVAS_MIN_HEIGHT = 200
 
-#: Tallest the plot pane's controls may get before they scroll inside
-#: their own area rather than crowding the chart out.
+#: Height the plot pane's controls open at. They share a splitter with
+#: the chart and the table, so this is a starting point the user drags
+#: from, not a cap — the controls scroll inside whatever height they
+#: end up with.
 ROI_PLOT_CONTROLS_MAX_HEIGHT = 180
+
+#: Shortest a splitter section may be dragged. Small enough to tuck a
+#: section away, large enough to grab its handle again.
+ROI_PLOT_SECTION_MIN_PX = 40
 
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0
