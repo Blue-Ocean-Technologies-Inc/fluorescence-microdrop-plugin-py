@@ -75,6 +75,24 @@ def derive_series(session, filtered_paths):
     return series
 
 
+def normalized_series(series):
+    """``series`` with each ROI stretched to 0-100% of its own finite
+    range, so curves of wildly different brightness can be compared for
+    shape and timing. NaN stays NaN, so a gap stays a gap; a curve with
+    no range (min == max) sits flat at 0%, there being nothing to
+    stretch and no span to divide by."""
+    scaled = {}
+    for roi_id, (name, elapsed, values) in series.items():
+        finite = [value for value in values if value == value]
+        low = min(finite) if finite else 0.0
+        span = (max(finite) - low) if finite else 0.0
+        scaled[roi_id] = (name, elapsed, [
+            value if value != value
+            else (0.0 if span == 0 else (value - low) / span * 100.0)
+            for value in values])
+    return scaled
+
+
 def visible_series(session, series):
     """``series`` less the ROIs whose eye is off (and any entry whose
     ROI is gone). Applied once per redraw, so every view the figure

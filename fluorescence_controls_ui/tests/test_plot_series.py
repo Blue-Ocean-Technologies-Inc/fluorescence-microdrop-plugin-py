@@ -2,7 +2,7 @@
 import math
 
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
-    derive_series, stat_value, visible_series,
+    derive_series, normalized_series, stat_value, visible_series,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
     AnalysisSession, Roi, RoiStyle,
@@ -124,3 +124,32 @@ def test_derive_series_uses_the_sessions_calibration(tmp_path):
 
     _name, _elapsed, values = derive_series(session, [image])[roi.roi_id]
     assert abs(values[0] - 1e5) < 1e-6
+
+
+def test_normalized_series_stretches_each_roi_to_its_own_range():
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0], [10.0, 20.0, 30.0]),
+              "b": ("ROI 2", [0.0, 1.0, 2.0], [100.0, 300.0, 500.0])}
+    result = normalized_series(series)
+    assert result["a"][2] == [0.0, 50.0, 100.0]
+    assert result["b"][2] == [0.0, 50.0, 100.0]
+    # Names and time axes ride through untouched.
+    assert result["a"][0] == "ROI 1" and result["a"][1] == [0.0, 1.0, 2.0]
+
+
+def test_normalized_series_keeps_gaps_as_gaps():
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0],
+                    [10.0, math.nan, 30.0])}
+    values = normalized_series(series)["a"][2]
+    assert values[0] == 0.0 and values[2] == 100.0
+    assert math.isnan(values[1])
+
+
+def test_normalized_series_leaves_a_flat_curve_at_zero():
+    series = {"a": ("ROI 1", [0.0, 1.0], [7.0, 7.0])}
+    assert normalized_series(series)["a"][2] == [0.0, 0.0]
+
+
+def test_normalized_series_passes_an_all_nan_curve_through():
+    series = {"a": ("ROI 1", [0.0, 1.0], [math.nan, math.nan])}
+    assert all(math.isnan(value)
+               for value in normalized_series(series)["a"][2])
