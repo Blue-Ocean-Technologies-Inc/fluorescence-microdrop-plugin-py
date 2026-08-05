@@ -21,7 +21,7 @@ from pyface.api import FileDialog, OK
 from pyface.tasks.api import DockPane
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QLabel, QScrollArea, QSplitter, QVBoxLayout, QWidget,
+    QScrollArea, QSplitter, QVBoxLayout, QWidget,
 )
 from traits.api import Any, Instance
 from traitsui.api import EnumEditor, HGroup, Item, UItem, VGroup, View
@@ -34,8 +34,9 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ...consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
-    ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
-    ROI_PLOT_COALESCE_MS, VIEW_MODE_LABELS, VIEW_MODES,
+    ROI_PLOT_BATCH_COALESCE_MS, ROI_PLOT_CANVAS_MIN_HEIGHT,
+    ROI_PLOT_CANVAS_MIN_WIDTH, ROI_PLOT_COALESCE_MS, VIEW_MODE_LABELS,
+    VIEW_MODES,
 )
 from .curve_fit import (
     FIT_LABELS, FIT_METHODS, fastest_change_time, fit_series,
@@ -279,7 +280,12 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if self._redraw_pending:
             return
         self._redraw_pending = True
-        QTimer.singleShot(ROI_PLOT_COALESCE_MS, self._refresh)
+        # A running batch drains in bursts and every redraw refits each
+        # ROI, so at the idle cadence the redraws would crowd out the
+        # progress readout; back off until the batch finishes.
+        QTimer.singleShot(
+            ROI_PLOT_BATCH_COALESCE_MS if self._model.batch_running
+            else ROI_PLOT_COALESCE_MS, self._refresh)
 
     def _refresh(self):
         self._redraw_pending = False
@@ -622,7 +628,6 @@ class FluorescenceRoiPlotDockPane(DockPane):
     table = Instance(RoiStatsTable)
     _controls_ui = Any()
     _equations_ui = Any()
-    _progress_label = Any()
 
     def create_contents(self, parent):
         widget = QWidget(parent)
@@ -640,14 +645,13 @@ class FluorescenceRoiPlotDockPane(DockPane):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
         layout.addWidget(splitter, 1)
-        self._progress_label = QLabel("", widget)
-        layout.addWidget(self._progress_label)
+        # No progress label here: the image viewer pane already shows
+        # roi_analysis.progress_text, and one status belongs in one
+        # place.
         roi_analysis_model.observe(self._on_session_swapped, "session")
         roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
         roi_analysis_model.observe(self._on_fit_equations,
                                    "fit_equations_button")
-        roi_analysis_model.observe(self._on_progress_text_changed,
-                                   "progress_text")
         # The pane may be resized below the content's minimum; past that
         # point scrollbars take over instead of the dock pane locking.
         scroll = QScrollArea(parent)
@@ -685,9 +689,6 @@ class FluorescenceRoiPlotDockPane(DockPane):
         self._equations_ui = FitEquationsTable(rows=rows).edit_traits(
             kind="live")
 
-    def _on_progress_text_changed(self, event):
-        self._progress_label.setText(event.new)
-
     def destroy(self):
         # Everything below was registered in create_contents, which a
         # constructed-but-never-shown pane never ran (pyface's own
@@ -705,6 +706,4 @@ class FluorescenceRoiPlotDockPane(DockPane):
                                        "save_plot_button", remove=True)
             roi_analysis_model.observe(self._on_fit_equations,
                                        "fit_equations_button", remove=True)
-            roi_analysis_model.observe(self._on_progress_text_changed,
-                                       "progress_text", remove=True)
         super().destroy()

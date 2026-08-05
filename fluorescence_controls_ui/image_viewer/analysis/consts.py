@@ -22,6 +22,12 @@ ANALYSIS_RESULT_DRAIN_INTERVAL_MS = 200
 #: plot redraw — a drain burst paints once.
 ROI_PLOT_COALESCE_MS = 100
 
+#: The same delay while a batch is running. A redraw refits every ROI
+#: over the whole series, which measurably crowds the GUI thread: at
+#: the idle cadence the redraws queue back to back and the progress
+#: readout the user is watching never gets painted.
+ROI_PLOT_BATCH_COALESCE_MS = 1000
+
 #: Below this the plot canvas stops shrinking and the plot pane's
 #: scroll area takes over with scrollbars instead.
 ROI_PLOT_CANVAS_MIN_WIDTH = 300

@@ -266,39 +266,57 @@ class RoiAnalysisController(HasTraits):
 
     def drain_results(self):
         """Called by the dock pane's drain QTimer (GUI thread): move
-        finished results from the runner's queue into the model."""
+        finished results from the runner's queue into the model.
+
+        The pool returns in bursts, so the model is written once per
+        tick rather than once per result. Every write notifies its
+        observers — a stats_revision bump redraws the plot, refitting
+        every ROI — and doing that per result starved the GUI that has
+        to paint the progress the user is reading."""
+        done = 0
+        failed = 0
+        absorbed = False
+        finished = False
         while True:
             try:
                 kind, payload = self.runner.results.get_nowait()
             except queue.Empty:
                 break
             if kind == BATCH_RESULT:
-                self._absorb(payload)
-                self.analysis_model.batch_done += 1
+                absorbed = self._absorb(payload) or absorbed
+                done += 1
                 if payload["error"]:
-                    self.analysis_model.batch_failed += 1
+                    failed += 1
                     logger.warning(f"ROI stats failed for "
                                    f"{payload['path']}: {payload['error']}")
-                self._update_progress_text()
             elif kind == INSTANT_RESULT:
-                self._absorb(payload)
+                absorbed = self._absorb(payload) or absorbed
             elif kind == BATCH_FINISHED:
-                self.analysis_model.batch_running = False
-                self._update_progress_text(finished=True)
-                self.flush_stats(force=True)
-                if self._pending_export:
-                    self._write_export()
+                finished = True
+        if absorbed:
+            self.session.stats_revision += 1
+            self._mark_stats_dirty()
+        if done or failed:
+            self.analysis_model.batch_done += done
+            self.analysis_model.batch_failed += failed
+            self._update_progress_text()
+        if finished:
+            self.analysis_model.batch_running = False
+            self._update_progress_text(finished=True)
+            self.flush_stats(force=True)
+            if self._pending_export:
+                self._write_export()
 
     def _absorb(self, payload):
+        """True when anything landed — the caller bumps the revision
+        once per drain instead of once per result."""
         absorbed = False
         for roi_id, stats in payload["stats"].items():
             key = self._dispatched_keys.get((payload["path"], roi_id))
             if key is not None:
                 self.session.stats[key] = stats
                 absorbed = True
-        if absorbed:
-            self.session.stats_revision += 1
-            self._mark_stats_dirty()
+        return absorbed
 
     def _update_progress_text(self, finished=False):
         model = self.analysis_model
