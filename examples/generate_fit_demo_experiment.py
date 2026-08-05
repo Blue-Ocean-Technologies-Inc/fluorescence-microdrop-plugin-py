@@ -2,7 +2,13 @@
 features against known ground truth.
 
 Creates ``<output>/fit_demo_experiment/`` holding 20 16-bit frames
-(10 s apart) whose five uniform disks follow known curves:
+(10 s apart), built as background + signal + Gaussian noise. Every
+curve below is the signal ABOVE a background of 100, so the mean reads
+100 higher and ``bg_corrected`` recovers the stated equation — which is
+why the demo session plots the corrected series.
+
+Seven disks: five following known curves, and a pair that checks the
+background correction itself.
 
 - ``decay``  : mean = 3000·e^(-0.05·t) + 500   (exponential; d² max at
   t=0, min at the end — both markers should appear at the span edges)
@@ -14,6 +20,10 @@ Creates ``<output>/fit_demo_experiment/`` holding 20 16-bit frames
   onset; fastest change / inflection at t=95, interior d² max/min at
   ~78.5 / ~111.5 s — markers land mid-plot, and the fastest-change
   view's bar should read 95)
+- ``plain`` and ``on_glow``: two disks carrying the same constant
+  signal, but ``on_glow`` sits in a patch of background raised by 300.
+  Their means differ by that 300; their corrected values must agree,
+  and the generator fails loudly if they do not
 - ``bleached``: that same sigmoid times e^(-0.015·(t-120)) past t=120
   (photobleached plateau). It exists to exercise "Trim poor tail":
   with the box off the fit lands ~12 s early on an R² of ~0.75, with
@@ -65,8 +75,25 @@ from fluorescence_controls_ui.image_viewer.discovery import (
 
 FRAME_COUNT = 20
 FRAME_INTERVAL_S = 10.0
-IMAGE_SHAPE = (240, 320)          # (height, width)
+IMAGE_SHAPE = (400, 420)          # (height, width)
+
+#: The frames are built as background + signal + noise, so every curve
+#: below is the signal ABOVE background: the mean reads BACKGROUND_LEVEL
+#: higher, and bg_corrected recovers the stated equation.
 BACKGROUND_LEVEL = 100
+NOISE_SIGMA = 15.0
+
+#: A patch of raised background under one of the paired disks, to prove
+#: the correction removes it: 300 counts over an area comfortably wider
+#: than that ROI's ring.
+GLOW_CENTRE = (180, 320)
+GLOW_RADIUS = 65
+GLOW_LEVEL = 300
+
+#: The paired disks carry the same signal on different backgrounds, so
+#: their corrected values must agree.
+PAIR_SIGNAL = 1200.0
+PAIR_TOLERANCE = 5.0
 
 #: (name, circle geometry (cx, cy, r), mean_of_t callable, truth text).
 DEMO_ROIS = (
@@ -86,25 +113,51 @@ DEMO_ROIS = (
      lambda t: (3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0)
      * math.exp(-0.015 * max(t - 120.0, 0.0)),
      "the same sigmoid, bleaching at 1.5%/s past t=120"),
+    ("plain", (60.0, 320.0, 30.0),
+     lambda t: PAIR_SIGNAL,
+     f"constant {PAIR_SIGNAL:.0f} on plain background"),
+    ("on_glow", (180.0, 320.0, 30.0),
+     lambda t: PAIR_SIGNAL,
+     f"constant {PAIR_SIGNAL:.0f} on background raised by {GLOW_LEVEL}"),
 )
+
+#: The two ROIs whose corrected values must match: same signal, one of
+#: them sitting in the glow.
+PAIR_NAMES = ("plain", "on_glow")
+
+
+def _background_map():
+    """The background each pixel sits on: flat, plus the glow patch
+    under one of the paired disks. Signal is added on top of this, so
+    a background correction has something real to remove."""
+    background = np.full(IMAGE_SHAPE, float(BACKGROUND_LEVEL))
+    cv2.circle(background, GLOW_CENTRE, GLOW_RADIUS,
+               float(BACKGROUND_LEVEL + GLOW_LEVEL), -1)
+    return background
 
 
 def write_frames(raw_dir):
-    """The 16-bit frames, one per time step, with each disk filled at
-    its curve's value; mtimes ascend so discovery order is stable."""
+    """The 16-bit frames, one per time step: background + each disk's
+    signal + Gaussian noise. mtimes ascend so discovery order is
+    stable, and the noise is seeded per frame so a regenerated demo
+    reproduces exactly."""
     base_epoch = time.time() - FRAME_COUNT * FRAME_INTERVAL_S
+    background = _background_map()
     paths = []
     for index in range(FRAME_COUNT):
         elapsed = index * FRAME_INTERVAL_S
-        frame = np.full(IMAGE_SHAPE, BACKGROUND_LEVEL, dtype=np.uint16)
+        signal = np.zeros(IMAGE_SHAPE, dtype=float)
         for _, (center_x, center_y, radius), mean_of_t, _ in DEMO_ROIS:
-            cv2.circle(frame,
+            cv2.circle(signal,
                        (int(center_x), int(center_y)), int(radius),
-                       int(round(mean_of_t(elapsed))), -1)
+                       float(mean_of_t(elapsed)), -1)
+        noise = np.random.default_rng(index).normal(
+            0.0, NOISE_SIGMA, IMAGE_SHAPE)
+        frame = np.clip(background + signal + noise, 0, 65535)
         stamp = time.strftime("%Y_%m_%d-%H_%M_%S",
                               time.gmtime(base_epoch + elapsed))
         path = raw_dir / f"frame{index:02d}_{stamp}_raw.png"
-        cv2.imwrite(str(path), frame)
+        cv2.imwrite(str(path), frame.astype(np.uint16))
         paths.append(path)
     return paths
 
@@ -119,6 +172,10 @@ def build_session(experiment_dir):
                       geometry[2], 0.0],
             base_anchor=0.0)
         for name, geometry, _, _ in DEMO_ROIS]
+    # The curves above are signal over background, so the corrected
+    # series is the one that reproduces them; plain "mean" reads
+    # BACKGROUND_LEVEL higher (and 300 higher again inside the glow).
+    session.plot_stat = "bg_corrected"
     figure_settings = session.figure
     figure_settings.fit_method = "sigmoid"
     figure_settings.trim_poor_fit = True
@@ -145,6 +202,30 @@ def compute_store(session, paths):
     return store
 
 
+def _report_pair(session, series):
+    """The background-correction check: two disks carrying the same
+    signal, one of them in the glow, must correct to the same value."""
+    by_name = {name: (roi_id, values)
+               for roi_id, (name, _elapsed, values) in series.items()}
+    print()
+    print("Background-correction check (same signal, different "
+          "backgrounds):")
+    corrected = {}
+    for name in PAIR_NAMES:
+        roi_id, values = by_name[name]
+        raw = [session.stats[key].get("mean")
+               for key in session.stats if key[2] == roi_id]
+        corrected[name] = values[0]
+        print(f"  {name:8s} bg_corrected={values[0]:8.1f}  "
+              f"(raw mean {max(raw):8.1f})")
+    difference = abs(corrected[PAIR_NAMES[0]] - corrected[PAIR_NAMES[1]])
+    print(f"  difference {difference:.1f} counts "
+          f"(signal is {PAIR_SIGNAL:.0f}, tolerance {PAIR_TOLERANCE:.0f})")
+    if difference > PAIR_TOLERANCE:
+        sys.exit(f"background correction is off by {difference:.1f} "
+                 f"counts between {PAIR_NAMES[0]} and {PAIR_NAMES[1]}")
+
+
 def verify_and_report(experiment_dir):
     """Reload everything through the app's own loaders and print the
     fitted equations the GUI must reproduce."""
@@ -157,6 +238,7 @@ def verify_and_report(experiment_dir):
         sys.exit(f"expected {len(DEMO_ROIS)} series, got {len(series)}")
     print(f"\nDemo experiment: {experiment_dir}")
     print(f"Browse to: {experiment_dir / 'captures'}\n")
+    _report_pair(session, series)
     print("Expected results (sigmoid fit and 'Trim poor tail' are "
           "preselected; switch the Fit dropdown to try the others, and "
           "the View dropdown for the d² and fastest-change charts):")
