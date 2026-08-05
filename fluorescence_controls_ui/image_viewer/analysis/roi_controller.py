@@ -494,7 +494,8 @@ class RoiAnalysisController(HasTraits):
             write_intensity_csv(
                 csv_path, rows, session.rois,
                 pixel_area(scale.metres_per_pixel, scale.unit),
-                area_unit(scale.metres_per_pixel, scale.unit))
+                area_unit(scale.metres_per_pixel, scale.unit),
+                session.plot_stat if session.figure.normalize else None)
         except Exception as error:
             logger.warning(f"CSV export failed: {error}")
             self.analysis_model.progress_text = f"Export failed: {error}"

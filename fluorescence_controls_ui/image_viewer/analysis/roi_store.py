@@ -10,7 +10,7 @@ from logger.logger_service import get_logger
 
 from .consts import ANALYSIS_DIR_NAME, OUTLINE_STATS_PREFIX, \
     ROI_CONFIG_FILENAME, ROI_STATS_FILENAME
-from .plot_series import stat_value
+from .plot_series import normalized_series, stat_value
 from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
 from .roi_model import (
@@ -194,8 +194,24 @@ def _csv_cell(stats, stat, pixel_area):
     return "" if value != value else value
 
 
+def _normalised_columns(rows, rois, normalize_stat, pixel_area):
+    """{roi_id: [cell, ...]} for the normalised column, run through the
+    plot's own normaliser so a CSV column and its curve can never
+    disagree."""
+    series = {
+        roi.roi_id: (roi.name, list(range(len(rows))),
+                     [stat_value(row["stats"].get(roi.roi_id, {}),
+                                 normalize_stat, pixel_area)
+                      for row in rows])
+        for roi in rois}
+    return {roi_id: ["" if value != value else value
+                     for value in values]
+            for roi_id, (_name, _elapsed, values)
+            in normalized_series(series).items()}
+
+
 def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
-                        area_unit_label="px²"):
+                        area_unit_label="px²", normalize_stat=None):
     """One row per image, blank cells where an (image, ROI) pair has no
     computed stats. ``rows``: [{"filename", "time_utc", "elapsed_sec",
     "group", "wavelength", "stats": {roi_id: stats_dict}}, ...].
@@ -208,6 +224,11 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
         header += [f"{roi.name}_area_{area_unit_label}"]
         header += [f"{roi.name}_{stat}"
                    for stat in CSV_DERIVED_COLUMNS[1:]]
+        if normalize_stat is not None:
+            header += [f"{roi.name}_{normalize_stat}_norm_pct"]
+    normalised = ({} if normalize_stat is None
+                  else _normalised_columns(rows, rois, normalize_stat,
+                                           pixel_area))
     # utf-8, not the platform default: the area header carries µ and ².
     with open(csv_path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
@@ -221,4 +242,6 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
                            for stat in CSV_STAT_COLUMNS]
                 record += [_csv_cell(stats, stat, pixel_area)
                            for stat in CSV_DERIVED_COLUMNS]
+                if normalize_stat is not None:
+                    record += [normalised[roi.roi_id][index]]
             writer.writerow(record)

@@ -255,3 +255,37 @@ def test_write_intensity_csv_includes_the_derived_columns(tmp_path):
     assert abs(float(area) - 25.0 * 1e-4) < 1e-12
     integrated = records[1][records[0].index("ROI 1_integrated")]
     assert float(integrated) == 250.0
+
+
+def test_write_intensity_csv_adds_the_normalised_column(tmp_path):
+    roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
+    rows = [{
+        "filename": f"img{index}_raw.png",
+        "time_utc": "2026_07_20-17_46_24", "elapsed_sec": float(index),
+        "group": "burst_a", "wavelength": "Green 540 nm",
+        "stats": {roi.roi_id: {"mean": mean, "count": 4.0}},
+    } for index, mean in enumerate((10.0, 20.0, 30.0))]
+    csv_path = tmp_path / "out.csv"
+    write_intensity_csv(csv_path, rows, [roi], normalize_stat="mean")
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        records = list(csv.reader(handle))
+
+    column = records[0].index("ROI 1_mean_norm_pct")
+    assert [records[row][column] for row in (1, 2, 3)] == \
+        ["0.0", "50.0", "100.0"]
+
+
+def test_write_intensity_csv_omits_the_column_when_not_normalising(
+        tmp_path):
+    roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
+    rows = [{
+        "filename": "img_raw.png", "time_utc": "2026_07_20-17_46_24",
+        "elapsed_sec": 0.0, "group": "burst_a",
+        "wavelength": "Green 540 nm",
+        "stats": {roi.roi_id: {"mean": 10.0, "count": 4.0}},
+    }]
+    csv_path = tmp_path / "out.csv"
+    write_intensity_csv(csv_path, rows, [roi])
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        header = next(csv.reader(handle))
+    assert not [name for name in header if name.endswith("_norm_pct")]
