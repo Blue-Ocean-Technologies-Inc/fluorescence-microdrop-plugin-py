@@ -42,7 +42,9 @@ from .curve_fit import (
     second_derivative_extrema, trimmed_note,
 )
 from .fit_equations import FitEquationsTable, fit_equation_rows
-from .plot_series import derive_series, visible_series
+from .plot_series import (
+    derive_series, normalized_series, visible_series,
+)
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
 from .roi_table import RoiStatsTable
@@ -69,14 +71,15 @@ _Y_LABEL_TEMPLATES = {
 }
 
 
-def y_axis_label(plot_stat, scale):
+def y_axis_label(plot_stat, scale, normalize=False):
     """The y-axis text for a stat, with the area unit spliced in where
-    the stat depends on it."""
+    the stat depends on it and the normalisation noted where it
+    applies."""
     template = _Y_LABEL_TEMPLATES.get(plot_stat)
-    if template is None:
-        return PLOT_STAT_LABELS[plot_stat]
-    return template.format(
-        unit=area_unit(scale.metres_per_pixel, scale.unit))
+    label = (PLOT_STAT_LABELS[plot_stat] if template is None
+             else template.format(
+                 unit=area_unit(scale.metres_per_pixel, scale.unit)))
+    return f"{label} (% of range)" if normalize else label
 
 
 #: matplotlib linestyle codes for RoiStyle.line_style.
@@ -179,6 +182,27 @@ _plot_controls_view = View(
                   enabled_when="figure.show_second_derivative_max or "
                                "figure.show_second_derivative_min"),
         ),
+        HGroup(
+            UItem("figure.log_x",
+                  editor=InPlaceToggleEditor(on_label="Log X",
+                                             off_label="Log X"),
+                  tooltip="Logarithmic time axis. Points at t = 0 "
+                          "cannot be drawn on it and are counted in a "
+                          "note on the figure."),
+            UItem("figure.log_y",
+                  editor=InPlaceToggleEditor(on_label="Log Y",
+                                             off_label="Log Y"),
+                  tooltip="Logarithmic value axis. Zero and negative "
+                          "values cannot be drawn on it and are "
+                          "counted in a note on the figure."),
+            UItem("figure.normalize",
+                  editor=InPlaceToggleEditor(on_label="Normalize",
+                                             off_label="Normalize"),
+                  tooltip="Stretch each ROI to 0-100% of its own "
+                          "range, to compare shape and timing. Fitted "
+                          "midpoints and R² are unchanged; amplitudes "
+                          "become percentages."),
+        ),
     ),
 )
 
@@ -208,7 +232,9 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:second_derivative_vline, "
                "session:figure:second_derivative_hline, "
                "session:figure:second_derivative_coords, "
-               "session:figure:view_mode")
+               "session:figure:view_mode, "
+               "session:figure:log_x, session:figure:log_y, "
+               "session:figure:normalize")
 
 
 class RoiPlotCanvas(FigureCanvasQTAgg):
@@ -266,6 +292,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # Filtered once here, so every view hides the same ROIs.
         series = visible_series(self._model.session, derived)
         figure_settings = self._model.session.figure
+        if figure_settings.normalize:
+            # Once, before any view draws, so the lines, the fits, the
+            # d² curves and the bars cannot disagree.
+            series = normalized_series(series)
         for artist in self._fit_artists:
             artist.remove()
         self._fit_artists = []
@@ -301,7 +331,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
     def _refresh_intensity(self, series, figure_settings):
         session = self._model.session
         self._axes.set_ylabel(y_axis_label(session.plot_stat,
-                                           session.scale))
+                                           session.scale,
+                                           figure_settings.normalize))
         for roi_id in list(self._lines):
             if roi_id not in series:
                 self._lines.pop(roi_id).remove()

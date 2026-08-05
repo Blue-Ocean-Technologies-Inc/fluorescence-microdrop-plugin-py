@@ -68,6 +68,11 @@ class FigureSettings(HasTraits):
     #: Refit on a shorter leading slice when R² is poor, for series
     #: whose tail the model does not describe (a bleached plateau).
     trim_poor_fit = Bool(False)
+    #: Display scales (the data and the fits are untouched) and the
+    #: 0-100% per-ROI normalisation (which rewrites the values).
+    log_x = Bool(False)
+    log_y = Bool(False)
+    normalize = Bool(False)
     show_legend = Bool(True)
     #: Corner box with each ROI's fitted equation.
     show_fit_equations = Bool(False)

@@ -47,6 +47,8 @@ def test_figure_fit_settings_round_trip(tmp_path):
     session.figure.show_second_derivative_max = True
     session.figure.view_mode = "fastest_change"
     session.figure.trim_poor_fit = True
+    session.figure.log_x = True
+    session.figure.normalize = True
     save_session(tmp_path, session)
 
     loaded = load_session(tmp_path)
@@ -55,6 +57,8 @@ def test_figure_fit_settings_round_trip(tmp_path):
     assert loaded.figure.show_second_derivative_max is True
     assert loaded.figure.view_mode == "fastest_change"
     assert loaded.figure.trim_poor_fit is True
+    assert loaded.figure.log_x is True and loaded.figure.log_y is False
+    assert loaded.figure.normalize is True
 
 
 def test_load_session_accepts_v1_bare_list(tmp_path):
