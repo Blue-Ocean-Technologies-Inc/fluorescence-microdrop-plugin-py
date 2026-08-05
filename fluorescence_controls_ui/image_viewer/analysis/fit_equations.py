@@ -8,8 +8,8 @@ from traits.api import (
     Bool, Button, Float, HasTraits, Instance, Int, List, Str, observe,
 )
 from traitsui.api import (
-    EnumEditor, HGroup, HSplit, Item, Label, TabularEditor, UItem, VGroup,
-    View,
+    EnumEditor, Handler, HGroup, HSplit, Item, Label, TabularEditor, UItem,
+    VGroup, View,
 )
 from traitsui.tabular_adapter import TabularAdapter
 
@@ -132,6 +132,21 @@ class _GuessAdapter(TabularAdapter):
         return self.columns[self.column][1] == "text"
 
 
+class _FitEquationsHandler(Handler):
+    """Keeps the two table widgets to hand so a refit can force them to
+    repaint in full."""
+
+    def init(self, info):
+        controls = [editor.control for editor in
+                    (info.rows, info.guesses) if editor is not None]
+        for control in controls:
+            # Opaque, so a repaint clears what it draws over instead of
+            # letting the previous frame show through the new text.
+            control.viewport().setAutoFillBackground(True)
+        info.object._table_controls = controls
+        return True
+
+
 class PresetName(HasTraits):
     """Modal asking what to call the equation being saved."""
 
@@ -176,6 +191,10 @@ class FitEquationsTable(HasTraits):
 
     #: Parameter names of the current fit, in fitted order.
     _parameters = List(Str)
+
+    #: The two table widgets, handed over by the handler once they
+    #: exist — a refit has to repaint them itself (see _repaint_tables).
+    _table_controls = List()
 
     def _adapter_default(self):
         return _FitAdapter()
@@ -226,7 +245,7 @@ class FitEquationsTable(HasTraits):
                                            stretch_last_section=False)),
             ),
             title="Fit equations", width=760, height=340,
-            resizable=True)
+            resizable=True, handler=_FitEquationsHandler())
 
     def _method_label(self, key):
         return method_label(key, self.model.fit_presets)
@@ -239,6 +258,13 @@ class FitEquationsTable(HasTraits):
     def _on_method_changed(self, event):
         if self._syncing:
             return
+        self.reload()
+
+    def reload(self):
+        """Show the fit currently in force, equation and all. Also how
+        the popup opens: nothing has changed at that point, so there is
+        no notification to ride, and the field would sit empty until
+        the user touched something."""
         self._syncing = True
         try:
             self.expression = expression_for(
@@ -247,6 +273,7 @@ class FitEquationsTable(HasTraits):
             self.error = ""
         finally:
             self._syncing = False
+        self._update_can_add()
         self.refresh()
 
     @observe("expression")
@@ -367,12 +394,24 @@ class FitEquationsTable(HasTraits):
         self.adapter.columns = columns
         self.rows = rows
         self._parameters = parameters
+        self._repaint_tables()
         self._sync_guess_rows(parameters)
         # Reached only with an equation that parsed, so the field is
         # free to report on the fit instead.
         self.error = ("Those starting values did not converge — fitted "
                       "from automatic ones instead"
                       if any(row.auto_seeded for row in rows) else "")
+
+    def _repaint_tables(self):
+        """Repaint both tables outright after a refit.
+
+        Changing the adapter's columns rebuilds the headers but does
+        not reset the model, so the view repaints only the region it
+        works out to be dirty — and the columns have just moved under
+        it, leaving the old text still painted where the new text now
+        lands."""
+        for control in self._table_controls:
+            control.viewport().update()
 
     def _sync_guess_rows(self, parameters):
         """One row per parameter of the current fit, keeping whatever

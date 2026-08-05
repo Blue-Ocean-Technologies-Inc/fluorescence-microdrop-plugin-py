@@ -858,7 +858,7 @@ class FluorescenceRoiPlotDockPane(DockPane):
     def _on_fit_equations(self, event):
         if (self._equations_ui is not None
                 and self._equations_ui.control is not None):
-            self._equations_ui.info.object.refresh()
+            self._equations_ui.info.object.reload()
             self._equations_ui.control.raise_()
             self._equations_ui.control.activateWindow()
             return
@@ -866,7 +866,7 @@ class FluorescenceRoiPlotDockPane(DockPane):
             session=roi_analysis_model.session,
             model=roi_analysis_model,
             filtered_paths=list(roi_analysis_model.filtered_paths))
-        table.refresh()
+        table.reload()
         self._equations_ui = table.edit_traits(kind="live")
 
     def destroy(self):
