@@ -30,7 +30,7 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
                   "show_second_derivative_min",
                   "second_derivative_vline", "second_derivative_hline",
                   "second_derivative_coords", "view_mode",
-                  "log_x", "log_y", "normalize")
+                  "log_x", "log_y", "normalize", "subtract_first")
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
                  "visible", "alpha")
 

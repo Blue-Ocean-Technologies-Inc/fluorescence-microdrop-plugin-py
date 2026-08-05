@@ -73,6 +73,8 @@ class FigureSettings(HasTraits):
     log_x = Bool(False)
     log_y = Bool(False)
     normalize = Bool(False)
+    #: Each curve less its own first value: change from baseline.
+    subtract_first = Bool(False)
     show_legend = Bool(True)
     #: Corner box with each ROI's fitted equation.
     show_fit_equations = Bool(False)

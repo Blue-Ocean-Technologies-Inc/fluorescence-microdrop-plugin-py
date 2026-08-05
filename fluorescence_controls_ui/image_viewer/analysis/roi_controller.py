@@ -458,6 +458,7 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:figure:log_x, "
              "analysis_model:session:figure:log_y, "
              "analysis_model:session:figure:normalize, "
+             "analysis_model:session:figure:subtract_first, "
              "analysis_model:session:rois:items:name, "
              "analysis_model:session:rois:items:style:color, "
              "analysis_model:session:rois:items:style:line_style, "

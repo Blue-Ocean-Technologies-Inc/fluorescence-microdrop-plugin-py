@@ -75,6 +75,19 @@ def derive_series(session, filtered_paths):
     return series
 
 
+def subtracted_series(series):
+    """``series`` with each curve less its own first finite value, so
+    every ROI starts at zero and shows change from baseline. NaN stays
+    NaN; a curve with no finite value passes through untouched."""
+    shifted = {}
+    for roi_id, (name, elapsed, values) in series.items():
+        first = next((value for value in values if value == value), None)
+        shifted[roi_id] = (name, elapsed, values if first is None else [
+            value if value != value else value - first
+            for value in values])
+    return shifted
+
+
 def normalized_series(series):
     """``series`` with each ROI stretched to 0-100% of its own finite
     range, so curves of wildly different brightness can be compared for
