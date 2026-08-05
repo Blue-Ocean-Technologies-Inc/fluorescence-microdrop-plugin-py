@@ -37,6 +37,11 @@ RING_ALPHA = 200
 RING_FILL_ALPHA = 60
 RING_DASH = Qt.PenStyle.DashLine
 
+#: Stacking: the image pixmap sits at z 0, so a ring below that is
+#: invisible — it has to sit above the image and below the shapes.
+RING_Z = 0.5
+ROI_Z = 1.0
+
 
 class RoiCanvasLayer:
     """Owns the ROI items on the image scene (stateless wiring around Qt
@@ -107,7 +112,7 @@ class RoiCanvasLayer:
             ring_item = QGraphicsPathItem(path)
             ring_item.setPen(QPen(colour, 0, RING_DASH))
             ring_item.setBrush(QBrush(fill))
-            ring_item.setZValue(-1)
+            ring_item.setZValue(RING_Z)
             ring_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self._scene.addItem(ring_item)
             self._ring_items.append(ring_item)
@@ -130,6 +135,7 @@ class RoiCanvasLayer:
                 item = item_class(roi_id, name, geometry,
                                   self.on_roi_edited)
                 item.set_editable(self.mode == "edit")
+                item.setZValue(ROI_Z)
                 self._scene.addItem(item)
                 self._items[roi_id] = item
             elif not item.is_dragging():
