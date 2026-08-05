@@ -7,12 +7,13 @@ clamped to the connected camera's own reported control range, so cameras
 with narrower capability sets stay safe.
 """
 from pyface.tasks.api import TraitsDockPane
-from traits.api import Instance
+from traits.api import Any, Instance
 from traitsui.api import Handler
 
 from logger.logger_service import get_logger
 
 from ..consts import PKG
+from ..theme import follow_app_theme, unfollow_app_theme
 from .controller import AdvancedCameraController
 from .model import AdvancedCameraModel
 from .view import advanced_camera_view
@@ -29,6 +30,7 @@ class AdvancedCameraDockPane(TraitsDockPane):
     view = advanced_camera_view
 
     controller = Instance(Handler)
+    _theme_slot = Any()
 
     def traits_init(self):
         self.model = AdvancedCameraModel()
@@ -40,6 +42,7 @@ class AdvancedCameraDockPane(TraitsDockPane):
     def create_contents(self, parent):
         self.ui = self.edit_traits(
             kind="subpanel", parent=parent, handler=self.controller)
+        self._theme_slot = follow_app_theme(self.ui.control)
         return self.ui.control
 
     def destroy(self):
@@ -47,4 +50,5 @@ class AdvancedCameraDockPane(TraitsDockPane):
         hot-unloaded pane doesn't keep receiving capability updates."""
         if self.controller is not None:
             self.controller.remove_camera_caps_observers()
+        unfollow_app_theme(self._theme_slot)
         super().destroy()
