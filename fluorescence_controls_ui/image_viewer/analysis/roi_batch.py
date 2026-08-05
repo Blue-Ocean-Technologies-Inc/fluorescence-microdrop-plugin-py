@@ -52,6 +52,14 @@ def _shared_executor():
         return _executor
 
 
+def pool_is_warm():
+    """Whether the shared pool already exists. A cold one costs seconds
+    to spawn on Windows, and nothing can be reported in the meantime —
+    worth saying out loud rather than showing a stalled 0/N."""
+    with _executor_lock:
+        return _executor is not None
+
+
 def _discard_executor(executor):
     """Drop a broken shared pool so the next batch rebuilds it (the
     persistent pool otherwise has no recovery path after a worker

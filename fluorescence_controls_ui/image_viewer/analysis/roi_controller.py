@@ -23,6 +23,7 @@ from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import DEFAULT_ROI_COLORS, STATS_SAVE_DEBOUNCE_S
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
+    pool_is_warm,
 )
 from .roi_model import AnalysisSession, Roi, RoiAnalysisModel, RoiStyle
 from .roi_store import (
@@ -257,7 +258,13 @@ class RoiAnalysisController(HasTraits):
                 self._write_export()
             return
         self.analysis_model.batch_running = True
-        self._update_progress_text()
+        if pool_is_warm():
+            self._update_progress_text()
+        else:
+            # First batch of the session: the pool spawns before any
+            # image can finish, so say that rather than sit at 0/N.
+            self.analysis_model.progress_text = (
+                f"Starting workers for {len(work)} images…")
         self.runner.start(work)
 
     def _restart_batch_if_running(self):
