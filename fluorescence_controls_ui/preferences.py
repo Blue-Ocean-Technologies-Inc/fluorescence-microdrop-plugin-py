@@ -58,6 +58,12 @@ class FluorescencePreferences(PreferencesHelper):
         DEFAULT_UNIT, desc="Unit the last calibration was entered in"
     )
 
+    # The user's saved fit equations, as JSON [{name, expression}, ...].
+    # App-wide: an equation re-typed per experiment is not a preset.
+    fluorescence_fit_presets = Str(
+        "", desc="Saved custom fit equations (JSON)"
+    )
+
     # Root of the ZWO ASI SDK (the directory holding Win/ and Unix/).
     # Defaults to the copy bundled with the plugin; empty disables ASI.
     fluorescence_asi_sdk_dir = Directory(

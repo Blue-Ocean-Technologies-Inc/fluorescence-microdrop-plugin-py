@@ -42,10 +42,11 @@ from .consts import (
     VIEW_MODE_LABELS, VIEW_MODES,
 )
 from .curve_fit import (
-    FIT_LABELS, FIT_METHODS, fastest_change_time, fit_series,
+    fastest_change_time, fit_series,
     second_derivative_extrema, trimmed_note,
 )
-from .fit_equations import FitEquationsTable, fit_equation_rows
+from .fit_equations import FitEquationsTable
+from .fit_presets import fit_arguments, method_label
 from .plot_series import (
     derive_series, normalized_series, subtracted_series, visible_series,
 )
@@ -87,6 +88,12 @@ def y_axis_label(plot_stat, scale, normalize=False,
     if subtract_first:
         label = f"{label} (change from first)"
     return f"{label} (% of range)" if normalize else label
+
+
+def _fit_method_label(key):
+    """Dropdown text for a fit key, including the user's own presets
+    (which the singleton model carries)."""
+    return method_label(key, roi_analysis_model.fit_presets)
 
 
 #: matplotlib linestyle codes for RoiStyle.line_style.
@@ -132,8 +139,8 @@ _plot_controls_view = View(
         # label would repeat the button's text.
         HGroup(
             Item("figure.fit_method", label="Fit",
-                 editor=EnumEditor(values=list(FIT_METHODS),
-                                   format_func=FIT_LABELS.get)),
+                 editor=EnumEditor(name="model.fit_method_choices",
+                                   format_func=_fit_method_label)),
             UItem("figure.trim_poor_fit",
                   editor=InPlaceToggleEditor(on_label="Trim tail",
                                              off_label="Trim tail"),
@@ -255,6 +262,7 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:x_max, session:figure:y_auto, "
                "session:figure:y_min, session:figure:y_max, "
                "session:figure:fit_method, "
+               "session:figure:custom_expression, "
                "session:figure:trim_poor_fit, "
                "session:figure:show_legend, "
                "session:figure:show_fit_equations, "
@@ -532,8 +540,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
                 continue
-            fit = fit_series(elapsed, values, figure_settings.fit_method,
-                             figure_settings.trim_poor_fit)
+            method, expression = fit_arguments(figure_settings,
+                                               self._model.fit_presets)
+            fit = fit_series(elapsed, values, method,
+                             figure_settings.trim_poor_fit, expression)
             if fit is None:
                 continue
             finite_t = np.asarray(elapsed, dtype=float)[
@@ -580,8 +590,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
                 continue
-            fit = fit_series(elapsed, values, figure_settings.fit_method,
-                             figure_settings.trim_poor_fit)
+            method, expression = fit_arguments(figure_settings,
+                                               self._model.fit_presets)
+            fit = fit_series(elapsed, values, method,
+                             figure_settings.trim_poor_fit, expression)
             if fit is None:
                 continue
             finite_t = np.asarray(elapsed, dtype=float)[
@@ -670,8 +682,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             roi = self._model.session.roi_by_id(roi_id)
             if roi is None:
                 continue
-            fit = fit_series(elapsed, values, figure_settings.fit_method,
-                             figure_settings.trim_poor_fit)
+            method, expression = fit_arguments(figure_settings,
+                                               self._model.fit_presets)
+            fit = fit_series(elapsed, values, method,
+                             figure_settings.trim_poor_fit, expression)
             if fit is None:
                 continue
             # fit_series requires >= 2 finite points, so never empty.
@@ -839,16 +853,18 @@ class FluorescenceRoiPlotDockPane(DockPane):
         _save_figure(self.canvas)
 
     def _on_fit_equations(self, event):
-        rows = fit_equation_rows(roi_analysis_model.session,
-                                 roi_analysis_model.filtered_paths)
         if (self._equations_ui is not None
                 and self._equations_ui.control is not None):
-            self._equations_ui.info.object.rows = rows
+            self._equations_ui.info.object.refresh()
             self._equations_ui.control.raise_()
             self._equations_ui.control.activateWindow()
             return
-        self._equations_ui = FitEquationsTable(rows=rows).edit_traits(
-            kind="live")
+        table = FitEquationsTable(
+            session=roi_analysis_model.session,
+            model=roi_analysis_model,
+            filtered_paths=list(roi_analysis_model.filtered_paths))
+        table.refresh()
+        self._equations_ui = table.edit_traits(kind="live")
 
     def destroy(self):
         # Everything below was registered in create_contents, which a

@@ -23,6 +23,7 @@ from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import (
     DEFAULT_ROI_COLORS, PASTE_OFFSET_PX, STATS_SAVE_DEBOUNCE_S,
 )
+from .fit_presets import load_presets, save_presets
 from .roi_geometry import translated
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
@@ -61,6 +62,22 @@ class RoiAnalysisController(HasTraits):
     @property
     def session(self):
         return self.analysis_model.session
+
+    # ------------------------------------------------------------------ #
+    # Saved fit equations (app-wide, so they live in preferences rather   #
+    # than in any one experiment's config)                                #
+    # ------------------------------------------------------------------ #
+    @observe("viewer_model")
+    def _load_fit_presets(self, event):
+        self.analysis_model.fit_presets = load_presets(
+            self.viewer_model.preferences.fluorescence_fit_presets)
+
+    @observe("analysis_model:fit_presets.items, analysis_model:fit_presets")
+    def _store_fit_presets(self, event):
+        preferences = self.viewer_model.preferences
+        stored = save_presets(list(self.analysis_model.fit_presets))
+        if preferences.fluorescence_fit_presets != stored:
+            preferences.fluorescence_fit_presets = stored
 
     # ------------------------------------------------------------------ #
     # Interaction modes                                                    #
@@ -496,6 +513,7 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:figure:y_min, "
              "analysis_model:session:figure:y_max, "
              "analysis_model:session:figure:fit_method, "
+             "analysis_model:session:figure:custom_expression, "
              "analysis_model:session:figure:trim_poor_fit, "
              "analysis_model:session:figure:show_legend, "
              "analysis_model:session:figure:show_fit_equations, "

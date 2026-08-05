@@ -8,13 +8,14 @@ from pathlib import Path
 
 from traits.api import (
     Bool, Button, Dict, Enum, Event, Float, HasTraits, Instance, Int, List,
-    Range, Str,
+    Range, Str, observe,
 )
 
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
 from .consts import RING_GAP_PX, RING_THICKNESS_PX, VIEW_MODES
 from .curve_fit import FIT_METHODS
+from .fit_presets import choices_for
 
 #: Matches the "ROI N" names next_roi_name() itself produces, to find
 #: the next free number.
@@ -64,7 +65,16 @@ class FigureSettings(HasTraits):
     y_max = Float(1.0)
     export_format = Enum("png", "svg", "pdf", "tiff")
     export_dpi = Enum(300, 150, 600)
-    fit_method = Enum(*FIT_METHODS)
+    #: Which fit the plot draws: a built-in key, "preset:<name>" for a
+    #: saved equation, or "custom" while one is typed but unsaved. A
+    #: Str rather than an Enum because the saved equations are not
+    #: known at import time; an unresolvable key fits nothing.
+    fit_method = Str(FIT_METHODS[0])
+
+    #: The equation being fitted while fit_method is "custom", kept per
+    #: experiment so reopening one reproduces its fit whether or not
+    #: the equation was ever saved as a preset.
+    custom_expression = Str()
     #: Refit on a shorter leading slice when R² is poor, for series
     #: whose tail the model does not describe (a bleached plateau).
     trim_poor_fit = Bool(False)
@@ -312,6 +322,25 @@ class RoiAnalysisModel(HasTraits):
     #: told otherwise, so that a series of shapes is one trip to the
     #: toolbar rather than one trip each).
     canvas_draw_cancelled = Event()
+
+    #: The user's saved fit equations [(name, expression), ...],
+    #: mirrored from the app preferences that persist them so the plot
+    #: and the equations table need not reach for preferences.
+    fit_presets = List()
+
+    #: Method keys the fit dropdown offers, kept in step with the saved
+    #: presets and with whatever the session currently fits.
+    fit_method_choices = List(Str)
+
+    @observe("fit_presets.items, fit_presets, session, "
+             "session:figure:fit_method")
+    def _update_fit_method_choices(self, event):
+        self.fit_method_choices = choices_for(
+            self.fit_presets, self.session.figure.fit_method)
+
+    def _fit_method_choices_default(self):
+        return choices_for(self.fit_presets,
+                           self.session.figure.fit_method)
 
     #: The ROI shape held for pasting: kind and the geometry it had on
     #: the image it was copied from ('' = nothing copied yet). Not the
