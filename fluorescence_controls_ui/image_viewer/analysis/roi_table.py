@@ -23,12 +23,22 @@ from microdrop_style.icons.icons import (
 from ..scale_bar import area_unit, pixel_area
 from .plot_series import stat_value
 
+
+def _visibility_glyph(visible):
+    return ICON_VISIBILITY if visible else ICON_VISIBILITY_OFF
+
 #: Value columns after the editors, shown for the current image.
 _STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max",
                  "count", "area")
 #: The eye column's header stays blank, as in the device viewer's
 #: alpha sidebar; Name keeps column 0, where the rename handler
 #: expects it.
+_VISIBLE_COLUMN = 1
+
+#: Point size of the eye glyph, matching the device viewer's own
+#: visibility column.
+EYE_GLYPH_POINT_SIZE = 15
+
 _HEADERS = ("Name", "", "Alpha", "Color", "Line", "Marker",
             "Size") + _STAT_COLUMNS
 _LINE_CHOICES = ("solid", "dashed", "dotted", "dashdot")
@@ -59,6 +69,7 @@ class RoiStatsTable(QTableWidget):
         self._pending = None   # None | "rebuild" | "values"
         self.verticalHeader().setVisible(False)
         self.itemChanged.connect(self._on_item_changed)
+        self.cellClicked.connect(self._on_cell_clicked)
         model.observe(self._on_structure_changed, _TABLE_STRUCTURE)
         model.observe(self._on_values_changed, _TABLE_VALUES)
         self._rebuild()
@@ -115,7 +126,7 @@ class RoiStatsTable(QTableWidget):
             name_item = QTableWidgetItem(roi.name)
             name_item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
             self.setItem(row, 0, name_item)
-            self.setCellWidget(row, 1, self._visible_button(roi))
+            self.setItem(row, _VISIBLE_COLUMN, self._visible_item(roi))
             self.setCellWidget(row, 2, self._alpha_spin(roi))
             self.setCellWidget(row, 3, self._color_button(roi))
             self.setCellWidget(
@@ -194,25 +205,37 @@ class RoiStatsTable(QTableWidget):
         if roi is not None and item.text().strip():
             roi.name = item.text().strip()
 
-    def _visible_button(self, roi):
+    def _visible_item(self, roi):
         """Eye toggle over roi.style.visible — the plot skips a hidden
-        ROI entirely, while its stats and CSV columns stay."""
-        button = QPushButton(self)
-        button.setFont(QFont(ICON_FONT_FAMILY))
-        button.setFlat(True)
-        button.setToolTip("Show or hide this ROI on the plot")
-        self._show_visibility(button, roi.style.visible)
-        button.clicked.connect(lambda _=False, roi=roi, button=button:
-                               self._toggle_visible(roi, button))
-        return button
+        ROI entirely, while its stats and CSV columns stay.
 
-    def _toggle_visible(self, roi, button):
+        A cell of glyph text rather than a button inside the cell, the
+        way the device viewer's own visibility column works: the font
+        rides on the item, so the row reads as one thing instead of
+        carrying a widget that draws its own background and border."""
+        item = QTableWidgetItem(_visibility_glyph(roi.style.visible))
+        item.setFont(QFont(ICON_FONT_FAMILY, EYE_GLYPH_POINT_SIZE))
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Clickable and selectable, but never editable: the click is
+        # the control, and a double-click must not open an editor over
+        # the glyph.
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled
+                      | Qt.ItemFlag.ItemIsSelectable)
+        item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
+        item.setToolTip("Show or hide this ROI on the plot")
+        return item
+
+    def _on_cell_clicked(self, row, column):
+        """The eye cell toggles what it shows — it IS the control."""
+        if self._rebuilding or column != _VISIBLE_COLUMN:
+            return
+        item = self.item(row, column)
+        roi = (self._model.session.roi_by_id(
+            item.data(Qt.ItemDataRole.UserRole)) if item else None)
+        if roi is None:
+            return
         roi.style.visible = not roi.style.visible
-        self._show_visibility(button, roi.style.visible)
-
-    def _show_visibility(self, button, visible):
-        button.setText(ICON_VISIBILITY if visible
-                       else ICON_VISIBILITY_OFF)
+        item.setText(_visibility_glyph(roi.style.visible))
 
     def _alpha_spin(self, roi):
         spin = QSpinBox(self)
