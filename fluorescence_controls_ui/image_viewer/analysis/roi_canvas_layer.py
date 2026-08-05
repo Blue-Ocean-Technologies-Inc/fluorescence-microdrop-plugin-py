@@ -62,6 +62,7 @@ class RoiCanvasLayer:
         self.on_roi_created = lambda kind, geometry: None
         self.on_roi_edited = lambda roi_id, geometry: None
         self.on_roi_selected = lambda roi_id: None
+        self.on_draw_cancelled = lambda: None
         self._scene.selectionChanged.connect(self._selection_changed)
 
     def set_mode(self, mode):
@@ -225,9 +226,11 @@ class RoiCanvasLayer:
             radius = math.hypot(span_x, span_y)
             return [press.x(), press.y(), radius, radius, 0.0]
         if self._draft_kind == "box":
+            # Trailing 0.0 is the corner radius: a box is drawn square
+            # and rounded afterwards with its own grip.
             return [min(press.x(), scene_point.x()),
                     min(press.y(), scene_point.y()),
-                    abs(span_x), abs(span_y), 0.0]
+                    abs(span_x), abs(span_y), 0.0, 0.0]
         length = math.hypot(span_x, span_y)
         return [press.x() + span_x / 2, press.y() + span_y / 2,
                 length / 2, max(length / 4, MIN_ROI_SIZE_PX),
@@ -288,24 +291,29 @@ class RoiCanvasLayer:
         return True
 
     def key_press(self, key):
-        """Enter closes the contour, Escape discards it, Backspace
-        takes back the last vertex."""
-        if self.mode != "draw_polygon" or not self._draft_points:
-            return False
-        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self._close_contour()
-        elif key == Qt.Key.Key_Escape:
-            self._discard_contour()
-        elif key == Qt.Key.Key_Backspace:
-            self._draft_points.pop()
-            if self._draft_points:
-                self._draft.setPath(
-                    self._contour_path(self._draft_points[-1]))
-            else:
+        """While tracing a contour: Enter closes it, Escape discards it,
+        Backspace takes back the last vertex. Otherwise Escape puts an
+        armed draw tool away — so a half-drawn contour costs two
+        Escapes, the first for the trace and the second for the tool."""
+        if self.mode == "draw_polygon" and self._draft_points:
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self._close_contour()
+            elif key == Qt.Key.Key_Escape:
                 self._discard_contour()
-        else:
-            return False
-        return True
+            elif key == Qt.Key.Key_Backspace:
+                self._draft_points.pop()
+                if self._draft_points:
+                    self._draft.setPath(
+                        self._contour_path(self._draft_points[-1]))
+                else:
+                    self._discard_contour()
+            else:
+                return False
+            return True
+        if key == Qt.Key.Key_Escape and self.mode in DRAW_KINDS:
+            self.on_draw_cancelled()
+            return True
+        return False
 
     def _selection_changed(self):
         for roi_id, item in self._items.items():

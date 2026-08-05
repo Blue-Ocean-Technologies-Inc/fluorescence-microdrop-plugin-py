@@ -3,6 +3,7 @@ import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_geometry import (
     box_polygon, capsule_polygon, centre_of, normalize, outline_of,
+    translated,
 )
 
 
@@ -13,9 +14,18 @@ def test_normalize_upgrades_a_legacy_circle():
 
 
 def test_normalize_upgrades_a_legacy_box():
+    # Pre-rotation (4 values) and pre-rounding (5) boxes both land on
+    # the canonical six, square-cornered and unrotated.
     kind, geometry = normalize("box", [1.0, 2.0, 30.0, 40.0])
     assert kind == "box"
-    assert geometry == [1.0, 2.0, 30.0, 40.0, 0.0]
+    assert geometry == [1.0, 2.0, 30.0, 40.0, 0.0, 0.0]
+    assert normalize("box", [1.0, 2.0, 30.0, 40.0, 15.0])[1] == [
+        1.0, 2.0, 30.0, 40.0, 15.0, 0.0]
+
+
+def test_normalize_clamps_a_corner_radius_to_the_shorter_side():
+    assert normalize("box", [0.0, 0.0, 40.0, 20.0, 0.0, 99.0])[1][5] == 10.0
+    assert normalize("box", [0.0, 0.0, 40.0, 20.0, 0.0, -5.0])[1][5] == 0.0
 
 
 def test_normalize_is_idempotent():
@@ -81,3 +91,32 @@ def test_outline_of_answers_for_every_polygon_shaped_kind():
 
 def test_outline_of_is_empty_below_the_minimum_vertices():
     assert len(outline_of("polygon", [0.0, 0.0, 10.0, 0.0])) == 0
+
+
+def test_a_rounded_box_keeps_its_bounds_and_loses_its_corners():
+    sharp = box_polygon([0.0, 0.0, 100.0, 60.0, 0.0, 0.0])
+    rounded = box_polygon([0.0, 0.0, 100.0, 60.0, 0.0, 20.0])
+    # Same extent — rounding cuts the corners, it does not shrink the
+    # shape — but no vertex reaches a corner any more.
+    assert rounded[:, 0].min() == 0.0 and rounded[:, 0].max() == 100.0
+    assert rounded[:, 1].min() == 0.0 and rounded[:, 1].max() == 60.0
+    assert len(rounded) > len(sharp)
+    assert not any(x in (0.0, 100.0) and y in (0.0, 60.0)
+                   for x, y in rounded)
+
+
+def test_a_rounded_box_still_rotates_about_its_centre():
+    upright = box_polygon([0.0, 0.0, 40.0, 40.0, 0.0, 10.0])
+    turned = box_polygon([0.0, 0.0, 40.0, 40.0, 90.0, 10.0])
+    # A square rounded equally at every corner maps onto itself.
+    assert np.allclose(sorted(map(tuple, np.round(upright, 6))),
+                       sorted(map(tuple, np.round(turned, 6))))
+
+
+def test_translated_moves_an_anchor_or_every_vertex():
+    assert translated("box", [10.0, 20.0, 30.0, 40.0, 0.0, 5.0],
+                      12.0, -3.0) == [22.0, 17.0, 30.0, 40.0, 0.0, 5.0]
+    assert translated("ellipse", [10.0, 20.0, 5.0, 5.0, 45.0],
+                      1.0, 2.0) == [11.0, 22.0, 5.0, 5.0, 45.0]
+    assert translated("polygon", [0.0, 0.0, 10.0, 0.0, 10.0, 10.0],
+                      2.0, 3.0) == [2.0, 3.0, 12.0, 3.0, 12.0, 13.0]

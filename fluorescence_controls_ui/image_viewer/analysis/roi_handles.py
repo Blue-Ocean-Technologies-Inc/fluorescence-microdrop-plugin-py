@@ -12,6 +12,10 @@ from .consts import ROTATE_SNAP_DEGREES
 ROI_PEN = QPen(QColor(0, 229, 255), 0)
 ROI_SELECTED_PEN = QPen(QColor(255, 214, 0), 0)
 HANDLE_BRUSH = QBrush(QColor(255, 214, 0))
+#: The corner-radius grip is a second grip on the same edge as resize
+#: and rotate, so it is coloured apart from them rather than left to be
+#: told apart by position alone.
+RADIUS_HANDLE_BRUSH = QBrush(QColor(255, 128, 171))
 HANDLE_SIZE_PX = 9.0
 
 
@@ -67,6 +71,36 @@ class NodeHandle(QGraphicsRectItem):
 
     def mouseMoveEvent(self, event):
         self.parentItem().move_node(self._index, event.scenePos())
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        parent = self.parentItem()
+        parent.commit_geometry()
+        parent._dragging = False
+        event.accept()
+
+
+class CornerRadiusHandle(QGraphicsRectItem):
+    """Grip riding a box's top edge, at its top-right corner when the
+    corners are square. Dragging it inward (left) rounds them and
+    outward sharpens them, the gesture PowerPoint uses."""
+
+    def __init__(self, parent):
+        half = HANDLE_SIZE_PX / 2
+        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX,
+                         parent)
+        self.setBrush(RADIUS_HANDLE_BRUSH)
+        self.setPen(QPen(Qt.PenStyle.NoPen))
+        self.setFlag(self.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.setCursor(Qt.CursorShape.SizeHorCursor)
+        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+
+    def mousePressEvent(self, event):
+        self.parentItem()._dragging = True
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        self.parentItem().round_to(event.scenePos())
         event.accept()
 
     def mouseReleaseEvent(self, event):

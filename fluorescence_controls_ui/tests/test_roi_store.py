@@ -32,8 +32,8 @@ def test_session_round_trip_preserves_rois_styles_and_figure(tmp_path):
     assert loaded.figure.y_auto is False and loaded.figure.y_max == 4096.0
     (back,) = loaded.rois
     assert back.roi_id == roi.roi_id and back.name == "Cell body"
-    assert back.geometry == [1.0, 2.0, 30.0, 40.0, 15.0]
-    assert back.overrides == {200.0: [5.0, 6.0, 30.0, 40.0, 15.0]}
+    assert back.geometry == [1.0, 2.0, 30.0, 40.0, 15.0, 0.0]
+    assert back.overrides == {200.0: [5.0, 6.0, 30.0, 40.0, 15.0, 0.0]}
     assert back.style.color == "#d62728"
     assert back.style.line_style == "dashed"
     assert back.style.marker == "o" and back.style.marker_size == 7.0
@@ -152,6 +152,37 @@ def test_legacy_stats_keys_migrate_with_their_roi(tmp_path):
     # keeping it would also break the next save.
     assert load_roi_stats(tmp_path) == {}
     assert session.roi_by_id("abcd1234").kind == "ellipse"
+
+
+def test_a_pre_rounding_box_keeps_its_cached_stats(tmp_path):
+    # Boxes gained a corner radius, so their geometry grew a sixth
+    # value. Config and stats keys migrate through the same normalize(),
+    # so an existing experiment's numbers must still be found rather
+    # than silently recomputed.
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    image = tmp_path / "a_raw.png"
+    image.write_bytes(b"")
+    (analysis / "roi_stats.json").write_text(json.dumps({
+        "version": 1, "entries": [{
+            "path": str(image), "mtime": image.stat().st_mtime,
+            "roi_id": "abcd1234", "kind": "box",
+            "geometry": [10.0, 20.0, 30.0, 40.0, 0.0],
+            "ring": [2, 4], "stats": {"mean": 7.0},
+        }],
+    }))
+    (analysis / "roi_config.json").write_text(json.dumps({
+        "version": 2, "plot_stat": "mean", "figure": {}, "rois": [{
+            "roi_id": "abcd1234", "name": "ROI 1", "kind": "box",
+            "geometry": [10.0, 20.0, 30.0, 40.0, 0.0], "overrides": {},
+            "base_anchor": 0.0,
+        }],
+    }))
+    session = load_session(tmp_path)
+    session.stats = load_roi_stats(tmp_path)
+
+    (roi,) = session.rois
+    assert session.stats[session.cache_key(image, roi)] == {"mean": 7.0}
 
 
 def test_load_roi_stats_missing_or_corrupt_is_empty(tmp_path):

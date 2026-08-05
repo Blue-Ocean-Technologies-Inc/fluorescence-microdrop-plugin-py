@@ -8,7 +8,8 @@ from .consts import MIN_POLYGON_POINTS
 
 #: Values in every canonical geometry list:
 #:   ellipse [cx, cy, rx, ry, angle]
-#:   box     [x, y, width, height, angle]  (x, y = top-left corner)
+#:   box     [x, y, width, height, angle, corner_radius]
+#:                                      (x, y = top-left corner)
 #:   capsule [cx, cy, half_length, radius, angle]
 #: half_length reaches the cap CENTRE, so a capsule spans
 #: 2 * (half_length + radius). Angles are degrees clockwise, the
@@ -17,6 +18,12 @@ from .consts import MIN_POLYGON_POINTS
 #: A contour is the exception, and has no fixed length or angle:
 #:   polygon [x1, y1, x2, y2, ...]  (rotation already in the vertices)
 GEOMETRY_LENGTH = 5
+GEOMETRY_LENGTHS = {"box": 6}
+
+#: Points sampled along each rounded corner of a box. Chords cut inside
+#: the true arc, so this is set where that error is under a fifth of a
+#: pixel for the corner radii a 400-px frame allows.
+BOX_CORNER_SAMPLES = 12
 
 #: Pre-rotation kind that could only ever be a circle.
 _LEGACY_KINDS = {"circle": "ellipse"}
@@ -24,9 +31,10 @@ _LEGACY_KINDS = {"circle": "ellipse"}
 
 def normalize(kind, geometry):
     """(kind, geometry) in canonical form: "circle" becomes "ellipse"
-    with equal radii, a 4-value box gains its angle, and canonical
-    input passes through unchanged. Never raises — a corrupt entry
-    degrades to a placeable shape instead of a traceback."""
+    with equal radii, a 4-value box gains its angle and a 5-value one
+    its (zero) corner radius, and canonical input passes through
+    unchanged. Never raises — a corrupt entry degrades to a placeable
+    shape instead of a traceback."""
     kind = _LEGACY_KINDS.get(kind, kind)
     values = [float(value) for value in geometry]
     if kind == "polygon":
@@ -35,8 +43,26 @@ def normalize(kind, geometry):
         return kind, values[:len(values) - len(values) % 2]
     if kind == "ellipse" and len(values) == 3:
         values = [values[0], values[1], values[2], values[2], 0.0]
-    values = (values + [0.0] * GEOMETRY_LENGTH)[:GEOMETRY_LENGTH]
+    length = GEOMETRY_LENGTHS.get(kind, GEOMETRY_LENGTH)
+    values = (values + [0.0] * length)[:length]
+    if kind == "box":
+        # Clamped here so no consumer has to defend against a radius
+        # wider than the shape it rounds.
+        values[5] = min(max(values[5], 0.0),
+                        min(abs(values[2]), abs(values[3])) / 2.0)
     return kind, values
+
+
+def translated(kind, geometry, offset_x, offset_y):
+    """``geometry`` moved by (offset_x, offset_y) — every coordinate
+    pair for a contour, the anchor point for everything else."""
+    kind, values = normalize(kind, geometry)
+    if kind == "polygon":
+        return [value + (offset_x if index % 2 == 0 else offset_y)
+                for index, value in enumerate(values)]
+    values[0] += offset_x
+    values[1] += offset_y
+    return values
 
 
 def centre_of(kind, geometry):
@@ -60,13 +86,34 @@ def _rotated(points, centre, angle_degrees):
     return (np.asarray(points, dtype=float) - centre) @ matrix.T + centre
 
 
+def _corner_arc(centre_x, centre_y, radius, start_radians):
+    """One quarter-circle corner, swept clockwise in image (y-down)
+    coordinates from ``start_radians``."""
+    sweep = np.linspace(start_radians, start_radians + np.pi / 2.0,
+                        BOX_CORNER_SAMPLES)
+    return np.column_stack([centre_x + radius * np.cos(sweep),
+                            centre_y + radius * np.sin(sweep)])
+
+
 def box_polygon(geometry):
-    """The box's four rotated corners, clockwise from its top-left."""
+    """The box's outline, clockwise from its top-left: four rotated
+    corners, or four sampled quarter-circle arcs once the corner radius
+    is non-zero."""
     _, values = normalize("box", geometry)
-    x, y, width, height, angle = values
-    corners = [(x, y), (x + width, y),
-               (x + width, y + height), (x, y + height)]
-    return _rotated(corners, centre_of("box", values), angle)
+    x, y, width, height, angle, corner_radius = values
+    if corner_radius <= 0.0:
+        points = [(x, y), (x + width, y),
+                  (x + width, y + height), (x, y + height)]
+    else:
+        right, bottom = x + width, y + height
+        inset = corner_radius
+        points = np.vstack([
+            _corner_arc(x + inset, y + inset, inset, np.pi),
+            _corner_arc(right - inset, y + inset, inset, -np.pi / 2.0),
+            _corner_arc(right - inset, bottom - inset, inset, 0.0),
+            _corner_arc(x + inset, bottom - inset, inset, np.pi / 2.0),
+        ])
+    return _rotated(points, centre_of("box", values), angle)
 
 
 def capsule_polygon(geometry, samples=32):

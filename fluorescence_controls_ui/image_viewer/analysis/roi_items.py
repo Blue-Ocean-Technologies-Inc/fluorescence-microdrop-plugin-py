@@ -9,14 +9,14 @@ from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QBrush, QPainterPath, QPolygonF
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsPolygonItem,
-    QGraphicsRectItem, QGraphicsSimpleTextItem,
+    QGraphicsSimpleTextItem,
 )
 
 from .consts import MIN_ROI_SIZE_PX
 from .roi_geometry import centre_of, normalize
 from .roi_handles import (
-    HANDLE_SIZE_PX, ROI_PEN, ROI_SELECTED_PEN, NodeHandle, ResizeHandle,
-    RotateHandle,
+    HANDLE_SIZE_PX, ROI_PEN, ROI_SELECTED_PEN, CornerRadiusHandle,
+    NodeHandle, ResizeHandle, RotateHandle,
 )
 
 
@@ -154,42 +154,91 @@ class EllipseRoiItem(_RoiItemBase, QGraphicsEllipseItem):
                           rect.width() / 2, rect.height() / 2)
 
 
-class BoxRoiItem(_RoiItemBase, QGraphicsRectItem):
-    """Box ROI: geometry [x, y, width, height, angle] with (x, y) the
-    unrotated top-left corner; it rotates about its centre."""
+def box_path(geometry):
+    """The (possibly rounded) box QPainterPath in unrotated local
+    coordinates — the item transform adds the angle."""
+    _, values = normalize("box", geometry)
+    x, y, width, height, _angle, corner_radius = values
+    path = QPainterPath()
+    rectangle = QRectF(x, y, width, height)
+    if corner_radius > 0.0:
+        path.addRoundedRect(rectangle, corner_radius, corner_radius)
+    else:
+        path.addRect(rectangle)
+    return path
+
+
+class BoxRoiItem(_RoiItemBase, QGraphicsPathItem):
+    """Box ROI: geometry [x, y, width, height, angle, corner_radius]
+    with (x, y) the unrotated top-left corner; it rotates about its
+    centre. A path item rather than a rect one so the corners can
+    round."""
 
     def __init__(self, roi_id, name, geometry, on_edited):
-        QGraphicsRectItem.__init__(self)
+        QGraphicsPathItem.__init__(self)
+        self._rect = QRectF(0, 0, MIN_ROI_SIZE_PX, MIN_ROI_SIZE_PX)
+        self._corner_radius = 0.0
         self._setup(roi_id, name, on_edited)
+        self._radius_handle = CornerRadiusHandle(self)
+        self._radius_handle.setVisible(False)
         self.set_geometry(geometry)
 
     def set_geometry(self, geometry):
         _, values = normalize("box", geometry)
-        x, y, width, height, angle = values
+        x, y, width, height, angle, self._corner_radius = values
+        self._rect = QRectF(x, y, width, height)
         self.setPos(0, 0)
-        self.setRect(x, y, width, height)
+        self.setPath(box_path(values))
         self.setTransformOriginPoint(*centre_of("box", values))
         self.setRotation(angle)
         self._place_attachments()
 
     def geometry(self):
-        rect = self.rect()
-        return [rect.x() + self.pos().x(), rect.y() + self.pos().y(),
-                rect.width(), rect.height(), self.rotation()]
+        return [self._rect.x() + self.pos().x(),
+                self._rect.y() + self.pos().y(),
+                self._rect.width(), self._rect.height(),
+                self.rotation(), self._corner_radius]
+
+    def set_editable(self, editable):
+        super().set_editable(editable)
+        self._radius_handle.setVisible(editable)
+
+    def round_to(self, scene_point):
+        """Radius from how far the grip was dragged in along the top
+        edge, in the unrotated frame the shape was authored in."""
+        point = self.mapFromScene(scene_point)
+        self._corner_radius = max(self._rect.right() - point.x(), 0.0)
+        self._redraw()
+        self._place_attachments()
 
     def _apply_size(self, point, uniform):
         # Centre-anchored, unlike the pre-rotation top-left anchoring:
         # a moving centre would drag the rotation pivot mid-drag.
-        centre = self.rect().center()
+        centre = self._rect.center()
         half_width = max(abs(point.x() - centre.x()), MIN_ROI_SIZE_PX)
         half_height = max(abs(point.y() - centre.y()), MIN_ROI_SIZE_PX)
-        self.setRect(centre.x() - half_width, centre.y() - half_height,
-                     2 * half_width, 2 * half_height)
+        self._rect = QRectF(centre.x() - half_width,
+                            centre.y() - half_height,
+                            2 * half_width, 2 * half_height)
+        self._redraw()
+
+    def _redraw(self):
+        """Rebuild the path from the current rect and radius, clamping
+        the radius the way normalize() would (a resize can shrink the
+        box under a radius it already carries). Local coordinates
+        throughout: the item's own pos() offsets the result."""
+        _, values = normalize("box", [
+            self._rect.x(), self._rect.y(), self._rect.width(),
+            self._rect.height(), self.rotation(), self._corner_radius])
+        self._corner_radius = values[5]
+        self.setPath(box_path(values))
 
     def _place_attachments(self):
-        rect = self.rect()
+        rect = self._rect
         self._place_grips(rect.center().x(), rect.center().y(),
                           rect.width() / 2, rect.height() / 2)
+        self._radius_handle.setPos(rect.right() - self._corner_radius,
+                                   rect.top())
 
 
 class CapsuleRoiItem(_RoiItemBase, QGraphicsPathItem):
