@@ -24,7 +24,9 @@ from PySide6.QtWidgets import (
     QScrollArea, QSplitter, QVBoxLayout, QWidget,
 )
 from traits.api import Any, Instance
-from traitsui.api import EnumEditor, HGroup, Item, UItem, VGroup, View
+from traitsui.api import (
+    EnumEditor, HGroup, Item, RangeEditor, UItem, VGroup, View,
+)
 
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
 from microdrop_utils.traitsui_qt_helpers import (
@@ -215,12 +217,19 @@ _plot_controls_view = View(
                           "become percentages."),
         ),
         HGroup(
+            # auto_set: a typed value must reach the session before
+            # Calculate reads it, or the batch finds nothing missing
+            # and reports "up to date" against the old ring.
             Item("session.ring.gap_px", label="BG gap",
+                 editor=RangeEditor(low=0, high=50, mode="spinner",
+                                    auto_set=True),
                  tooltip="Pixels between an ROI's edge and the ring its "
                          "background is read from. Fluorescence bleeds "
                          "a pixel or two past the boundary and that "
                          "halo is not background."),
             Item("session.ring.thickness_px", label="BG width",
+                 editor=RangeEditor(low=1, high=50, mode="spinner",
+                                    auto_set=True),
                  tooltip="Thickness of the background ring, in pixels. "
                          "Changing either value recomputes the "
                          "statistics."),

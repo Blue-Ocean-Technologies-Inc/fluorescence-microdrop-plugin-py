@@ -7,7 +7,7 @@ canvas_* event traits and the controller reacts."""
 import math
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainterPath, QPen
+from PySide6.QtGui import QBrush, QColor, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsRectItem,
 )
@@ -29,9 +29,12 @@ ITEM_CLASSES = {"ellipse": EllipseRoiItem, "box": BoxRoiItem,
 DRAW_KINDS = {"draw_ellipse": "ellipse", "draw_box": "box",
               "draw_capsule": "capsule", "draw_polygon": "polygon"}
 
-#: Dashed and half transparent: the ring is context for an ROI, not a
-#: shape to grab.
-RING_ALPHA = 150
+#: The ring is filled as well as outlined: two thin dashed circles in
+#: the ROI's own colour read as stray lines, especially once a wide
+#: ring is clipped by the image edge, while a tinted band reads as the
+#: area it is.
+RING_ALPHA = 200
+RING_FILL_ALPHA = 60
 RING_DASH = Qt.PenStyle.DashLine
 
 
@@ -95,10 +98,15 @@ class RoiCanvasLayer:
                 path.closeSubpath()
             if path.isEmpty():
                 continue
+            # Odd-even so the hole in the annulus stays a hole.
+            path.setFillRule(Qt.FillRule.OddEvenFill)
             colour = QColor(item.pen().color())
+            fill = QColor(colour)
             colour.setAlpha(RING_ALPHA)
+            fill.setAlpha(RING_FILL_ALPHA)
             ring_item = QGraphicsPathItem(path)
             ring_item.setPen(QPen(colour, 0, RING_DASH))
+            ring_item.setBrush(QBrush(fill))
             ring_item.setZValue(-1)
             ring_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self._scene.addItem(ring_item)

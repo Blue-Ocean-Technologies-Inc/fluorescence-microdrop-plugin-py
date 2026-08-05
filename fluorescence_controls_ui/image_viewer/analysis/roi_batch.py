@@ -1,18 +1,24 @@
 """Off-GUI batch computation: a daemon orchestrator thread (the plugin's
 established off-GUI pattern) fans the images out to a lazily-created,
-persistent process pool and streams results back through a thread-safe
-queue that the dock pane's drain timer empties on the GUI thread. The
-pool is created once (module-level, lock-guarded) and reused across
-every batch — on Windows spawn, rebuilding it per start() costs seconds
-and rescans during live capture would otherwise thrash it with
-overlapping pools — so it is never shut down. One batch at a time:
+persistent thread pool and streams results back through a thread-safe
+queue that the dock pane's drain timer empties on the GUI thread.
+
+Threads, not processes. The work is cv2 and numpy, both of which drop
+the GIL, and measured against a process pool threads returned their
+first result 17x sooner on small frames (0.03 s against 0.50 s) and
+finished a 60-frame 1200x1600 batch in 1.20 s against 1.96 s. Spawn
+also made every worker re-import the launcher on Windows, running the
+app's self-update and leaving stray processes behind.
+
+The pool is created once (module-level, lock-guarded) and reused, so
+it is never shut down. One batch at a time:
 start() cancels any running one and swaps in a fresh queue, so a
 superseded batch's stragglers die with the old queue."""
 import os
 import queue
 import threading
 from concurrent.futures import (
-    BrokenExecutor, ProcessPoolExecutor, ThreadPoolExecutor, as_completed,
+    BrokenExecutor, ThreadPoolExecutor, as_completed,
 )
 
 from traits.api import Any, HasTraits
@@ -38,24 +44,23 @@ def _pool_workers():
 
 
 def _shared_executor():
-    """The one process pool (falling back to threads) reused across every
-    batch, created on first use."""
+    """The one thread pool reused across every batch, created on first
+    use — which costs microseconds, so a batch starts reporting almost
+    at once."""
     global _executor
     with _executor_lock:
         if _executor is None:
-            try:
-                _executor = ProcessPoolExecutor(max_workers=_pool_workers())
-            except Exception as error:
-                logger.warning(f"Process pool unavailable, falling back to "
-                               f"threads: {error}")
-                _executor = ThreadPoolExecutor(max_workers=_pool_workers())
+            _executor = ThreadPoolExecutor(
+                max_workers=_pool_workers(),
+                thread_name_prefix="roi-stats")
         return _executor
 
 
 def pool_is_warm():
-    """Whether the shared pool already exists. A cold one costs seconds
-    to spawn on Windows, and nothing can be reported in the meantime —
-    worth saying out loud rather than showing a stalled 0/N."""
+    """Whether the shared pool already exists. Threads start in
+    microseconds, so this is nearly always true by the time anything is
+    painted; it earns its keep only if the pool ever goes back to
+    processes."""
     with _executor_lock:
         return _executor is not None
 

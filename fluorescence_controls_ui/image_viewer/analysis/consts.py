@@ -17,8 +17,10 @@ ANALYSIS_DIR_NAME = "analysis"
 ROI_CONFIG_FILENAME = "roi_config.json"
 
 #: Cadence (ms) of the GUI-thread timer draining finished batch results
-#: into the model.
-ANALYSIS_RESULT_DRAIN_INTERVAL_MS = 200
+#: into the model. Fine-grained on purpose: the drain itself is cheap
+#: (the expensive redraw is coalesced separately), and a coarser tick
+#: is what made the count jump in chunks rather than climb.
+ANALYSIS_RESULT_DRAIN_INTERVAL_MS = 50
 
 #: Coalescing delay (ms) between an analysis-state notification and the
 #: plot redraw — a drain burst paints once.
