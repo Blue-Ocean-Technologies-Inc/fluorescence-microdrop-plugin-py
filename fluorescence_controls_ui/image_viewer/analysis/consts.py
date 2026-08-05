@@ -28,10 +28,19 @@ ROI_PLOT_COALESCE_MS = 100
 #: readout the user is watching never gets painted.
 ROI_PLOT_BATCH_COALESCE_MS = 1000
 
+#: Wheel-zoom step on the plot canvas: one notch multiplies the span
+#: by this going in, and by its reciprocal going out. Matches the
+#: image canvas's 1.25/0.8 so the two feel the same.
+PLOT_ZOOM_STEP = 0.8
+
 #: Below this the plot canvas stops shrinking and the plot pane's
 #: scroll area takes over with scrollbars instead.
 ROI_PLOT_CANVAS_MIN_WIDTH = 300
 ROI_PLOT_CANVAS_MIN_HEIGHT = 200
+
+#: Tallest the plot pane's controls may get before they scroll inside
+#: their own area rather than crowding the chart out.
+ROI_PLOT_CONTROLS_MAX_HEIGHT = 180
 
 #: Smallest ROI dimension (radius / box side, px) a canvas drag may create.
 MIN_ROI_SIZE_PX = 3.0

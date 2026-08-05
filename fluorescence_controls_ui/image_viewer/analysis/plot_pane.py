@@ -34,9 +34,10 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ...consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
-    ROI_PLOT_BATCH_COALESCE_MS, ROI_PLOT_CANVAS_MIN_HEIGHT,
-    ROI_PLOT_CANVAS_MIN_WIDTH, ROI_PLOT_COALESCE_MS, VIEW_MODE_LABELS,
-    VIEW_MODES,
+    PLOT_ZOOM_STEP, ROI_PLOT_BATCH_COALESCE_MS,
+    ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
+    ROI_PLOT_COALESCE_MS, ROI_PLOT_CONTROLS_MAX_HEIGHT,
+    VIEW_MODE_LABELS, VIEW_MODES,
 )
 from .curve_fit import (
     FIT_LABELS, FIT_METHODS, fastest_change_time, fit_series,
@@ -237,6 +238,11 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:log_x, session:figure:log_y, "
                "session:figure:normalize")
 
+#: Changes that mean "show me everything again", releasing a view the
+#: user zoomed or panned into.
+_VIEW_RESET_STATE = ("session:figure:x_auto, session:figure:y_auto, "
+                     "session:figure:view_mode")
+
 
 class RoiPlotCanvas(FigureCanvasQTAgg):
     """Chart derived from the analysis model, rendering whichever view
@@ -259,14 +265,103 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists = []
         self._redraw_pending = False
         self._detached = False
+        #: Set once the user zooms or pans: their view then survives
+        #: every redraw until they ask for a fit.
+        self._user_view = False
+        self._panning = False
         model.observe(self._on_plot_state_changed, _PLOT_STATE)
+        model.observe(self._on_fit_requested, _VIEW_RESET_STATE)
+        for event_name, handler in (
+                ("scroll_event", self._on_scroll),
+                ("button_press_event", self._on_press),
+                ("motion_notify_event", self._on_motion),
+                ("button_release_event", self._on_release)):
+            self.mpl_connect(event_name, handler)
         self._schedule_redraw()
+
+    # ------------------------------------------------------------------ #
+    # Modeless zoom and pan, as on the image canvas next door: the        #
+    # navigation toolbar's own tools still work and take precedence.      #
+    # ------------------------------------------------------------------ #
+    def release_view(self):
+        """Drop the user's view and let the axes autoscale again."""
+        self._user_view = False
+        self._schedule_redraw()
+
+    def _on_fit_requested(self, event):
+        self.release_view()
+
+    def _toolbar_busy(self):
+        """True while the navigation toolbar's pan or zoom tool is armed
+        (or anything else holds the canvas), so the two never fight."""
+        return bool(getattr(getattr(self, "toolbar", None), "mode", "")
+                    or self.widgetlock.locked())
+
+    def _on_scroll(self, event):
+        if self._toolbar_busy() or event.inaxes is not self._axes:
+            return
+        factor = (PLOT_ZOOM_STEP if event.button == "up"
+                  else 1.0 / PLOT_ZOOM_STEP)
+        x_limits = self._zoomed(self._axes.xaxis.get_transform(),
+                                self._axes.get_xlim(), event.xdata,
+                                factor)
+        y_limits = self._zoomed(self._axes.yaxis.get_transform(),
+                                self._axes.get_ylim(), event.ydata,
+                                factor)
+        if x_limits is None or y_limits is None:
+            return
+        self._axes.set_xlim(x_limits)
+        self._axes.set_ylim(y_limits)
+        self._user_view = True
+        self.draw_idle()
+
+    @staticmethod
+    def _zoomed(transform, limits, cursor, factor):
+        """The new (low, high) about ``cursor``, computed in the axis's
+        own scale so a notch multiplies on a log axis and adds on a
+        linear one. None when the scale cannot represent them."""
+        if cursor is None:
+            return None
+        low, high, point = transform.transform(
+            [limits[0], limits[1], cursor])
+        if not np.all(np.isfinite([low, high, point])):
+            return None
+        scaled = [point - (point - low) * factor,
+                  point + (high - point) * factor]
+        new_low, new_high = transform.inverted().transform(scaled)
+        if not np.all(np.isfinite([new_low, new_high]))                 or new_low >= new_high:
+            return None
+        return new_low, new_high
+
+    def _on_press(self, event):
+        if (self._toolbar_busy() or event.button != 1
+                or event.inaxes is not self._axes):
+            return
+        # Matplotlib's own pan machinery, which already knows how each
+        # axis scale moves.
+        self._axes.start_pan(event.x, event.y, event.button)
+        self._panning = True
+
+    def _on_motion(self, event):
+        if not self._panning:
+            return
+        self._axes.drag_pan(1, event.key, event.x, event.y)
+        self._user_view = True
+        self.draw_idle()
+
+    def _on_release(self, event):
+        if not self._panning:
+            return
+        self._axes.end_pan()
+        self._panning = False
 
     def detach(self):
         # An in-flight coalesced singleShot may fire after the widget's
         # C++ side is gone; the flag makes it a no-op.
         self._detached = True
         self._model.observe(self._on_plot_state_changed, _PLOT_STATE,
+                            remove=True)
+        self._model.observe(self._on_fit_requested, _VIEW_RESET_STATE,
                             remove=True)
 
     def showEvent(self, event):
@@ -328,8 +423,21 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         log_y = time_axis and figure_settings.log_y
         self._axes.set_xscale("log" if log_x else "linear")
         self._axes.set_yscale("log" if log_y else "linear")
+        # A view the user zoomed or panned into outlives every redraw
+        # — a drained result or a toggled fit would otherwise snap the
+        # axes back while they were still reading them.
+        kept = ((self._axes.get_xlim(), self._axes.get_ylim())
+                if self._user_view else None)
+        if kept is None:
+            # set_xlim during a zoom latches autoscaling off, so without
+            # this the axes would never rescale again — not for new
+            # data, not even for Home.
+            self._axes.set_autoscale_on(True)
         self._axes.relim()
         self._axes.autoscale_view()
+        if kept is not None:
+            self._axes.set_xlim(kept[0])
+            self._axes.set_ylim(kept[1])
         # A log axis rejects a limit at or below zero, so a manual one
         # is skipped there and the autoscaled range stands.
         if (not figure_settings.x_auto and time_axis
@@ -600,6 +708,16 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 alpha=alpha))
 
 
+class _PlotToolbar(NavigationToolbar2QT):
+    """The standard navigation toolbar, with Home also releasing the
+    view the user zoomed or panned into — otherwise the next redraw
+    would restore what Home just cleared."""
+
+    def home(self, *args):
+        self.canvas.release_view()
+        super().home(*args)
+
+
 def _save_figure(canvas):
     """Render the current figure at the session's export settings; the
     dialog defaults into the experiment's analysis folder."""
@@ -627,6 +745,7 @@ class FluorescenceRoiPlotDockPane(DockPane):
     canvas = Instance(RoiPlotCanvas)
     table = Instance(RoiStatsTable)
     _controls_ui = Any()
+    _controls_scroll = Any()
     _equations_ui = Any()
 
     def create_contents(self, parent):
@@ -635,9 +754,17 @@ class FluorescenceRoiPlotDockPane(DockPane):
         self.canvas = RoiPlotCanvas(roi_analysis_model)
         self.canvas.setMinimumSize(ROI_PLOT_CANVAS_MIN_WIDTH,
                                    ROI_PLOT_CANVAS_MIN_HEIGHT)
-        layout.addWidget(NavigationToolbar2QT(self.canvas, widget))
+        layout.addWidget(_PlotToolbar(self.canvas, widget))
         self._controls_ui = self._build_controls(widget)
-        layout.addWidget(self._controls_ui.control)
+        # The controls get their own scroll area so a narrow pane
+        # scrolls them instead of forcing the whole pane wide, and a
+        # short pane scrolls them instead of squeezing the plot away.
+        self._controls_scroll = QScrollArea(widget)
+        self._controls_scroll.setWidgetResizable(True)
+        self._controls_scroll.setWidget(self._controls_ui.control)
+        self._controls_scroll.setMaximumHeight(
+            ROI_PLOT_CONTROLS_MAX_HEIGHT)
+        layout.addWidget(self._controls_scroll)
         splitter = QSplitter(Qt.Orientation.Vertical, widget)
         splitter.addWidget(self.canvas)
         self.table = RoiStatsTable(roi_analysis_model, splitter)
@@ -668,10 +795,11 @@ class FluorescenceRoiPlotDockPane(DockPane):
 
     def _on_session_swapped(self, event):
         old_ui = self._controls_ui
-        holder = old_ui.control.parentWidget()
-        self._controls_ui = self._build_controls(holder)
-        holder.layout().replaceWidget(old_ui.control,
-                                      self._controls_ui.control)
+        self._controls_ui = self._build_controls(self._controls_scroll)
+        # takeWidget before setWidget: setWidget destroys the control it
+        # replaces, and TraitsUI still has to dispose of that one.
+        self._controls_scroll.takeWidget()
+        self._controls_scroll.setWidget(self._controls_ui.control)
         old_ui.dispose()
 
     def _on_save_plot(self, event):
