@@ -37,7 +37,7 @@ FIT_TEMPLATES = {
     "poly2": "c2*x^2 + c1*x + c0",
     "poly3": "c3*x^3 + c2*x^2 + c1*x + c0",
     "exponential": "amplitude*exp(rate*x) + offset",
-    "sigmoid": "amplitude/(1 + exp(-rate*(x - midpoint))) + offset",
+    "sigmoid": "initial + (final - initial)/(1 + exp(-rate*(x - midpoint)))",
 }
 
 #: Fewest finite points each model can be solved on.
@@ -196,19 +196,25 @@ def _fit_sigmoid(elapsed, values):
     # then reads as a positive rate with a negative amplitude).
     if rate < 0:
         initial, final, rate = final, initial, -rate
-    amplitude, offset = final - initial, initial
 
     def sig(t):
         return expit(rate * (np.asarray(t, dtype=float) - midpoint))
 
+    # The plateau separation: what the curve climbs (or falls) through,
+    # and the scale factor in both derivatives.
+    amplitude = final - initial
+
     return FitResult(
-        params={"amplitude": amplitude, "rate": rate,
-                "midpoint": midpoint, "offset": offset},
+        # The four the model actually solves for, in the order the
+        # template writes them — an amplitude-on-offset pair would hide
+        # the far plateau behind a sum, which is the whole reason this
+        # fits the 4PL form.
+        params={"initial": initial, "final": final, "rate": rate,
+                "midpoint": midpoint},
         inflection=midpoint,
-        equation=(f"y = {amplitude:.3g}/(1+e^(-{rate:.3g}"
-                  f"·(t{_signed(-midpoint)}))){_signed(offset)}"),
-        predict=lambda t: _sigmoid(t, amplitude, rate, midpoint,
-                                   offset),
+        equation=(f"y = {initial:.3g} + ({final:.3g} - {initial:.3g})"
+                  f"/(1+e^(-{rate:.3g}·(t{_signed(-midpoint)})))"),
+        predict=lambda t: _logistic_4p(t, initial, final, midpoint, rate),
         first_derivative=lambda t: amplitude * rate * sig(t)
         * (1.0 - sig(t)),
         second_derivative=lambda t: amplitude * rate * rate * sig(t)

@@ -86,7 +86,10 @@ def test_sigmoid_recovers_known_params():
     assert fit.r_squared > 0.999
     assert abs(fit.params["rate"] - 0.08) < 0.008
     assert abs(fit.params["midpoint"] - 95.0) < 2.0
-    assert abs(fit.params["amplitude"] - 3000.0) < 150.0
+    # Both plateaus are reported, not an amplitude hiding the far one
+    # behind a sum: the curve runs from 500 up to 3500.
+    assert abs(fit.params["initial"] - 500.0) < 75.0
+    assert abs(fit.params["final"] - 3500.0) < 150.0
     assert fit.equation.startswith("y = ")
     assert "e^(-" in fit.equation
 
