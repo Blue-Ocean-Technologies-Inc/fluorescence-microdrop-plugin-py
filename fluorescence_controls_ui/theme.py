@@ -9,10 +9,20 @@ window that all need it.
 from pyface.qt.QtCore import Qt
 from pyface.qt.QtWidgets import QApplication
 
-from microdrop_style.button_styles import get_tooltip_style
-from microdrop_style.general_style import get_general_style
-from microdrop_style.helpers import QT_THEME_NAMES, is_dark_mode
-from microdrop_style.label_style import get_label_style
+from microdrop_style.button_styles import ICON_FONT_FAMILY
+from microdrop_style.helpers import (
+    QT_THEME_NAMES, get_complete_stylesheet, is_dark_mode,
+)
+
+#: A stylesheet's font beats the QFont a widget sets on itself, and the
+#: shared sheet's general rules put a text font on every button. Its
+#: QPushButton rules hand the icon font back — the eye buttons in the
+#: stats table live through that — but nothing does the same for
+#: QToolButton, which is what every glyph button in these toolbars is.
+#: Only the family is restored here: their sizes belong to the editors
+#: that build them, and this is undoing damage, not restyling.
+_TOOLBUTTON_ICON_FONT = (
+    'QToolButton { font-family: "%s"; }' % ICON_FONT_FAMILY)
 
 
 def current_theme():
@@ -21,11 +31,14 @@ def current_theme():
 
 
 def theme_stylesheet(theme=None):
-    """The plugin's stylesheet for a theme. Order matters slightly:
-    generic rules first, specific widgets last."""
-    theme = theme or current_theme()
-    return "\n".join((get_general_style(theme), get_label_style(theme),
-                      get_tooltip_style(theme)))
+    """The plugin's stylesheet for a theme: the shared sheet, whole,
+    with the icon font put back on the glyph buttons.
+
+    Composing a subset of the shared sheet's parts is a trap — leave
+    out the button rules and every icon in the pane turns into text.
+    """
+    return "\n".join((get_complete_stylesheet(theme or current_theme()),
+                      _TOOLBUTTON_ICON_FONT))
 
 
 def follow_app_theme(widget, also=None):
