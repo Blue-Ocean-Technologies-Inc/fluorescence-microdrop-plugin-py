@@ -4,24 +4,56 @@ a FitResult carrying the equation text, R², a vectorized predictor,
 and the analytic second derivative (for the curvature extremum
 markers)."""
 import math
+import re
+import warnings
 
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.special import expit
 from traits.api import Any, Dict, Float, HasTraits, Str
 
-#: Selectable fit models, in dropdown order ("none" = fitting off).
+from .fit_expression import FitExpressionError, parse_expression
+
+#: Selectable fit models, in dropdown order ("none" = fitting off,
+#: CUSTOM_METHOD = whatever equation the user typed).
+CUSTOM_METHOD = "custom"
 FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential",
                "sigmoid")
 
 #: Human labels (fit dropdown + equations table).
 FIT_LABELS = {"none": "No fit", "linear": "Linear",
               "poly2": "Quadratic", "poly3": "Cubic",
-              "exponential": "Exponential", "sigmoid": "Sigmoid"}
+              "exponential": "Exponential", "sigmoid": "Sigmoid",
+              CUSTOM_METHOD: "Custom"}
+
+#: What each built-in fits, in the notation the equation field uses —
+#: so selecting one shows the form it will solve, and editing that text
+#: carries straight over into a custom fit of the same shape.
+#:
+#: Each names the parameters that model actually reports, so the
+#: equation on display and the table's columns say the same thing.
+FIT_TEMPLATES = {
+    "linear": "c1*x + c0",
+    "poly2": "c2*x^2 + c1*x + c0",
+    "poly3": "c3*x^3 + c2*x^2 + c1*x + c0",
+    "exponential": "amplitude*exp(rate*x) + offset",
+    "sigmoid": "amplitude/(1 + exp(-rate*(x - midpoint))) + offset",
+}
 
 #: Fewest finite points each model can be solved on.
 _MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4,
                "sigmoid": 5}
+
+#: Constant initial guesses tried for a custom equation (see
+#: _custom_seeds for the data-derived ones). All-zeros alone —
+#: pyCftool's choice — stalls on a*exp(b*x), which has no gradient in
+#: a at a = 0.
+_CUSTOM_SEEDS = (1.0, 0.0)
+
+#: Step for the numeric derivatives of a custom fit, as a fraction of
+#: the fitted t-span. Small enough to follow real curvature, wide
+#: enough that the second difference doesn't drown in float noise.
+_DERIVATIVE_STEP_FRACTION = 1e-3
 
 #: Poor-fit tail trim (opt-in, see fit_series): R² a fit must reach to
 #: be accepted, the share of points each retry keeps, and the fewest
@@ -180,19 +212,115 @@ def _fit_sigmoid(elapsed, values):
         * (1.0 - sig(t)) * (1.0 - 2.0 * sig(t)))
 
 
-def _solve(elapsed, values, method):
+def _numeric_derivatives(predict, step):
+    """(first, second) central-difference closures around ``predict``.
+
+    A typed equation has no analytic derivative to hand, and both
+    consumers of these — the d²-extrema markers and the fastest-change
+    time — only ever sample them on a grid, so differencing satisfies
+    the FitResult contract exactly as an analytic form would."""
+    def first(t):
+        t = np.asarray(t, dtype=float)
+        return (predict(t + step) - predict(t - step)) / (2.0 * step)
+
+    def second(t):
+        t = np.asarray(t, dtype=float)
+        return (predict(t + step) - 2.0 * predict(t)
+                + predict(t - step)) / (step * step)
+
+    return first, second
+
+
+def _custom_equation_text(expression, params):
+    """The typed equation with each parameter replaced by its fitted
+    value — the readable form, in the user's own notation."""
+    text = expression.display_text
+    for name, value in params.items():
+        # Whole words only: a parameter 'a' must not rewrite 'atan'.
+        text = re.sub(rf"\b{re.escape(name)}\b", f"{value:.4g}", text)
+    return f"y = {text}"
+
+
+def _custom_seeds(elapsed, values, count):
+    """Uniform starting points to try, every parameter at the same
+    value. A typed equation says nothing about which of its parameters
+    is an amplitude and which is a rate, so instead of guessing per
+    name this offers the optimizer one seed per magnitude the data
+    suggests and keeps whichever converges best.
+
+    ±1/span earn their place: a rate seeded at 1.0 puts exp(1·t) past
+    the float ceiling for any real time axis, and the NEGATIVE one is
+    the only seed in this list that recovers a decay — the shape a
+    bleaching fluorescence series actually has."""
+    span = float(elapsed[-1] - elapsed[0]) or 1.0
+    magnitudes = list(_CUSTOM_SEEDS) + [
+        float(np.mean(values)), float(np.ptp(values)) or 1.0,
+        1.0 / span, -1.0 / span,
+    ]
+    return [[magnitude] * count for magnitude in magnitudes]
+
+
+def _fit_custom(elapsed, values, expression):
+    """Solve a typed equation, keeping the seed that fits best."""
+    span = float(elapsed[-1] - elapsed[0]) or 1.0
+    seeds = _custom_seeds(elapsed, values,
+                          len(expression.parameters))
+    best = None
+    for seed in seeds:
+        try:
+            solved, _ = curve_fit(expression, elapsed, values, p0=seed,
+                                  maxfev=10000)
+        except Exception:
+            continue
+        solved = [float(value) for value in solved]
+        if not all(math.isfinite(value) for value in solved):
+            continue
+        fitted = np.asarray(expression(elapsed, *solved), dtype=float)
+        if not np.all(np.isfinite(fitted)):
+            continue
+        score = _r_squared(values, fitted)
+        if best is None or score > best[0]:
+            best = (score, solved)
+    if best is None:
+        return None
+    params = dict(zip(expression.parameters, best[1]))
+
+    def predict(t, values=best[1]):
+        return np.asarray(expression(t, *values), dtype=float)
+
+    first, second = _numeric_derivatives(
+        predict, span * _DERIVATIVE_STEP_FRACTION)
+    return FitResult(params=params,
+                     equation=_custom_equation_text(expression, params),
+                     predict=predict, first_derivative=first,
+                     second_derivative=second)
+
+
+def _solve(elapsed, values, method, expression=None):
     """One fit over exactly the points given (already finite-filtered),
     scored and stamped with the domain it used. None when the model
     cannot be solved on them."""
     try:
-        if method == "exponential":
-            result = _fit_exponential(elapsed, values)
-        elif method == "sigmoid":
-            result = _fit_sigmoid(elapsed, values)
-        else:
-            result = _fit_polynomial(
-                elapsed, values,
-                {"linear": 1, "poly2": 2, "poly3": 3}[method])
+        # Overflow and invalid values are ordinary events while an
+        # optimizer explores — exp() of a rate it is still guessing at
+        # runs off the top of a float routinely. What matters is
+        # whether the SOLUTION is finite, which is checked below, so
+        # the noise is silenced here. Without this, an ambient
+        # warnings-as-errors filter turns those transients into
+        # exceptions and the best fit is silently thrown away for a
+        # worse one that happened not to trip a warning.
+        with np.errstate(all="ignore"), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if method == CUSTOM_METHOD:
+                result = _fit_custom(elapsed, values, expression)
+            elif method == "exponential":
+                result = _fit_exponential(elapsed, values)
+            elif method == "sigmoid":
+                result = _fit_sigmoid(elapsed, values)
+            else:
+                result = _fit_polynomial(
+                    elapsed, values,
+                    {"linear": 1, "poly2": 2, "poly3": 3}[method])
     except Exception:
         return None
     if result is None:
@@ -204,10 +332,12 @@ def _solve(elapsed, values, method):
     return result
 
 
-def fit_series(elapsed, values, method, trim_tail=False):
+def fit_series(elapsed, values, method, trim_tail=False, expression=""):
     """Fit one series. None when fitting is off, too few finite points
     remain after NaN filtering, or the optimizer fails — callers render
-    that as "fit failed", never a traceback.
+    that as "fit failed", never a traceback. ``expression`` is the typed
+    equation, used when ``method`` is CUSTOM_METHOD and ignored
+    otherwise; one that does not parse fits nothing.
 
     ``trim_tail`` retries a fit that misses TRIM_TARGET_R_SQUARED on
     successively shorter leading slices, the qPCR trick for a tail the
@@ -216,26 +346,38 @@ def fit_series(elapsed, values, method, trim_tail=False):
     none does, the full-series fit stands rather than paying data for
     nothing. Read ``fitted_start``/``fitted_end`` for what was used —
     everything past it is extrapolation."""
-    if method not in _MIN_POINTS:
+    parsed = None
+    if method == CUSTOM_METHOD:
+        try:
+            parsed = parse_expression(expression)
+        except FitExpressionError:
+            return None
+        # A curve through N parameters needs more than N points to say
+        # anything; one point per parameter merely interpolates.
+        minimum = len(parsed.parameters) + 1
+    elif method in _MIN_POINTS:
+        minimum = _MIN_POINTS[method]
+    else:
         return None
     elapsed = np.asarray(elapsed, dtype=float)
     values = np.asarray(values, dtype=float)
     finite = np.isfinite(elapsed) & np.isfinite(values)
     elapsed, values = elapsed[finite], values[finite]
-    if len(elapsed) < _MIN_POINTS[method]:
+    if len(elapsed) < minimum:
         return None
-    result = _solve(elapsed, values, method)
+    result = _solve(elapsed, values, method, parsed)
     if (result is None or not trim_tail
             or result.r_squared >= TRIM_TARGET_R_SQUARED):
         return result
-    floor = max(_MIN_POINTS[method], _TRIM_MIN_POINTS)
+    floor = max(minimum, _TRIM_MIN_POINTS)
     kept = len(elapsed)
     while kept > floor:
         # min() with kept - 1 keeps short series shrinking at all.
         kept = min(kept - 1, int(kept * _TRIM_KEEP_FRACTION))
         if kept < floor:
             break
-        trimmed = _solve(elapsed[:kept], values[:kept], method)
+        trimmed = _solve(elapsed[:kept], values[:kept], method,
+                         parsed)
         if (trimmed is not None
                 and trimmed.r_squared >= TRIM_TARGET_R_SQUARED):
             return trimmed
