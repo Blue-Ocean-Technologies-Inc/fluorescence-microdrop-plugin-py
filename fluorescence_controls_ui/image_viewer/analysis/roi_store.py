@@ -46,7 +46,7 @@ _RING_FIELDS = ("gap_px", "thickness_px", "show_on_canvas")
 
 #: Persisted RollingBall fields (tolerated-missing on load, so a config
 #: written before the ball existed opens with it off).
-_BALL_FIELDS = ("enabled", "radius_px")
+_BALL_FIELDS = ("enabled", "radius_px", "show_reference")
 
 
 def analysis_directory(experiment_directory) -> Path:

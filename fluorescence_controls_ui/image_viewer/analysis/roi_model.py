@@ -136,6 +136,11 @@ class RollingBall(HasTraits):
     enabled = Bool(False)
     radius_px = Range(5, 500, ROLLING_BALL_RADIUS_PX, mode="spinner")
 
+    #: Draw the ball on the image at its true size, as a guide for
+    #: choosing the radius by eye. Display only — it is measured with
+    #: whether or not it is shown.
+    show_reference = Bool(False)
+
     def effective_radius(self):
         """The radius to correct with, or 0 when it is switched off —
         what compute_image_stats takes."""

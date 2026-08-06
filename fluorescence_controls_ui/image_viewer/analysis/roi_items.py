@@ -15,8 +15,8 @@ from PySide6.QtWidgets import (
 from .consts import MIN_ROI_SIZE_PX
 from .roi_geometry import centre_of, normalize
 from .roi_handles import (
-    HANDLE_SIZE_PX, ROI_PEN, ROI_SELECTED_PEN, CornerRadiusHandle,
-    NodeHandle, ResizeHandle, RotateHandle,
+    BALL_REFERENCE_PEN, HANDLE_SIZE_PX, ROI_PEN, ROI_SELECTED_PEN,
+    CornerRadiusHandle, NodeHandle, ResizeHandle, RotateHandle,
 )
 
 
@@ -166,6 +166,37 @@ def box_path(geometry):
     else:
         path.addRect(rectangle)
     return path
+
+
+class BallReferenceItem(EllipseRoiItem):
+    """The rolling ball drawn at its true size, as a guide.
+
+    It is not an ROI: nothing is measured inside it and it is never
+    saved. It looks like one so that it can be judged against them —
+    the whole point is to see whether the ball clears the droplets —
+    but it carries its own colour and stays a circle, a ball having
+    only one radius."""
+
+    def __init__(self, roi_id, name, geometry, on_edited):
+        super().__init__(roi_id, name, geometry, on_edited)
+        self.setPen(BALL_REFERENCE_PEN)
+        self._label.setBrush(QBrush(BALL_REFERENCE_PEN.color()))
+        # A circle has nothing to rotate.
+        self._rotate_handle.setVisible(False)
+
+    def _apply_size(self, point, uniform):
+        # Always uniform, whatever the modifier: dragging this to an
+        # ellipse would describe a ball that cannot exist.
+        super()._apply_size(point, True)
+
+    def set_selected_style(self, selected):
+        # Its colour says what it is; selection must not repaint it as
+        # an ROI.
+        self._label.setBrush(QBrush(self.pen().color()))
+
+    def set_editable(self, editable):
+        super().set_editable(editable)
+        self._rotate_handle.setVisible(False)
 
 
 class BoxRoiItem(_RoiItemBase, QGraphicsPathItem):

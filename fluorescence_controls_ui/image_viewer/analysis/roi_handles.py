@@ -11,6 +11,9 @@ from .consts import ROTATE_SNAP_DEGREES
 #: Cosmetic (zoom-independent 1px) pens; cyan reads on dark raws.
 ROI_PEN = QPen(QColor(0, 229, 255), 0)
 ROI_SELECTED_PEN = QPen(QColor(255, 214, 0), 0)
+#: The rolling-ball size guide: violet, so it reads as neither an ROI
+#: (cyan), a selected one (amber), nor a background ring.
+BALL_REFERENCE_PEN = QPen(QColor(179, 136, 255), 0)
 HANDLE_BRUSH = QBrush(QColor(255, 214, 0))
 #: The corner-radius grip is a second grip on the same edge as resize
 #: and rotate, so it is coloured apart from them rather than left to be

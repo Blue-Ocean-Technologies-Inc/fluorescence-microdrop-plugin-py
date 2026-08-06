@@ -20,8 +20,8 @@ from microdrop_style.icons.icons import (
     ICON_CONTOUR, ICON_COPY, ICON_CROP, ICON_DELETE, ICON_DELETE_SWEEP,
     ICON_EDIT, ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PASTE,
     ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH,
-    ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE, ICON_SHOW_CHART,
-    ICON_TONALITY,
+    ICON_ADJUST, ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE,
+    ICON_SHOW_CHART, ICON_TONALITY,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconModeButtonEditor,
@@ -256,6 +256,8 @@ class _ImageCanvasEditor(QtEditor):
             lambda roi_id: analysis.trait_set(selected_roi_id=roi_id))
         self._roi_layer.on_draw_cancelled = (
             lambda: analysis.trait_set(canvas_draw_cancelled=True))
+        self._roi_layer.on_ball_radius_changed = (
+            self._on_ball_radius_dragged)
         self._scale_layer = ScaleCanvasLayer(self._scene)
         self._scale_layer.on_line_drawn = self._on_scale_line_drawn
         self.control = _ImageView(self._scene, self._on_hover,
@@ -282,6 +284,9 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
             "roi_analysis:session:ring:show_on_canvas, "
+            "roi_analysis:session:ball:enabled, "
+            "roi_analysis:session:ball:radius_px, "
+            "roi_analysis:session:ball:show_reference, "
             "roi_analysis:selected_roi_id")
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode")
@@ -307,6 +312,9 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:ring:gap_px, "
             "roi_analysis:session:ring:thickness_px, "
             "roi_analysis:session:ring:show_on_canvas, "
+            "roi_analysis:session:ball:enabled, "
+            "roi_analysis:session:ball:radius_px, "
+            "roi_analysis:session:ball:show_reference, "
             "roi_analysis:selected_roi_id",
             remove=True)
         self.object.observe(self._on_interaction_mode_changed,
@@ -339,10 +347,22 @@ class _ImageCanvasEditor(QtEditor):
         ring = model.roi_analysis.session.ring
         self._roi_layer.set_ring(ring.gap_px, ring.thickness_px,
                                  ring.show_on_canvas)
+        ball = model.roi_analysis.session.ball
+        self._roi_layer.set_ball_reference(
+            ball.enabled and ball.show_reference, ball.radius_px)
         self._roi_layer.sync(
             model.roi_analysis.session.effective_for(model.current_path),
             model.roi_analysis.selected_roi_id)
         self._push_scale()
+
+    def _on_ball_radius_dragged(self, radius):
+        """The guide was resized on the canvas: that IS the setting, so
+        it goes straight to the session and the spinner follows."""
+        ball = self.object.roi_analysis.session.ball
+        radius = int(round(radius))
+        # The trait is a Range; anything outside it would raise rather
+        # than clamp, and a drag can reach either end.
+        ball.radius_px = max(min(radius, 500), 5)
 
     def _push_scale(self):
         """One path for a session swap and a fresh calibration."""
@@ -659,6 +679,14 @@ correction_group = HGroup(
                  "removed. Keep it comfortably larger than the "
                  "droplets, or the ball rolls over them and takes the "
                  "signal too. The image shows the result as you drag."),
+    UItem("object.roi_analysis.session.ball.show_reference",
+          editor=IconToggleEditor(
+              on_glyph=ICON_ADJUST, off_glyph=ICON_ADJUST,
+              tooltip="Draw the ball on the image at its true size, to "
+                      "hold against the droplets it has to clear. Drag "
+                      "the circle to move it, or its grip to set the "
+                      "radius by eye."),
+          enabled_when="object.roi_analysis.rolling_ball_enabled"),
     springy=True,
 )
 

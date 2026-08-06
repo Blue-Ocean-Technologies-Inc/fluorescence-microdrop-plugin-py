@@ -18,8 +18,8 @@ from .consts import (
 from .roi_compute import ring_contours
 from .roi_handles import ROI_SELECTED_PEN
 from .roi_items import (
-    BoxRoiItem, CapsuleRoiItem, EllipseRoiItem, PolygonRoiItem,
-    capsule_path,
+    BallReferenceItem, BoxRoiItem, CapsuleRoiItem, EllipseRoiItem,
+    PolygonRoiItem, capsule_path,
 )
 
 
@@ -42,6 +42,10 @@ RING_DASH = Qt.PenStyle.DashLine
 RING_Z = 0.5
 ROI_Z = 1.0
 
+#: Item id of the rolling-ball guide. Not an ROI id: it is never in
+#: the session, so it cannot collide with one.
+BALL_REFERENCE_ID = "__rolling_ball_reference__"
+
 
 class RoiCanvasLayer:
     """Owns the ROI items on the image scene (stateless wiring around Qt
@@ -63,6 +67,9 @@ class RoiCanvasLayer:
         self.on_roi_edited = lambda roi_id, geometry: None
         self.on_roi_selected = lambda roi_id: None
         self.on_draw_cancelled = lambda: None
+        self.on_ball_radius_changed = lambda radius: None
+        self._ball_item = None
+        self._ball_centre = None
         self._scene.selectionChanged.connect(self._selection_changed)
 
     def set_mode(self, mode):
@@ -70,6 +77,49 @@ class RoiCanvasLayer:
         self.mode = mode
         for item in self._items.values():
             item.set_editable(mode == "edit")
+        if self._ball_item is not None:
+            # A guide is a tool, not data: it stays draggable outside
+            # edit mode, but not while a draw tool is armed, where a
+            # click on it would swallow the first corner of a shape.
+            self._ball_item.set_editable(mode not in DRAW_KINDS)
+
+    def set_ball_reference(self, visible, radius_px):
+        """Show the rolling ball at its true size, or take it away.
+
+        It keeps wherever it was dragged to: the point of moving it is
+        to hold it against one feature and then another, and a guide
+        that jumped back to the middle on every radius change would
+        undo that with each nudge of the spinner."""
+        if not visible or radius_px <= 0:
+            if self._ball_item is not None:
+                self._scene.removeItem(self._ball_item)
+                self._ball_item = None
+            return
+        bounds = self._scene.sceneRect()
+        if self._ball_centre is None:
+            if bounds.isEmpty():
+                return
+            self._ball_centre = (bounds.center().x(),
+                                 bounds.center().y())
+        centre_x, centre_y = self._ball_centre
+        geometry = [centre_x, centre_y, float(radius_px),
+                    float(radius_px), 0.0]
+        if self._ball_item is None:
+            self._ball_item = BallReferenceItem(
+                BALL_REFERENCE_ID, "Rolling Ball Ref", geometry,
+                self._on_ball_edited)
+            self._ball_item.setZValue(ROI_Z)
+            self._scene.addItem(self._ball_item)
+            self._ball_item.set_editable(self.mode not in DRAW_KINDS)
+        elif not self._ball_item.is_dragging():
+            self._ball_item.set_geometry(geometry)
+
+    def _on_ball_edited(self, roi_id, geometry):
+        """The guide was dragged: its centre is where it now sits, and
+        its radius is the ball radius the user just chose by eye."""
+        centre_x, centre_y, radius_x, _radius_y, _angle = geometry
+        self._ball_centre = (centre_x, centre_y)
+        self.on_ball_radius_changed(radius_x)
 
     def set_ring(self, gap_px, thickness_px, visible):
         """The background annulus to draw around each ROI, from the
@@ -152,6 +202,7 @@ class RoiCanvasLayer:
     def clear_items(self):
         self._discard_contour()
         self._clear_rings()
+        self.set_ball_reference(False, 0)
         for item in self._items.values():
             self._scene.removeItem(item)
         self._items = {}
