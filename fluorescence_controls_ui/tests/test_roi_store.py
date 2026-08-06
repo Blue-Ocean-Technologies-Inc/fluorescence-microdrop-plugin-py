@@ -480,13 +480,27 @@ def test_moving_the_experiment_folder_keeps_the_cache(tmp_path):
         {"mean": 7.0}
 
 
+def _fit_entry(params, r_squared=0.99, fitted=(0.0, 190.0),
+               trimmed=False):
+    return {"params": params, "r_squared": r_squared,
+            "fitted_range_sec": list(fitted), "trimmed": trimmed}
+
+
 def test_fit_equations_are_keyed_by_equation_then_roi(tmp_path):
     save_fit_equations(tmp_path, "a*x + b",
-                       {"ROI 1": {"a": 2.0, "b": 3.0},
-                        "ROI 2": {"a": 5.0, "b": 7.0}})
+                       {"ROI 1": _fit_entry({"a": 2.0, "b": 3.0}),
+                        "ROI 2": _fit_entry({"a": 5.0, "b": 7.0})})
     payload = load_fit_equations(tmp_path)
-    assert payload == {"a*x + b": {"ROI 1": {"a": 2.0, "b": 3.0},
-                                   "ROI 2": {"a": 5.0, "b": 7.0}}}
+    assert list(payload) == ["a*x + b"]
+    roi = payload["a*x + b"]["ROI 1"]
+    assert roi["params"] == {"a": 2.0, "b": 3.0}
+    assert roi["r_squared"] == 0.99
+    assert roi["fitted_range_sec"] == [0.0, 190.0]
+    assert roi["trimmed"] is False
+    # Parameters keep their own key: an equation may name one
+    # "r_squared", and a fitted value must not be read as the quality
+    # of the fit that produced it.
+    assert "r_squared" not in roi["params"]
     # Readable on purpose: this one is small enough to indent whole.
     text = (tmp_path / "analysis" / "fit_equations.json").read_text(
         encoding="utf-8")
@@ -496,10 +510,10 @@ def test_fit_equations_are_keyed_by_equation_then_roi(tmp_path):
 def test_fitting_a_second_equation_keeps_the_first(tmp_path):
     # Keyed by equation so the file becomes the record of every model
     # tried on the experiment, not only the last one.
-    save_fit_equations(tmp_path, "a*x + b", {"ROI 1": {"a": 2.0,
-                                                       "b": 3.0}})
-    save_fit_equations(tmp_path, "a*exp(-b*x)", {"ROI 1": {"a": 9.0,
-                                                           "b": 0.1}})
+    save_fit_equations(tmp_path, "a*x + b",
+                       {"ROI 1": _fit_entry({"a": 2.0, "b": 3.0})})
+    save_fit_equations(tmp_path, "a*exp(-b*x)",
+                       {"ROI 1": _fit_entry({"a": 9.0, "b": 0.1})})
     payload = load_fit_equations(tmp_path)
     assert sorted(payload) == ["a*exp(-b*x)", "a*x + b"]
 
@@ -508,16 +522,15 @@ def test_refitting_one_equation_replaces_its_rois(tmp_path):
     # The entry is the fit of the ROIs that exist now; one deleted
     # since must not linger under the same equation.
     save_fit_equations(tmp_path, "a*x + b",
-                       {"ROI 1": {"a": 1.0, "b": 1.0},
-                        "ROI 2": {"a": 2.0, "b": 2.0}})
+                       {"ROI 1": _fit_entry({"a": 1.0, "b": 1.0}),
+                        "ROI 2": _fit_entry({"a": 2.0, "b": 2.0})})
     save_fit_equations(tmp_path, "a*x + b",
-                       {"ROI 1": {"a": 9.0, "b": 9.0}})
-    assert load_fit_equations(tmp_path) == {
-        "a*x + b": {"ROI 1": {"a": 9.0, "b": 9.0}}}
+                       {"ROI 1": _fit_entry({"a": 9.0, "b": 9.0})})
+    assert list(load_fit_equations(tmp_path)["a*x + b"]) == ["ROI 1"]
 
 
 def test_nothing_to_record_writes_no_fit_file(tmp_path):
-    save_fit_equations(tmp_path, "", {"ROI 1": {"a": 1.0}})
+    save_fit_equations(tmp_path, "", {"ROI 1": _fit_entry({"a": 1.0})})
     save_fit_equations(tmp_path, "a*x + b", {})
     assert not (tmp_path / "analysis" / "fit_equations.json").exists()
     assert load_fit_equations(tmp_path) == {}

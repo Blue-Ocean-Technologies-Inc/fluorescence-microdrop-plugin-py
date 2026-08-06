@@ -639,8 +639,21 @@ class RoiAnalysisController(HasTraits):
             fit = fit_series(elapsed, values, method,
                              session.figure.trim_poor_fit, expression,
                              session.figure.initial_guesses)
-            if fit is not None:
-                fits[name] = fit.params
+            if fit is None:
+                continue
+            finite = [time for time, value in zip(elapsed, values)
+                      if value == value]
+            series_end = max(finite) if finite else fit.fitted_end
+            fits[name] = {
+                "params": fit.params,
+                "r_squared": fit.r_squared,
+                # The span actually solved on, and whether that is
+                # short of the data — a parameter set from a trimmed
+                # fit describes only that stretch, and read without
+                # this it looks like it describes the whole series.
+                "fitted_range_sec": [fit.fitted_start, fit.fitted_end],
+                "trimmed": bool(fit.fitted_end < series_end),
+            }
         try:
             save_fit_equations(
                 directory,

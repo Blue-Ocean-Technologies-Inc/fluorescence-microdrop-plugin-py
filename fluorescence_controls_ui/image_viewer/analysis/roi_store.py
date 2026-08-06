@@ -398,7 +398,14 @@ def load_fit_equations(experiment_directory) -> dict:
 
 
 def save_fit_equations(experiment_directory, equation, fits):
-    """Record what ``equation`` fitted to, as {ROI: {parameter: value}}.
+    """Record what ``equation`` fitted to, as
+    {ROI: {"params": {...}, "r_squared": ..., "fitted_range_sec": ...,
+    "trimmed": ...}}.
+
+    The parameters sit under their own key rather than at the top of
+    the ROI's dict: an equation is free to name a parameter anything,
+    ``r_squared`` included, and a fitted value must never be mistaken
+    for the quality of the fit that produced it.
 
     Keyed by the equation in symbolic form, so the file accumulates one
     entry per model tried on this experiment rather than only the last
