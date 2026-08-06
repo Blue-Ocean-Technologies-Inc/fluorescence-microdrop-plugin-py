@@ -15,7 +15,7 @@ from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
 from .roi_model import (
     AnalysisSession, BackgroundRing, FigureSettings, Roi, RoiStyle,
-    ScaleCalibration,
+    RollingBall, ScaleCalibration,
 )
 
 logger = get_logger(__name__)
@@ -44,6 +44,10 @@ _SCALE_FIELDS = ("metres_per_pixel", "value", "unit")
 #: Persisted BackgroundRing fields (tolerated-missing on load).
 _RING_FIELDS = ("gap_px", "thickness_px", "show_on_canvas")
 
+#: Persisted RollingBall fields (tolerated-missing on load, so a config
+#: written before the ball existed opens with it off).
+_BALL_FIELDS = ("enabled", "radius_px")
+
 
 def analysis_directory(experiment_directory) -> Path:
     """The experiment's analysis output folder, created on demand."""
@@ -62,6 +66,8 @@ def save_session(experiment_directory, session):
                   for name in _SCALE_FIELDS},
         "ring": {name: getattr(session.ring, name)
                  for name in _RING_FIELDS},
+        "ball": {name: getattr(session.ball, name)
+                 for name in _BALL_FIELDS},
         "rois": [{
             "roi_id": roi.roi_id,
             "name": roi.name,
@@ -158,6 +164,15 @@ def load_session(experiment_directory) -> AnalysisSession:
         except Exception as error:
             logger.warning(f"Ignoring invalid ring settings in "
                            f"{path}: {error}")
+        try:
+            ball = RollingBall()
+            ball.trait_set(**{name: payload.get("ball", {})[name]
+                              for name in _BALL_FIELDS
+                              if name in payload.get("ball", {})})
+            session.ball = ball
+        except Exception as error:
+            logger.warning(f"Ignoring invalid rolling-ball settings in "
+                           f"{path}: {error}")
     return session
 
 
@@ -182,6 +197,12 @@ def _stats_key(entry):
     # came from a stroke straddling the boundary, so None here keeps it
     # from ever matching a current key.
     ring = entry.get("ring")
+    if ring is not None and len(ring) < 3:
+        # Written before the rolling ball existed, which is to say it
+        # was computed with no ball — radius 0, exactly what a current
+        # key carries when the ball is off. Padding rather than
+        # discarding keeps every stored intensity valid.
+        ring = list(ring) + [0]
     return (entry["path"], float(entry["mtime"]), entry["roi_id"],
             kind, tuple(geometry),
             tuple(ring) if ring is not None else None)

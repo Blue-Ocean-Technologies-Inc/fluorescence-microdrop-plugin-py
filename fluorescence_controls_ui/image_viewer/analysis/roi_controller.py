@@ -314,8 +314,7 @@ class RoiAnalysisController(HasTraits):
                     self._dispatched_keys[(str(path), roi.roi_id)] = key
             if missing:
                 work.append((str(path), missing,
-                             (session.ring.gap_px,
-                              session.ring.thickness_px)))
+                             session.correction_key()))
         return work
 
     def _start_batch(self, work=None):
@@ -416,10 +415,9 @@ class RoiAnalysisController(HasTraits):
         self._dispatched_keys[(current, roi.roi_id)] = key
         if key in self.session.stats:
             return
-        ring = self.session.ring
         self.runner.compute_single(
             current, {roi.roi_id: (roi.kind, tuple(key[4]))},
-            (ring.gap_px, ring.thickness_px))
+            self.session.correction_key())
 
     # ------------------------------------------------------------------ #
     # Persistence                                                          #
@@ -541,7 +539,9 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:scale:unit, "
              "analysis_model:session:ring:gap_px, "
              "analysis_model:session:ring:thickness_px, "
-             "analysis_model:session:ring:show_on_canvas")
+             "analysis_model:session:ring:show_on_canvas, "
+             "analysis_model:session:ball:enabled, "
+             "analysis_model:session:ball:radius_px")
     def _on_plot_settings_changed(self, event):
         self._save_config()
 

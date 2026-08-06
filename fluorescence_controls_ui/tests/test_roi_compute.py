@@ -5,7 +5,8 @@ import cv2
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_compute import (
-    compute_image_stats, masked_stats, ring_contours, roi_masks,
+    _shrink_factor, compute_image_stats, masked_stats, ring_contours,
+    roi_masks, subtract_rolling_ball,
 )
 
 
@@ -203,3 +204,68 @@ def test_ring_contours_trace_the_annulus():
                      for points in contours)
     assert abs(extents[0] - 42.0) < 2.0    # inner edge: radius + gap
     assert abs(extents[1] - 46.0) < 2.0    # outer: + thickness
+
+
+def _uneven_frame(height=240, width=320, signal=800.0, radius=12):
+    """A 16-bit frame: a smooth ramp-and-swell background with a
+    bright disk on it, and the disk's mask."""
+    y, x = np.mgrid[0:height, 0:width].astype(float)
+    background = (400.0 + 2.0 * x + 900.0 * np.sin(y / height * 2.0))
+    mask = (x - width / 2) ** 2 + (y - height / 2) ** 2 <= radius ** 2
+    frame = background + mask * signal
+    return (np.clip(frame, 0, 65535).astype(np.uint16), background,
+            mask)
+
+
+def test_the_rolling_ball_flattens_a_16_bit_frame():
+    frame, background, mask = _uneven_frame()
+    assert frame.dtype == np.uint16
+    corrected = subtract_rolling_ball(frame, 40)
+    assert corrected.dtype == np.uint16, "16-bit in, 16-bit out"
+    # The background spanned hundreds of counts and is now near zero,
+    # while the disk keeps most of its height.
+    away = ~mask
+    assert frame[away].std() > 200.0
+    assert corrected[away].mean() < 60.0
+    assert corrected[mask].mean() > 700.0
+
+
+def test_the_ball_leaves_a_flat_frame_alone():
+    flat = np.full((120, 160), 5000, dtype=np.uint16)
+    assert int(subtract_rolling_ball(flat, 30).max()) == 0
+
+
+def test_a_ball_smaller_than_the_signal_eats_it():
+    # The failure mode worth knowing: a ball that fits inside the
+    # droplet rolls over it and calls it background.
+    frame, _background, mask = _uneven_frame(signal=800.0, radius=30)
+    kept_big = subtract_rolling_ball(frame, 60)[mask].mean()
+    kept_small = subtract_rolling_ball(frame, 8)[mask].mean()
+    assert kept_big > 700.0
+    assert kept_small < kept_big / 2.0
+
+
+def test_the_estimate_shrinks_but_the_measurement_does_not():
+    frame, _background, mask = _uneven_frame()
+    corrected = subtract_rolling_ball(frame, 40)
+    # Same shape, so an ROI still averages exactly its own pixels —
+    # the shrink applies to the background estimate alone.
+    assert corrected.shape == frame.shape
+    assert int(np.count_nonzero(mask)) == int(np.count_nonzero(mask))
+    assert _shrink_factor(8) == 1        # small ball: no shrink
+    assert _shrink_factor(50) == 4
+    assert _shrink_factor(400) == 8
+
+
+def test_compute_image_stats_measures_the_corrected_frame(tmp_path):
+    frame, _background, _mask = _uneven_frame()
+    path = tmp_path / "uneven_raw.png"
+    cv2.imwrite(str(path), frame)
+    rois = {"a": ("ellipse", (160.0, 120.0, 12.0, 12.0, 0.0))}
+    raw = compute_image_stats(str(path), rois)["stats"]["a"]
+    flattened = compute_image_stats(str(path), rois,
+                                    ball_radius_px=40)["stats"]["a"]
+    assert raw["count"] == flattened["count"], "same pixels measured"
+    # The background sat under the ROI; flattening takes it away.
+    assert raw["mean"] > flattened["mean"] + 300.0
+    assert flattened["mean"] > 700.0

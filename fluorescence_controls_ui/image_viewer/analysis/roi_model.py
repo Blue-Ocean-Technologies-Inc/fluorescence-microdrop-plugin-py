@@ -13,7 +13,9 @@ from traits.api import (
 
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
-from .consts import RING_GAP_PX, RING_THICKNESS_PX, VIEW_MODES
+from .consts import (
+    RING_GAP_PX, RING_THICKNESS_PX, ROLLING_BALL_RADIUS_PX, VIEW_MODES,
+)
 from .curve_fit import FIT_METHODS
 from .fit_presets import choices_for
 
@@ -120,6 +122,24 @@ class ScaleCalibration(HasTraits):
 
     def calibrated(self):
         return self.metres_per_pixel > 0.0
+
+
+class RollingBall(HasTraits):
+    """Rolling-ball flattening applied to the whole frame before any
+    ROI is measured (persisted per experiment). Like the ring, this
+    changes what is measured, so it is part of the stats cache key.
+
+    The radius is the scale of the unevenness to remove: it must be
+    comfortably larger than the features being measured, or the ball
+    rolls over them and takes the signal with the background."""
+
+    enabled = Bool(False)
+    radius_px = Range(5, 500, ROLLING_BALL_RADIUS_PX, mode="spinner")
+
+    def effective_radius(self):
+        """The radius to correct with, or 0 when it is switched off —
+        what compute_image_stats takes."""
+        return self.radius_px if self.enabled else 0
 
 
 class BackgroundRing(HasTraits):
@@ -229,6 +249,9 @@ class AnalysisSession(HasTraits):
     #: Where each ROI's background is measured (part of the cache key).
     ring = Instance(BackgroundRing, ())
 
+    #: Frame-wide flattening applied before measuring (cache key too).
+    ball = Instance(RollingBall, ())
+
     def roi_by_id(self, roi_id):
         for roi in self.rois:
             if roi.roi_id == roi_id:
@@ -273,7 +296,15 @@ class AnalysisSession(HasTraits):
         mtime, capture_time = self.stat_info(path, stat_cache)
         return (str(path), mtime, roi.roi_id, roi.kind,
                 tuple(roi.effective_geometry(capture_time)),
-                (self.ring.gap_px, self.ring.thickness_px))
+                self.correction_key())
+
+    def correction_key(self):
+        """Everything about how the image is treated before a stat is
+        read off it — the ring, and the rolling ball that runs before
+        it. One tuple, so the cache key and the work item cannot drift
+        apart."""
+        return (self.ring.gap_px, self.ring.thickness_px,
+                self.ball.effective_radius())
 
     def effective_for(self, path):
         """[(roi_id, name, kind, geometry), ...] in force for ``path`` —

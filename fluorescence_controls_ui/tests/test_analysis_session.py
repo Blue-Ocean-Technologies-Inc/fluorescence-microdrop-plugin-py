@@ -50,7 +50,24 @@ def test_cache_key_includes_the_ring(tmp_path):
     session.ring.gap_px = 5
     after = session.cache_key(str(image), roi)
     assert before != after
-    assert after[5] == (5, session.ring.thickness_px)
+    assert after[5] == (5, session.ring.thickness_px, 0)
+
+
+def test_cache_key_includes_the_rolling_ball(tmp_path):
+    image = tmp_path / "a_2026_07_20-10_00_00_raw.png"
+    image.write_bytes(b"")
+    roi = Roi(name="ROI 1", kind="ellipse",
+              geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    session = AnalysisSession(rois=[roi])
+    before = session.cache_key(str(image), roi)
+    session.ball.enabled = True
+    after = session.cache_key(str(image), roi)
+    assert before != after, "flattening the frame changes the numbers"
+    assert after[5][2] == session.ball.radius_px
+    # A radius set while the ball is off changes nothing measured.
+    session.ball.enabled = False
+    session.ball.radius_px = 123
+    assert session.cache_key(str(image), roi) == before
 
 
 def test_model_gains_session_and_mirrors():
@@ -83,7 +100,7 @@ def test_experiment_switch_saves_and_reloads_stats(tmp_path, monkeypatch):
     viewer.browsed_directory = str(exp_a / "captures")
 
     key = ("img.png", 1.0, "abcd1234", "ellipse",
-           (5.0, 5.0, 2.0, 2.0, 0.0), (2, 4))
+           (5.0, 5.0, 2.0, 2.0, 0.0), (2, 4, 0))
     controller.session.stats[key] = {"mean": 7.0, "count": 4.0}
     controller._mark_stats_dirty()
 

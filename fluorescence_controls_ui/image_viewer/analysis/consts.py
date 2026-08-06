@@ -6,6 +6,11 @@
 RING_GAP_PX = 2
 RING_THICKNESS_PX = 4
 
+#: Default rolling-ball radius (px): the scale of unevenness removed
+#: from the whole frame before any ROI is measured. Comfortably larger
+#: than a droplet, or the ball rolls over the signal too.
+ROLLING_BALL_RADIUS_PX = 50
+
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).
 OUTLINE_STATS_PREFIX = "outline_"
 

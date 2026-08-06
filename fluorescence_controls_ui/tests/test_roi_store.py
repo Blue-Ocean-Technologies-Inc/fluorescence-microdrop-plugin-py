@@ -103,7 +103,7 @@ def test_load_session_missing_or_corrupt_is_empty(tmp_path):
 
 def test_stats_store_round_trip_including_nan(tmp_path):
     key = (str(tmp_path / "a_raw.png"), 123.5, "abcd1234", "ellipse",
-           (10.0, 10.0, 5.0, 5.0, 0.0), (2, 4))
+           (10.0, 10.0, 5.0, 5.0, 0.0), (2, 4, 0))
     stats = {"mean": 42.5, "std": float("nan"), "count": 9.0}
     save_roi_stats(tmp_path, {key: stats})
 
@@ -168,6 +168,7 @@ def test_a_pre_rounding_box_keeps_its_cached_stats(tmp_path):
             "path": str(image), "mtime": image.stat().st_mtime,
             "roi_id": "abcd1234", "kind": "box",
             "geometry": [10.0, 20.0, 30.0, 40.0, 0.0],
+            # Two values: written before the rolling ball existed.
             "ring": [2, 4], "stats": {"mean": 7.0},
         }],
     }))
@@ -181,6 +182,29 @@ def test_a_pre_rounding_box_keeps_its_cached_stats(tmp_path):
     session = load_session(tmp_path)
     session.stats = load_roi_stats(tmp_path)
 
+    (roi,) = session.rois
+    assert session.stats[session.cache_key(image, roi)] == {"mean": 7.0}
+
+
+def test_stats_from_before_the_rolling_ball_still_match(tmp_path):
+    # Those numbers were computed with no ball, which is what radius 0
+    # means now — they must not be silently recomputed.
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    image = tmp_path / "a_raw.png"
+    image.write_bytes(b"")
+    (analysis / "roi_stats.json").write_text(json.dumps({
+        "version": 1, "entries": [{
+            "path": str(image), "mtime": image.stat().st_mtime,
+            "roi_id": "abcd1234", "kind": "ellipse",
+            "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
+            "ring": [2, 4], "stats": {"mean": 7.0},
+        }],
+    }))
+    session = AnalysisSession(rois=[
+        Roi(roi_id="abcd1234", name="ROI 1", kind="ellipse",
+            geometry=[5.0, 5.0, 2.0, 2.0, 0.0])])
+    session.stats = load_roi_stats(tmp_path)
     (roi,) = session.rois
     assert session.stats[session.cache_key(image, roi)] == {"mean": 7.0}
 
@@ -345,7 +369,7 @@ def test_stats_survive_a_save_after_loading_pre_ring_entries(tmp_path):
     }))
     store = load_roi_stats(tmp_path)
     fresh = (str(tmp_path / "new_raw.png"), 2.0, "abcd1234", "ellipse",
-             (5.0, 5.0, 2.0, 2.0, 0.0), (2, 4))
+             (5.0, 5.0, 2.0, 2.0, 0.0), (2, 4, 0))
     store[fresh] = {"mean": 9.0}
     save_roi_stats(tmp_path, store)
 

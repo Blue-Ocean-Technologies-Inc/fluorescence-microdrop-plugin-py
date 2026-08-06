@@ -251,6 +251,22 @@ _plot_controls_view = View(
                  tooltip="Thickness of the background ring, in pixels. "
                          "Changing either value recomputes the "
                          "statistics."),
+            UItem("session.ball.enabled",
+                  editor=InPlaceToggleEditor(on_label="Rolling ball",
+                                             off_label="Rolling ball"),
+                  tooltip="Flatten each frame before measuring: the "
+                          "rolling-ball estimate of uneven "
+                          "illumination is subtracted from the whole "
+                          "image, so every stat below is read off the "
+                          "corrected frame."),
+            Item("session.ball.radius_px", label="Ball r",
+                 editor=RangeEditor(low=5, high=500, mode="spinner",
+                                    auto_set=True),
+                 enabled_when="session.ball.enabled",
+                 tooltip="Ball radius in pixels — the scale of the "
+                         "unevenness removed. Keep it comfortably "
+                         "larger than the droplets, or the ball rolls "
+                         "over them and takes the signal too."),
         ),
     ),
 )
