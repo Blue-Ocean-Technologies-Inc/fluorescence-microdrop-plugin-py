@@ -90,6 +90,10 @@ VIEW_MODE_LABELS = {"intensity": "Intensity",
 #: Persisted computed-stats store inside ANALYSIS_DIR_NAME.
 ROI_STATS_FILENAME = "roi_stats.json"
 
+#: Fitted parameters, written beside each CSV export: equation ->
+#: ROI -> {parameter: fitted value}.
+FIT_EQUATIONS_FILENAME = "fit_equations.json"
+
 #: Seconds of quiet since the last change before a debounced write of
 #: the stats store.
 STATS_SAVE_DEBOUNCE_S = 2.0

@@ -8,8 +8,8 @@ from pathlib import Path
 
 from logger.logger_service import get_logger
 
-from .consts import ANALYSIS_DIR_NAME, OUTLINE_STATS_PREFIX, \
-    ROI_CONFIG_FILENAME, ROI_STATS_FILENAME
+from .consts import ANALYSIS_DIR_NAME, FIT_EQUATIONS_FILENAME, \
+    OUTLINE_STATS_PREFIX, ROI_CONFIG_FILENAME, ROI_STATS_FILENAME
 from .plot_series import normalized_series, stat_value
 from .roi_compute import STAT_NAMES
 from .roi_geometry import normalize
@@ -380,3 +380,38 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
                 if normalize_stat is not None:
                     record += [normalised[roi.roi_id][index]]
                 writer.writerow(record + settings)
+
+
+def load_fit_equations(experiment_directory) -> dict:
+    """The saved fitted parameters, {} when absent or unreadable:
+    {equation: {roi name: {parameter: value}}}."""
+    path = (Path(experiment_directory) / ANALYSIS_DIR_NAME
+            / FIT_EQUATIONS_FILENAME)
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception as error:
+        logger.warning(f"Could not load fit equations {path}: {error}")
+        return {}
+
+
+def save_fit_equations(experiment_directory, equation, fits):
+    """Record what ``equation`` fitted to, as {ROI: {parameter: value}}.
+
+    Keyed by the equation in symbolic form, so the file accumulates one
+    entry per model tried on this experiment rather than only the last
+    — fitting a sigmoid and then a custom decay leaves both, which is
+    what makes the file worth keeping.
+
+    The ROI sits between the equation and its parameters because every
+    ROI is fitted separately: one equation, one parameter set each."""
+    if not equation or not fits:
+        return
+    payload = load_fit_equations(experiment_directory)
+    # The whole entry is replaced, not merged per ROI: it is the fit of
+    # the ROIs that exist now, and a deleted one should not linger.
+    payload[equation] = fits
+    path = analysis_directory(experiment_directory) / FIT_EQUATIONS_FILENAME
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

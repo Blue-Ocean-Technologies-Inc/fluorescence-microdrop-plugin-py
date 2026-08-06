@@ -9,7 +9,8 @@ from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
     AnalysisSession, Roi, RoiStyle,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
-    load_roi_stats, load_session, save_roi_stats, save_session,
+    load_fit_equations, load_roi_stats, load_session,
+    save_fit_equations, save_roi_stats, save_session,
     write_intensity_csv,
 )
 
@@ -477,3 +478,53 @@ def test_moving_the_experiment_folder_keeps_the_cache(tmp_path):
     moved_image = moved / "captures" / "a_raw.png"
     assert load_roi_stats(moved)[_stats_key_for(moved_image)] == \
         {"mean": 7.0}
+
+
+def test_fit_equations_are_keyed_by_equation_then_roi(tmp_path):
+    save_fit_equations(tmp_path, "a*x + b",
+                       {"ROI 1": {"a": 2.0, "b": 3.0},
+                        "ROI 2": {"a": 5.0, "b": 7.0}})
+    payload = load_fit_equations(tmp_path)
+    assert payload == {"a*x + b": {"ROI 1": {"a": 2.0, "b": 3.0},
+                                   "ROI 2": {"a": 5.0, "b": 7.0}}}
+    # Readable on purpose: this one is small enough to indent whole.
+    text = (tmp_path / "analysis" / "fit_equations.json").read_text(
+        encoding="utf-8")
+    assert len(text.splitlines()) > 5
+
+
+def test_fitting_a_second_equation_keeps_the_first(tmp_path):
+    # Keyed by equation so the file becomes the record of every model
+    # tried on the experiment, not only the last one.
+    save_fit_equations(tmp_path, "a*x + b", {"ROI 1": {"a": 2.0,
+                                                       "b": 3.0}})
+    save_fit_equations(tmp_path, "a*exp(-b*x)", {"ROI 1": {"a": 9.0,
+                                                           "b": 0.1}})
+    payload = load_fit_equations(tmp_path)
+    assert sorted(payload) == ["a*exp(-b*x)", "a*x + b"]
+
+
+def test_refitting_one_equation_replaces_its_rois(tmp_path):
+    # The entry is the fit of the ROIs that exist now; one deleted
+    # since must not linger under the same equation.
+    save_fit_equations(tmp_path, "a*x + b",
+                       {"ROI 1": {"a": 1.0, "b": 1.0},
+                        "ROI 2": {"a": 2.0, "b": 2.0}})
+    save_fit_equations(tmp_path, "a*x + b",
+                       {"ROI 1": {"a": 9.0, "b": 9.0}})
+    assert load_fit_equations(tmp_path) == {
+        "a*x + b": {"ROI 1": {"a": 9.0, "b": 9.0}}}
+
+
+def test_nothing_to_record_writes_no_fit_file(tmp_path):
+    save_fit_equations(tmp_path, "", {"ROI 1": {"a": 1.0}})
+    save_fit_equations(tmp_path, "a*x + b", {})
+    assert not (tmp_path / "analysis" / "fit_equations.json").exists()
+    assert load_fit_equations(tmp_path) == {}
+
+
+def test_an_unreadable_fit_file_is_no_fits(tmp_path):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "fit_equations.json").write_text("{not json")
+    assert load_fit_equations(tmp_path) == {}

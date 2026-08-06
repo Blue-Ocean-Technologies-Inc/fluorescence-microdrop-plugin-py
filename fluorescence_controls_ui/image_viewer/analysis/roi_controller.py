@@ -23,7 +23,9 @@ from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import (
     DEFAULT_ROI_COLORS, PASTE_OFFSET_PX, STATS_SAVE_DEBOUNCE_S,
 )
-from .fit_presets import load_presets, save_presets
+from .curve_fit import FIT_LABELS, fit_series
+from .fit_presets import fit_arguments, load_presets, save_presets
+from .plot_series import derive_series
 from .roi_geometry import translated
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
@@ -31,8 +33,8 @@ from .roi_batch import (
 )
 from .roi_model import AnalysisSession, Roi, RoiAnalysisModel, RoiStyle
 from .roi_store import (
-    analysis_directory, load_roi_stats, load_session, save_roi_stats,
-    save_session, write_intensity_csv,
+    analysis_directory, load_roi_stats, load_session, save_fit_equations,
+    save_roi_stats, save_session, write_intensity_csv,
 )
 
 logger = get_logger(__name__)
@@ -606,6 +608,7 @@ class RoiAnalysisController(HasTraits):
                 f"{sanitize_label(self.viewer_model.selected_wavelength)}_"
                 f"{capture_service.utc_stamp()}.csv")
         csv_path = analysis_directory(directory) / name
+        self._write_fit_equations(directory)
         scale = session.scale
         try:
             write_intensity_csv(
@@ -620,6 +623,30 @@ class RoiAnalysisController(HasTraits):
             return
         self.analysis_model.progress_text = f"Exported {csv_path.name}"
         logger.info(f"ROI intensities exported to {csv_path}")
+
+    def _write_fit_equations(self, directory):
+        """Record the fitted parameters beside the CSV, keyed by the
+        equation — the numbers behind the curves the export describes,
+        which the CSV itself has no column for."""
+        session = self.session
+        method, expression = fit_arguments(session.figure,
+                                           self.analysis_model.fit_presets)
+        if method == "none":
+            return
+        fits = {}
+        for roi_id, (name, elapsed, values) in derive_series(
+                session, self.analysis_model.filtered_paths).items():
+            fit = fit_series(elapsed, values, method,
+                             session.figure.trim_poor_fit, expression,
+                             session.figure.initial_guesses)
+            if fit is not None:
+                fits[name] = fit.params
+        try:
+            save_fit_equations(
+                directory,
+                expression or FIT_LABELS.get(method, method), fits)
+        except Exception as error:
+            logger.warning(f"Could not write fit equations: {error}")
 
     def _group_of(self, path):
         """The image-group (burst folder) name a capture belongs to."""
