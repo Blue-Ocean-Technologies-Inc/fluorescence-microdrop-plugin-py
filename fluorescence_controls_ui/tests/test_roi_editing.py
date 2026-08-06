@@ -127,3 +127,24 @@ def test_copy_with_nothing_selected_and_paste_with_nothing_copied():
     model.paste_roi_button = True
     assert controller.session.rois == []
     assert model.progress_text == "Nothing copied yet"
+
+
+def test_saved_fit_presets_load_whichever_order_the_models_arrive():
+    # Both models are constructor arguments and traits assigns them one
+    # at a time, so the observer has to wait for the second. The pane
+    # passes viewer_model first, which is the order that used to raise
+    # inside the notifier and quietly leave the dropdown empty.
+    from fluorescence_controls_ui.image_viewer.analysis.fit_presets import (
+        save_presets,
+    )
+
+    viewer = FluorescenceImageViewerModel()
+    viewer.preferences.fluorescence_fit_presets = save_presets(
+        [("Bleach", "a*exp(-b*x) + c")])
+    for kwargs in (dict(viewer_model=viewer,
+                        analysis_model=RoiAnalysisModel()),
+                   dict(analysis_model=RoiAnalysisModel(),
+                        viewer_model=viewer)):
+        controller = RoiAnalysisController(**kwargs)
+        assert [name for name, _text
+                in controller.analysis_model.fit_presets] == ["Bleach"]

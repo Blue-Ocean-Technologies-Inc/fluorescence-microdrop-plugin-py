@@ -21,6 +21,7 @@ from microdrop_style.icons.icons import (
     ICON_EDIT, ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PASTE,
     ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH,
     ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE, ICON_SHOW_CHART,
+    ICON_TONALITY,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconModeButtonEditor,
@@ -29,6 +30,7 @@ from microdrop_utils.traitsui_qt_helpers import (
 
 from ..cameras.asi_thread import frame_to_qimage
 from .analysis.roi_canvas_layer import RoiCanvasLayer
+from .analysis.roi_compute import subtract_rolling_ball
 from .display import stretch_to_8bit
 from .scale_bar import (
     DEFAULT_UNIT, UNITS, metres_per_pixel, nice_scale,
@@ -237,6 +239,8 @@ class _ImageCanvasEditor(QtEditor):
     scrollable = True
 
     def init(self, parent):
+        self._corrected = None
+        self._corrected_key = None
         self._scene = QGraphicsScene()
         self._pixmap_item = QGraphicsPixmapItem()
         self._scene.addItem(self._pixmap_item)
@@ -261,6 +265,11 @@ class _ImageCanvasEditor(QtEditor):
                 **{f"{action}_roi_button": True}))
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max")
+        self.object.observe(
+            self._on_correction_changed,
+            "roi_analysis:session:ball:enabled, "
+            "roi_analysis:session:ball:radius_px, "
+            "roi_analysis:session")
         self.object.observe(self._on_fit_request, "fit_request")
         self.object.observe(
             self._on_roi_state_changed,
@@ -281,6 +290,11 @@ class _ImageCanvasEditor(QtEditor):
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max",
                             remove=True)
+        self.object.observe(
+            self._on_correction_changed,
+            "roi_analysis:session:ball:enabled, "
+            "roi_analysis:session:ball:radius_px, "
+            "roi_analysis:session", remove=True)
         self.object.observe(self._on_fit_request, "fit_request", remove=True)
         self.object.observe(
             self._on_roi_state_changed,
@@ -307,6 +321,9 @@ class _ImageCanvasEditor(QtEditor):
 
     def _on_window_changed(self, event):
         self._redraw()   # window edit: keep the user's zoom
+
+    def _on_correction_changed(self, event):
+        self._redraw()   # a different frame to show, same zoom
 
     def _on_fit_request(self, event):
         self.control.fit()
@@ -359,8 +376,27 @@ class _ImageCanvasEditor(QtEditor):
             self.control.DragMode.ScrollHandDrag if mode == "pan"
             else self.control.DragMode.NoDrag)
 
-    def _redraw(self):
+    def _display_array(self):
+        """The frame to show: the rolling-ball-corrected one while that
+        correction is on, so the canvas shows what is being measured
+        rather than what was on disk.
+
+        Cached against the frame and the radius — the correction costs
+        real work, and a redraw also happens for every contrast nudge,
+        which changes nothing about it."""
         array = self.value
+        analysis = self.object.roi_analysis
+        radius = analysis.session.ball.effective_radius()
+        if array is None or not radius:
+            return array
+        key = (id(array), radius)
+        if self._corrected_key != key:
+            self._corrected_key = key
+            self._corrected = subtract_rolling_ball(array, radius)
+        return self._corrected
+
+    def _redraw(self):
+        array = self._display_array()
         if array is None:
             self._pixmap_item.setPixmap(QPixmap())
             return
@@ -519,6 +555,14 @@ analysis_toolbar = VGroup(
               glyph=ICON_RULER, mode="draw_scale",
               tooltip="Set the image scale: drag a line of known "
                       "length, then type what it measures")),
+    UItem("object.roi_analysis.rolling_ball_enabled",
+          editor=IconToggleEditor(
+              on_glyph=ICON_TONALITY, off_glyph=ICON_TONALITY,
+              tooltip="Rolling-ball background correction: flattens "
+                      "uneven illumination out of every frame before "
+                      "the ROIs are measured. While it is on, the "
+                      "image below shows the corrected frame, so what "
+                      "you see is what is measured.")),
     UItem("object.roi_analysis.show_background_ring",
           editor=IconToggleEditor(
               on_glyph=ICON_CROP, off_glyph=ICON_CROP,
@@ -585,6 +629,40 @@ sidebar_group = VGroup(
 )
 
 
+#: The measurement settings, under the image they act on: two for the
+#: background ring around each ROI, one for the rolling ball over the
+#: whole frame. They live here rather than with the plot because they
+#: decide what is measured, and because the canvas above shows their
+#: effect as they are dragged.
+correction_group = HGroup(
+    Label("Background"),
+    # auto_set: a typed value must reach the session before Calculate
+    # reads it, or the batch finds nothing missing and reports "up to
+    # date" against the old ring.
+    Item("object.roi_analysis.session.ring.gap_px", label="gap",
+         editor=RangeEditor(low=0, high=50, mode="spinner",
+                            auto_set=True),
+         tooltip="Pixels between an ROI's edge and the ring its "
+                 "background is read from. Fluorescence bleeds a pixel "
+                 "or two past the boundary and that halo is not "
+                 "background."),
+    Item("object.roi_analysis.session.ring.thickness_px", label="width",
+         editor=RangeEditor(low=1, high=50, mode="spinner",
+                            auto_set=True),
+         tooltip="Thickness of the background ring, in pixels. "
+                 "Changing either value recomputes the statistics."),
+    Item("object.roi_analysis.session.ball.radius_px", label="Ball r",
+         editor=RangeEditor(low=5, high=500, mode="spinner",
+                            auto_set=True),
+         enabled_when="object.roi_analysis.rolling_ball_enabled",
+         tooltip="Ball radius in pixels — the scale of the unevenness "
+                 "removed. Keep it comfortably larger than the "
+                 "droplets, or the ball rolls over them and takes the "
+                 "signal too. The image shows the result as you drag."),
+    springy=True,
+)
+
+
 ImageViewerView = View(
     HGroup(
         VGroup(UItem("show_sidebar", editor=IconToggleEditor(
@@ -596,6 +674,7 @@ ImageViewerView = View(
                 buttons_group,
                 UItem("array", editor=ImageCanvasEditor(), springy=True,
                       resizable=True),
+                correction_group,
                 HGroup(
                     UItem("pixel_text", style="readonly"),
                     UItem("scale_text", style="readonly"),

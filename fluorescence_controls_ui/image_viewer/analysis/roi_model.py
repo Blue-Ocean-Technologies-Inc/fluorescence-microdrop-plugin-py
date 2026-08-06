@@ -347,6 +347,7 @@ class RoiAnalysisModel(HasTraits):
     #: toolbar is built once against this model while sessions swap
     #: underneath it.
     show_background_ring = Bool(True)
+    rolling_ball_enabled = Bool(False)
     edit_mode = Bool(False)
     delete_roi_button = Button()
     clear_rois_button = Button()

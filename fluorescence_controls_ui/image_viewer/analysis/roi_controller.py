@@ -67,13 +67,20 @@ class RoiAnalysisController(HasTraits):
     # Saved fit equations (app-wide, so they live in preferences rather   #
     # than in any one experiment's config)                                #
     # ------------------------------------------------------------------ #
-    @observe("viewer_model")
+    @observe("viewer_model, analysis_model")
     def _load_fit_presets(self, event):
+        """Both models are constructor arguments, and traits assigns
+        them one at a time — so this watches both and acts when the
+        second arrives, whichever order the caller passed them in."""
+        if self.viewer_model is None or self.analysis_model is None:
+            return
         self.analysis_model.fit_presets = load_presets(
             self.viewer_model.preferences.fluorescence_fit_presets)
 
     @observe("analysis_model:fit_presets.items, analysis_model:fit_presets")
     def _store_fit_presets(self, event):
+        if self.viewer_model is None:
+            return
         preferences = self.viewer_model.preferences
         stored = save_presets(list(self.analysis_model.fit_presets))
         if preferences.fluorescence_fit_presets != stored:
@@ -125,6 +132,12 @@ class RoiAnalysisController(HasTraits):
     def _on_show_background_ring(self, event):
         if self.session.ring.show_on_canvas != event.new:
             self.session.ring.show_on_canvas = event.new
+            self._save_config()
+
+    @observe("analysis_model:rolling_ball_enabled")
+    def _on_rolling_ball_toggled(self, event):
+        if self.session.ball.enabled != event.new:
+            self.session.ball.enabled = event.new
             self._save_config()
 
     @observe("analysis_model:edit_mode")
@@ -499,6 +512,7 @@ class RoiAnalysisController(HasTraits):
                     logger.warning(f"Could not seed the scale: {error}")
         self.analysis_model.session = session
         self.analysis_model.show_background_ring =             session.ring.show_on_canvas
+        self.analysis_model.rolling_ball_enabled = session.ball.enabled
         self._dispatched_keys = {}
 
     @observe("analysis_model:session:plot_stat, "

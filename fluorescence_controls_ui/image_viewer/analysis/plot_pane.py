@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 from traits.api import Any, Instance
 from traitsui.api import (
-    EnumEditor, HGroup, Item, RangeEditor, UItem, VGroup, View,
+    EnumEditor, HGroup, Item, UItem, VGroup, View,
 )
 
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
@@ -233,40 +233,6 @@ _plot_controls_view = View(
                           "range, to compare shape and timing. Fitted "
                           "midpoints and R² are unchanged; amplitudes "
                           "become percentages."),
-        ),
-        HGroup(
-            # auto_set: a typed value must reach the session before
-            # Calculate reads it, or the batch finds nothing missing
-            # and reports "up to date" against the old ring.
-            Item("session.ring.gap_px", label="BG gap",
-                 editor=RangeEditor(low=0, high=50, mode="spinner",
-                                    auto_set=True),
-                 tooltip="Pixels between an ROI's edge and the ring its "
-                         "background is read from. Fluorescence bleeds "
-                         "a pixel or two past the boundary and that "
-                         "halo is not background."),
-            Item("session.ring.thickness_px", label="BG width",
-                 editor=RangeEditor(low=1, high=50, mode="spinner",
-                                    auto_set=True),
-                 tooltip="Thickness of the background ring, in pixels. "
-                         "Changing either value recomputes the "
-                         "statistics."),
-            UItem("session.ball.enabled",
-                  editor=InPlaceToggleEditor(on_label="Rolling ball",
-                                             off_label="Rolling ball"),
-                  tooltip="Flatten each frame before measuring: the "
-                          "rolling-ball estimate of uneven "
-                          "illumination is subtracted from the whole "
-                          "image, so every stat below is read off the "
-                          "corrected frame."),
-            Item("session.ball.radius_px", label="Ball r",
-                 editor=RangeEditor(low=5, high=500, mode="spinner",
-                                    auto_set=True),
-                 enabled_when="session.ball.enabled",
-                 tooltip="Ball radius in pixels — the scale of the "
-                         "unevenness removed. Keep it comfortably "
-                         "larger than the droplets, or the ball rolls "
-                         "over them and takes the signal too."),
         ),
     ),
 )
