@@ -265,21 +265,35 @@ def _normalised_columns(rows, rois, normalize_stat, pixel_area):
 
 
 def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
-                        area_unit_label="px²", normalize_stat=None):
-    """One row per image, blank cells where an (image, ROI) pair has no
+                        area_unit_label="px²", normalize_stat=None,
+                        correction=None):
+    """One row per (image, ROI), blank cells where that pair has no
     computed stats. ``rows``: [{"filename", "time_utc", "elapsed_sec",
     "group", "wavelength", "stats": {roi_id: stats_dict}}, ...].
     ``pixel_area`` scales the derived size-aware columns; it is 1.0
-    (px²) for an uncalibrated experiment."""
-    header = ["index", "time_utc", "elapsed_sec", "filename", "group",
-              "wavelength"]
-    for roi in rois:
-        header += [f"{roi.name}_{stat}" for stat in CSV_STAT_COLUMNS]
-        header += [f"{roi.name}_area_{area_unit_label}"]
-        header += [f"{roi.name}_{stat}"
-                   for stat in CSV_DERIVED_COLUMNS[1:]]
-        if normalize_stat is not None:
-            header += [f"{roi.name}_{normalize_stat}_norm_pct"]
+    (px²) for an uncalibrated experiment. ``correction`` is the
+    session's (gap, width, ball radius), recorded on every row.
+
+    Long rather than wide: the ROI is a VALUE in a column, not a prefix
+    repeated across seventeen column names per ROI. Six ROIs used to
+    mean 108 columns and every stat name spelled six times; here the
+    width is fixed whatever the ROI count, each frame's ROIs sit
+    together as a block, and a reader groups by ``roi`` or filters to
+    one without counting columns. It is also what pandas, R and every
+    plotting library want handed to them."""
+    header = (["index", "time_utc", "elapsed_sec", "filename", "group",
+               "wavelength", "roi", "is_standard"]
+              + list(CSV_STAT_COLUMNS)
+              + [f"area_{area_unit_label}"]
+              + list(CSV_DERIVED_COLUMNS[1:]))
+    if normalize_stat is not None:
+        header += [f"{normalize_stat}_norm_pct"]
+    # What the numbers were measured with. Constant down the file, but
+    # it is the difference between two exports that otherwise look
+    # identical, and it keeps a row self-describing once files are
+    # concatenated.
+    header += ["ring_gap_px", "ring_width_px", "ball_radius_px"]
+    settings = list(correction if correction is not None else (0, 0, 0))
     normalised = ({} if normalize_stat is None
                   else _normalised_columns(rows, rois, normalize_stat,
                                            pixel_area))
@@ -288,14 +302,15 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
         writer = csv.writer(handle)
         writer.writerow(header)
         for index, row in enumerate(rows):
-            record = [index, row["time_utc"], row["elapsed_sec"],
+            shared = [index, row["time_utc"], row["elapsed_sec"],
                       row["filename"], row["group"], row["wavelength"]]
             for roi in rois:
                 stats = row["stats"].get(roi.roi_id, {})
+                record = shared + [roi.name, int(roi.is_standard)]
                 record += [stats.get(stat, "")
                            for stat in CSV_STAT_COLUMNS]
                 record += [_csv_cell(stats, stat, pixel_area)
                            for stat in CSV_DERIVED_COLUMNS]
                 if normalize_stat is not None:
                     record += [normalised[roi.roi_id][index]]
-            writer.writerow(record)
+                writer.writerow(record + settings)

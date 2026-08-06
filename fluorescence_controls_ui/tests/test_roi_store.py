@@ -236,13 +236,18 @@ def test_write_intensity_csv_layout(tmp_path):
     write_intensity_csv(csv_path, rows, [roi])
     with open(csv_path, newline="", encoding="utf-8") as handle:
         records = list(csv.reader(handle))
-    assert records[0][:6] == ["index", "time_utc", "elapsed_sec",
-                              "filename", "group", "wavelength"]
-    assert "ROI 1_mean" in records[0]
-    assert "ROI 1_outline_count" in records[0]
-    mean_column = records[0].index("ROI 1_mean")
+    # Long form: the ROI is a value in a column, so the width does
+    # not grow with the ROI count and every stat is named once.
+    assert records[0][:8] == ["index", "time_utc", "elapsed_sec",
+                              "filename", "group", "wavelength",
+                              "roi", "is_standard"]
+    assert "mean" in records[0] and "outline_count" in records[0]
+    assert not [name for name in records[0] if name.startswith("ROI 1")]
+    mean_column = records[0].index("mean")
+    roi_column = records[0].index("roi")
+    assert records[1][roi_column] == "ROI 1"
     assert records[1][mean_column] == "10.0"
-    assert records[2][mean_column] == ""
+    assert records[2][mean_column] == ""      # not computed
 
 
 def test_contour_round_trips_its_vertex_list(tmp_path):
@@ -298,14 +303,12 @@ def test_write_intensity_csv_includes_the_derived_columns(tmp_path):
     with open(csv_path, newline="", encoding="utf-8") as handle:
         records = list(csv.reader(handle))
 
-    assert "ROI 1_area_mm²" in records[0]
-    assert "ROI 1_integrated" in records[0]
-    assert "ROI 1_bg_integrated" in records[0]
-    assert "ROI 1_per_area" in records[0]
-    assert "ROI 1_bg_per_area" in records[0]
-    area = records[1][records[0].index("ROI 1_area_mm²")]
+    for name in ("area_mm²", "integrated", "bg_integrated",
+                 "per_area", "bg_per_area"):
+        assert name in records[0], name
+    area = records[1][records[0].index("area_mm²")]
     assert abs(float(area) - 25.0 * 1e-4) < 1e-12
-    integrated = records[1][records[0].index("ROI 1_integrated")]
+    integrated = records[1][records[0].index("integrated")]
     assert float(integrated) == 250.0
 
 
@@ -322,9 +325,42 @@ def test_write_intensity_csv_adds_the_normalised_column(tmp_path):
     with open(csv_path, newline="", encoding="utf-8") as handle:
         records = list(csv.reader(handle))
 
-    column = records[0].index("ROI 1_mean_norm_pct")
+    column = records[0].index("mean_norm_pct")
     assert [records[row][column] for row in (1, 2, 3)] == \
         ["0.0", "50.0", "100.0"]
+
+
+def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
+    # Three ROIs over two images is six rows of a fixed width, where
+    # the wide layout was two rows of ever-growing width.
+    rois = [Roi(name=f"ROI {index}", kind="box",
+                geometry=[1.0, 1.0, 5.0, 5.0], is_standard=index == 3)
+            for index in (1, 2, 3)]
+    rows = [{
+        "filename": f"img{image}_raw.png",
+        "time_utc": "2026_07_20-17_46_24", "elapsed_sec": float(image),
+        "group": "burst_a", "wavelength": "Green 540 nm",
+        "stats": {roi.roi_id: {"mean": 10.0 * position, "count": 4.0}
+                  for position, roi in enumerate(rois, start=1)},
+    } for image in (0, 1)]
+    csv_path = tmp_path / "out.csv"
+    write_intensity_csv(csv_path, rows, rois, correction=(2, 4, 60))
+    with open(csv_path, newline="", encoding="utf-8") as handle:
+        records = list(csv.reader(handle))
+
+    assert len(records) == 1 + 6
+    header, body = records[0], records[1:]
+    roi_column = header.index("roi")
+    # Each image's ROIs sit together, in the order the session has them.
+    assert [row[roi_column] for row in body] == [
+        "ROI 1", "ROI 2", "ROI 3"] * 2
+    assert [row[header.index("index")] for row in body] ==         ["0"] * 3 + ["1"] * 3
+    # The standard flag rides with its ROI, not in a separate file.
+    standard_column = header.index("is_standard")
+    assert [row[standard_column] for row in body[:3]] == ["0", "0", "1"]
+    # And every row says what it was measured with.
+    for row in body:
+        assert row[-3:] == ["2", "4", "60"]
 
 
 def test_write_intensity_csv_omits_the_column_when_not_normalising(
