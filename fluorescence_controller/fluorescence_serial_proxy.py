@@ -5,6 +5,9 @@ import time
 import serial
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.hardware_device_monitoring_helpers import (
+    WHOAMI_MARKER, parse_whoami_line,
+)
 from logger.logger_service import get_logger
 
 from .consts import (
@@ -15,24 +18,6 @@ from .consts import (
 
 logger = get_logger(__name__)
 
-# Boards in the heater firmware family reply to ``whoami`` with a single
-# WHOAMI_MARKER-prefixed line carrying {"uid", "device_id", ...}.
-WHOAMI_MARKER = "\u00a7WHOAMI"
-
-
-def parse_whoami_line(line) -> dict | None:
-    """The identity payload from a WHOAMI frame line, or None."""
-    if not line.startswith(WHOAMI_MARKER):
-        return None
-    brace = line.find("{")
-    if brace < 0:
-        return None
-    try:
-        return json.loads(line[brace:])
-    except Exception:
-        logger.error(f"Unparseable WHOAMI frame: {line!r}")
-        return None
-
 
 class FluorescenceSerialProxy:
     """Minimal headless serial proxy for the fluorescence LED board.
@@ -42,13 +27,28 @@ class FluorescenceSerialProxy:
     (requested on connect), which is published as the BOARD_ID identity.
     """
 
-    def __init__(self, port):
+    def __init__(self, port, expected_device_id_fragment=None,
+                 serial_instance=None):
         self.port = port
-        self._serial = serial.Serial(
-            port, BOARD_BAUDRATE,
-            timeout=SERIAL_READ_TIMEOUT_S,
-            write_timeout=SERIAL_WRITE_TIMEOUT_S,
-        )
+        # When set, a connect-time WHOAMI whose device_id lacks this fragment
+        # means the monitor claimed the wrong board (VID:PID collision) — the
+        # proxy relinquishes the port so the rightful monitor can find it.
+        self._expected_device_id_fragment = expected_device_id_fragment
+        if serial_instance is not None:
+            # Adopt the monitor's ClaimedPort handle, open since the whoami
+            # probe identified this board: reopening here would race the
+            # other monitors' probes and Windows' USB-CDC close→reopen
+            # latency (observed as Access-denied retry storms).
+            self._serial = serial_instance
+            self._serial.baudrate = BOARD_BAUDRATE
+            self._serial.timeout = SERIAL_READ_TIMEOUT_S
+            self._serial.write_timeout = SERIAL_WRITE_TIMEOUT_S
+        else:
+            self._serial = serial.Serial(
+                port, BOARD_BAUDRATE,
+                timeout=SERIAL_READ_TIMEOUT_S,
+                write_timeout=SERIAL_WRITE_TIMEOUT_S,
+            )
         # One writer at a time: commands arrive on the multi-threaded
         # dramatiq worker pool, and concurrent writes on one serial handle
         # interleave bytes mid-line (observed on Windows as garbled
@@ -112,6 +112,16 @@ class FluorescenceSerialProxy:
     def _handle_line(self, line: str):
         identity = parse_whoami_line(line)
         if identity is not None:
+            device_id = identity.get("device_id", "")
+            if (self._expected_device_id_fragment
+                    and self._expected_device_id_fragment not in device_id):
+                logger.warning(
+                    f"Fluorescence proxy on {self.port} got WHOAMI device_id "
+                    f"'{device_id}' — expected a "
+                    f"'{self._expected_device_id_fragment}' board; "
+                    f"relinquishing the port")
+                self.terminate()  # publishes DISCONNECTED → monitor resumes
+                return
             publish_message(message=json.dumps(identity), topic=BOARD_ID)
             return
         publish_message(message=line, topic=TELEMETRY)

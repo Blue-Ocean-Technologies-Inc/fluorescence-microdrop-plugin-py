@@ -1,7 +1,5 @@
 from traits.api import provides, Str, List
 
-from microdrop_utils.hardware_device_monitoring_helpers import find_port_by_device_id
-
 from peripheral_device_controller_base.services.peripheral_device_monitor_mixin_service import (
     PeripheralDeviceMonitorMixinService,
 )
@@ -22,11 +20,15 @@ class FluorescenceMonitorMixinService(PeripheralDeviceMonitorMixinService):
 
     _default_hwids = List(Str, [FLUORESCENCE_HWID])
 
-    def _make_proxy(self, port_name):
-        return FluorescenceSerialProxy(port=port_name)
+    # The heater board shares the Pico 2E8A:0005 id, so the base monitor
+    # probes each candidate port's whoami device_id for this fragment before
+    # claiming it.
+    _device_id_fragment = Str(DEVICE_ID_FRAGMENT)
 
-    def _find_port(self, hwids):
-        """Locate the board by VID:PID AND whoami identity: the heater board
-        shares the Pico 2E8A:0005 id, so each candidate port is probed for a
-        device_id containing "fluo" before it is claimed."""
-        return find_port_by_device_id(hwids, DEVICE_ID_FRAGMENT)
+    def _make_proxy(self, port_name):
+        # port_name is the base monitor's ClaimedPort: the proxy adopts its
+        # probe-time serial handle instead of reopening the port.
+        return FluorescenceSerialProxy(
+            port=str(port_name),
+            expected_device_id_fragment=DEVICE_ID_FRAGMENT,
+            serial_instance=getattr(port_name, "serial", None))
