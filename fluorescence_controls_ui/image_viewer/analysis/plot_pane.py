@@ -328,6 +328,14 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:normalize, "
                "session:figure:subtract_first, "
                "session:figure:subtract_standard, "
+               "session:figure:remove_outliers, "
+               "session:figure:outlier_threshold, "
+               "session:figure:outlier_window, "
+               "session:figure:smooth_method, "
+               "session:figure:savgol_window, "
+               "session:figure:savgol_order, "
+               "session:figure:butter_order, "
+               "session:figure:butter_cutoff, "
                "session:rois:items:is_standard")
 
 #: Changes that mean "show me everything again", releasing a view the

@@ -61,6 +61,9 @@ class RoiAnalysisController(HasTraits):
     _stats_dirty = Bool(False)
     _stats_dirty_since = Float(0.0)
 
+    #: When the running batch started, for the finished-in log line.
+    _batch_started = Float(0.0)
+
     @property
     def session(self):
         return self.analysis_model.session
@@ -348,6 +351,12 @@ class RoiAnalysisController(HasTraits):
                 self._write_export()
             return
         self.analysis_model.batch_running = True
+        gap, width, ball = self.session.correction_key()
+        logger.info(
+            f"ROI batch: {len(work)} images x {len(self.session.rois)} "
+            f"ROIs; ring gap={gap}px width={width}px; rolling ball="
+            f"{f'r={ball}px' if ball else 'off'}")
+        self._batch_started = time.monotonic()
         if pool_is_warm():
             self._update_progress_text()
         else:
@@ -394,6 +403,12 @@ class RoiAnalysisController(HasTraits):
             self._mark_stats_dirty()
         if finished:
             self.analysis_model.batch_running = False
+            elapsed = time.monotonic() - (self._batch_started
+                                          or time.monotonic())
+            logger.info(
+                f"ROI batch finished: {self.analysis_model.batch_done} "
+                f"done, {self.analysis_model.batch_failed} failed, in "
+                f"{elapsed:.1f}s")
             self._update_progress_text(finished=True)
             self.flush_stats(force=True)
             if self._pending_export:
@@ -542,6 +557,14 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:figure:normalize, "
              "analysis_model:session:figure:subtract_first, "
              "analysis_model:session:figure:subtract_standard, "
+             "analysis_model:session:figure:remove_outliers, "
+             "analysis_model:session:figure:outlier_threshold, "
+             "analysis_model:session:figure:outlier_window, "
+             "analysis_model:session:figure:smooth_method, "
+             "analysis_model:session:figure:savgol_window, "
+             "analysis_model:session:figure:savgol_order, "
+             "analysis_model:session:figure:butter_order, "
+             "analysis_model:session:figure:butter_cutoff, "
              "analysis_model:session:rois:items:name, "
              "analysis_model:session:rois:items:is_standard, "
              "analysis_model:session:rois:items:style:color, "
@@ -664,9 +687,10 @@ class RoiAnalysisController(HasTraits):
                 "trimmed": bool(fit.fitted_end < series_end),
             }
         try:
-            save_fit_equations(
-                directory,
-                expression or FIT_LABELS.get(method, method), fits)
+            equation = expression or FIT_LABELS.get(method, method)
+            save_fit_equations(directory, equation, fits)
+            logger.info(f"Fitted {len(fits)} ROIs to {equation!r} "
+                        f"(trim={session.figure.trim_poor_fit})")
         except Exception as error:
             logger.warning(f"Could not write fit equations: {error}")
 

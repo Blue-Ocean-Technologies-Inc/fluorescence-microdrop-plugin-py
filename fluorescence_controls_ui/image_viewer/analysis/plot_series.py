@@ -3,7 +3,11 @@ and the viewer's filtered paths, so the plot pane owns its own picture
 (observer pattern — nothing pushes series at it). Qt-free."""
 import math
 
+from logger.logger_service import get_logger
+
 from ..scale_bar import pixel_area
+
+logger = get_logger(__name__)
 
 
 def _signal(stats, background):
@@ -355,6 +359,10 @@ def smoothed_series(series, method, window=7, order=2, cutoff=0.2):
     """``series`` with every curve smoothed by ``method``."""
     if method not in ("savgol", "butterworth"):
         return series
+    logger.debug(
+        f"Smoothing {len(series)} curves for display: {method}"
+        + (f" window={window} order={order}" if method == "savgol"
+           else f" order={order} cutoff={cutoff:g} of Nyquist"))
     return {roi_id: (name, elapsed,
                      smoothed_values(values, method, window, order,
                                      cutoff))
@@ -377,20 +385,34 @@ def analysed_series(session, filtered_paths, visible_only=True):
     figure = session.figure
     series = derive_series(session, filtered_paths)
     flags = {}
+    steps = []
     if figure.remove_outliers:
         series, flags = without_outliers(series,
                                          figure.outlier_threshold,
                                          figure.outlier_window)
+        dropped = sum(sum(1 for flag in roi_flags if flag)
+                      for roi_flags in flags.values())
+        steps.append(f"outliers({figure.outlier_threshold:g} MAD, "
+                     f"window {figure.outlier_window}) dropped "
+                     f"{dropped}")
     if figure.subtract_standard:
         # After the outliers, before the visibility filter: the
         # standards are the very curves a user hides once they are
         # flat, and reading the baseline from the filtered set would
         # let that click turn the correction off.
         series = standard_corrected_series(session, series)
+        steps.append(f"standard({sum(1 for roi in session.rois
+                                     if roi.is_standard)} marked)")
     if visible_only:
         series = visible_series(session, series)
     if figure.subtract_first:
         series = subtracted_series(series)
+        steps.append("subtract-first")
     if figure.normalize:
         series = normalized_series(series)
+        steps.append("normalise")
+    logger.debug(
+        f"Series for {len(series)} ROIs over {len(filtered_paths)} "
+        f"images, stat={session.plot_stat}"
+        + (f"; {'; '.join(steps)}" if steps else "; no corrections"))
     return series, flags
