@@ -2,9 +2,9 @@
 import math
 
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
-    derive_series, normalized_series, standard_baseline,
-    standard_corrected_series, stat_value, subtracted_series,
-    visible_series,
+    derive_series, normalized_series, outlier_mask, smoothed_values,
+    standard_baseline, standard_corrected_series, stat_value,
+    subtracted_series, visible_series, without_outliers,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
     AnalysisSession, Roi, RoiStyle,
@@ -263,3 +263,118 @@ def test_standard_and_subtract_first_stack_and_commute():
     other_way = standard_corrected_series(session,
                                           subtracted_series(series))
     assert other_way["s1"][2] == stacked["s1"][2]
+
+
+def _rising(count=21, spike_at=None, spike=900.0):
+    values = [100.0 + 10.0 * index for index in range(count)]
+    if spike_at is not None:
+        values[spike_at] = spike
+    return ("ROI 1", [float(index) for index in range(count)], values)
+
+
+def test_the_hampel_test_finds_a_spike_and_leaves_a_trend_alone():
+    _name, _elapsed, clean = _rising()
+    _name, _elapsed, spiked = _rising(spike_at=10)
+    assert not any(outlier_mask(clean))
+    flags = outlier_mask(spiked)
+    assert flags[10] is True
+    assert sum(flags) == 1
+
+
+def test_an_isolated_spike_is_found_on_any_shape_of_baseline():
+    spike = 900.0
+    baselines = {
+        "flat": [100.0] * 21,
+        "noisy": [100.0 + (2.0 if index % 2 else -2.0)
+                  for index in range(21)],
+        "rising": [100.0 + 10.0 * index for index in range(21)],
+        "sigmoid": [100.0 + 800.0 / (1.0 + math.exp(-0.3 * (index - 10)))
+                    for index in range(21)],
+    }
+    for label, values in baselines.items():
+        assert not any(outlier_mask(values, window=7)),             f"{label}: a clean baseline has no outliers"
+        # Index 3, where each of these baselines is still flat-ish.
+        # A spike at the sigmoid's midpoint would NOT be found, the
+        # curve moving as much across that window as the spike does.
+        spiked = list(values)
+        spiked[3] = spike
+        flags = outlier_mask(spiked, window=7)
+        assert flags[3] is True, label
+        assert sum(flags) == 1, f"{label}: nothing else flagged"
+
+
+def test_outliers_packed_into_one_window_stop_being_outliers():
+    # The known limit of a windowed test, worth pinning rather than
+    # discovering: three spikes inside a seven-point window are no
+    # longer unusual relative to each other.
+    values = [100.0] * 21
+    for index in (8, 10, 12):
+        values[index] = 900.0
+    assert not any(outlier_mask(values, window=7))
+    # Spread them out and each is isolated again.
+    values = [100.0] * 21
+    for index in (2, 10, 18):
+        values[index] = 900.0
+    assert [index for index, flag
+            in enumerate(outlier_mask(values, window=7))
+            if flag] == [2, 10, 18]
+
+
+def test_an_alternating_signal_is_not_all_outliers():
+    # Half its values are identical, so the median deviation is zero
+    # while the data plainly has spread — the case that made an
+    # earlier version flag seventeen points of twenty-one.
+    sawtooth = [100.0 + (2.0 if index % 2 else -2.0)
+                for index in range(21)]
+    assert not any(outlier_mask(sawtooth, window=7))
+
+
+def test_gaps_are_not_outliers_and_survive_removal():
+    values = [1.0, 2.0, math.nan, 4.0, 5.0]
+    assert outlier_mask(values) == [False] * 5
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0, 3.0, 4.0], values)}
+    cleaned, flags = without_outliers(series)
+    assert cleaned["a"][2][2] != cleaned["a"][2][2]     # still a gap
+    assert not any(flags["a"])
+
+
+def test_removal_replaces_the_point_with_a_gap():
+    series = {"a": _rising(spike_at=10)}
+    cleaned, flags = without_outliers(series)
+    values = cleaned["a"][2]
+    assert values[10] != values[10], "dropped, not replaced by a guess"
+    assert values[9] == 190.0 and values[11] == 210.0
+    assert flags["a"][10] is True
+
+
+def test_the_threshold_and_window_are_the_users_to_set():
+    _name, _elapsed, spiked = _rising(spike_at=10)
+    assert outlier_mask(spiked, threshold=3.0)[10] is True
+    assert not outlier_mask(spiked, threshold=30.0)[10],         "a laxer threshold must keep the point"
+
+
+def test_smoothing_reduces_the_wiggle_without_moving_the_level():
+    noisy = [100.0 + (5.0 if index % 2 else -5.0)
+             for index in range(31)]
+    for method in ("savgol", "butterworth"):
+        smoothed = smoothed_values(noisy, method, window=7, order=2,
+                                   cutoff=0.2)
+        middle = smoothed[5:-5]
+        assert max(middle) - min(middle) < 4.0, method
+        assert abs(sum(middle) / len(middle) - 100.0) < 1.0, method
+
+
+def test_smoothing_keeps_gaps_and_length():
+    values = [float(index) for index in range(21)]
+    values[7] = math.nan
+    for method in ("savgol", "butterworth"):
+        smoothed = smoothed_values(values, method)
+        assert len(smoothed) == len(values), method
+        assert smoothed[7] != smoothed[7], f"{method} invented a value"
+
+
+def test_a_series_too_short_to_filter_is_returned_as_it_is():
+    short = [1.0, 2.0, 3.0]
+    assert smoothed_values(short, "butterworth") == short
+    assert smoothed_values(short, "none") == short
+    assert smoothed_values([], "savgol") == []

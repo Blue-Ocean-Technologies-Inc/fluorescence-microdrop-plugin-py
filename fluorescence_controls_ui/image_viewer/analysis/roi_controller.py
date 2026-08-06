@@ -25,7 +25,7 @@ from .consts import (
 )
 from .curve_fit import FIT_LABELS, fit_series
 from .fit_presets import fit_arguments, load_presets, save_presets
-from .plot_series import derive_series
+from .plot_series import analysed_series
 from .roi_geometry import translated
 from .roi_batch import (
     BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
@@ -608,7 +608,8 @@ class RoiAnalysisController(HasTraits):
                 f"{sanitize_label(self.viewer_model.selected_wavelength)}_"
                 f"{capture_service.utc_stamp()}.csv")
         csv_path = analysis_directory(directory) / name
-        self._write_fit_equations(directory)
+        fitted, outlier_flags = self._analysed_series()
+        self._write_fit_equations(directory, fitted)
         scale = session.scale
         try:
             write_intensity_csv(
@@ -616,7 +617,7 @@ class RoiAnalysisController(HasTraits):
                 pixel_area(scale.metres_per_pixel, scale.unit),
                 area_unit(scale.metres_per_pixel, scale.unit),
                 session.plot_stat if session.figure.normalize else None,
-                session.correction_key())
+                session.correction_key(), outlier_flags)
         except Exception as error:
             logger.warning(f"CSV export failed: {error}")
             self.analysis_model.progress_text = f"Export failed: {error}"
@@ -624,18 +625,26 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.progress_text = f"Exported {csv_path.name}"
         logger.info(f"ROI intensities exported to {csv_path}")
 
-    def _write_fit_equations(self, directory):
+    def _analysed_series(self):
+        """(series, outlier flags) for the export: the same pipeline
+        the plot fits, less the visibility filter — a hidden ROI is a
+        display choice, and the CSV has always carried them all."""
+        return analysed_series(self.session,
+                               self.analysis_model.filtered_paths,
+                               visible_only=False)
+
+    def _write_fit_equations(self, directory, series):
         """Record the fitted parameters beside the CSV, keyed by the
         equation — the numbers behind the curves the export describes,
-        which the CSV itself has no column for."""
+        which the CSV itself has no column for. ``series`` is the
+        analysed one, so these are the fits the plot drew."""
         session = self.session
         method, expression = fit_arguments(session.figure,
                                            self.analysis_model.fit_presets)
         if method == "none":
             return
         fits = {}
-        for roi_id, (name, elapsed, values) in derive_series(
-                session, self.analysis_model.filtered_paths).items():
+        for roi_id, (name, elapsed, values) in series.items():
             fit = fit_series(elapsed, values, method,
                              session.figure.trim_poor_fit, expression,
                              session.figure.initial_guesses)

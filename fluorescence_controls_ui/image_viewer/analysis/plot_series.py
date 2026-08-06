@@ -88,6 +88,106 @@ def subtracted_series(series):
     return shifted
 
 
+#: Scale factor making a median absolute deviation comparable to a
+#: standard deviation for normally distributed data, so a threshold of
+#: 3 means about what "3 sigma" means — without a single wild value
+#: inflating the scale it is tested against, as an SD would.
+MAD_TO_SIGMA = 1.4826
+
+#: The same for a MEAN absolute deviation, used only where the median
+#: one collapses to zero (see _robust_scale).
+MEAN_ABS_TO_SIGMA = 1.2533
+
+
+def _robust_scale(values, centre):
+    """A spread for ``values`` about ``centre``, in units comparable
+    to a standard deviation.
+
+    The median absolute deviation, except where that is zero — which
+    happens whenever half the values are identical, as in a steady
+    signal, a quantised one, or a two-level flicker. The median then
+    says there is no spread while the data plainly has some, so the
+    MEAN absolute deviation stands in: it still resists a spike (one
+    value in twenty pulls it by a twentieth) without vanishing."""
+    deviations = [abs(value - centre) for value in values]
+    middle = MAD_TO_SIGMA * _median(deviations)
+    if middle > 0.0:
+        return middle
+    return MEAN_ABS_TO_SIGMA * (sum(deviations) / len(deviations))
+
+
+def _window_slice(values, index, window):
+    half = window // 2
+    return values[max(index - half, 0):index + half + 1]
+
+
+def outlier_mask(values, threshold=3.0, window=5):
+    """Which points are outliers, by the Hampel test: each point
+    against the median and median-absolute-deviation of the window
+    around it.
+
+    Robust by construction — the spike being tested cannot drag the
+    median it is compared against, where a mean-and-SD test lets one
+    wild value raise the very threshold that would have caught it.
+
+    Where a window's own spread collapses (see _robust_scale) the
+    whole series' stands in, so the case the test exists for — a
+    steady signal with one bad frame — is not missed for want of a
+    scale.
+
+    Its limit is the window: outliers close enough together to fill
+    much of one stop being outliers relative to each other, and the
+    test goes quiet. Widening the window pushes that out only until
+    the window spans real changes in the signal. Isolated spikes, the
+    usual case, are what this catches."""
+    finite = [value for value in values if value == value]
+    if len(finite) < 3:
+        return [False] * len(values)
+    window = max(int(window), 3)
+    overall_scale = _robust_scale(finite, _median(finite))
+    flags = []
+    for index, value in enumerate(values):
+        if value != value:
+            flags.append(False)         # a gap is not an outlier
+            continue
+        neighbours = [other for other in _window_slice(values, index,
+                                                       window)
+                      if other == other]
+        if len(neighbours) < 3:
+            flags.append(False)
+            continue
+        middle = _median(neighbours)
+        deviation = abs(value - middle)
+        scale = _robust_scale(neighbours, middle) or overall_scale
+        flags.append(deviation > threshold * scale if scale > 0.0
+                     else deviation > 0.0)
+    return flags
+
+
+def _median(values):
+    ordered = sorted(values)
+    count = len(ordered)
+    middle = count // 2
+    if count % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
+
+
+def without_outliers(series, threshold=3.0, window=5):
+    """``series`` with outlying points replaced by NaN — the same hole
+    an uncomputed image leaves, so everything downstream already knows
+    how to skip it. Returns (series, {roi_id: [flags]}) so the plot can
+    mark what it dropped rather than quietly losing it."""
+    cleaned, flagged = {}, {}
+    for roi_id, (name, elapsed, values) in series.items():
+        flags = outlier_mask(values, threshold, window)
+        flagged[roi_id] = flags
+        cleaned[roi_id] = (name, elapsed, [
+            math.nan if flag else value
+            for value, flag in zip(values, flags)])
+    return cleaned, flagged
+
+
 def standard_baseline(session, series):
     """The per-image background from the ROIs marked as standards: the
     mean of their values at each point, over whichever of them have
@@ -162,3 +262,135 @@ def visible_series(session, series):
         if roi is not None and roi.style.visible:
             shown[roi_id] = entry
     return shown
+
+
+#: Smoothers the plot offers, in dropdown order.
+SMOOTH_METHODS = ("none", "savgol", "butterworth")
+SMOOTH_LABELS = {"none": "No smoothing",
+                 "savgol": "Savitzky-Golay",
+                 "butterworth": "Butterworth"}
+
+
+def _fill_gaps(values):
+    """(filled, gaps): the series with internal NaNs interpolated and
+    the ends held flat, plus where they were.
+
+    Both smoothers need a continuous, evenly spaced signal — one NaN
+    would otherwise spread across the whole window — so the holes are
+    filled for the filter and punched back out afterwards. A gap is
+    missing data, and smoothing must not invent a value there."""
+    gaps = [value != value for value in values]
+    known = [(index, value) for index, value in enumerate(values)
+             if value == value]
+    if not known:
+        return None, gaps
+    filled = []
+    for index, value in enumerate(values):
+        if value == value:
+            filled.append(value)
+            continue
+        before = [item for item in known if item[0] < index]
+        after = [item for item in known if item[0] > index]
+        if before and after:
+            (left_index, left), (right_index, right) = (before[-1],
+                                                        after[0])
+            span = right_index - left_index
+            filled.append(left + (right - left)
+                          * (index - left_index) / span)
+        else:                       # before the first or past the last
+            filled.append((before or after)[-1 if before else 0][1])
+    return filled, gaps
+
+
+def _restore_gaps(values, gaps):
+    return [math.nan if gap else value
+            for value, gap in zip(values, gaps)]
+
+
+def smoothed_values(values, method, window=7, order=2, cutoff=0.2):
+    """One series smoothed, or returned untouched when it is too short
+    for the filter asked for — a curve that cannot be smoothed is shown
+    as it is rather than not at all.
+
+    Both filters treat the points as evenly spaced. Captures are
+    usually on a fixed interval; where they are not, the smoothing is
+    over POINTS rather than seconds, which is the honest reading of
+    what a window means here."""
+    if method not in ("savgol", "butterworth"):
+        return list(values)
+    filled, gaps = _fill_gaps(values)
+    if filled is None:
+        return list(values)
+    from scipy.signal import butter, filtfilt, savgol_filter
+
+    count = len(filled)
+    try:
+        if method == "savgol":
+            # An even window has no centre point, and the polynomial
+            # needs more points than its own order to be determined.
+            length = min(max(int(window), 3), count)
+            if length % 2 == 0:
+                length -= 1
+            polyorder = min(max(int(order), 1), length - 1)
+            if length < 3:
+                return list(values)
+            smoothed = savgol_filter(filled, length, polyorder)
+        else:
+            # filtfilt runs the filter forwards and back, so the result
+            # has no phase shift — a smoothed peak stays where it was.
+            # It needs a few times the filter length in samples.
+            filter_order = min(max(int(order), 1), 8)
+            if count <= 3 * (filter_order + 1):
+                return list(values)
+            normalized = min(max(float(cutoff), 1e-3), 0.99)
+            numerator, denominator = butter(filter_order, normalized,
+                                            btype="low")
+            smoothed = filtfilt(numerator, denominator, filled)
+    except Exception:
+        return list(values)
+    return _restore_gaps([float(value) for value in smoothed], gaps)
+
+
+def smoothed_series(series, method, window=7, order=2, cutoff=0.2):
+    """``series`` with every curve smoothed by ``method``."""
+    if method not in ("savgol", "butterworth"):
+        return series
+    return {roi_id: (name, elapsed,
+                     smoothed_values(values, method, window, order,
+                                     cutoff))
+            for roi_id, (name, elapsed, values) in series.items()}
+
+
+def analysed_series(session, filtered_paths, visible_only=True):
+    """(series, outlier flags): everything a fit sees, in the order the
+    corrections have to happen.
+
+    Outliers go first. A spike inside a standard ROI would otherwise be
+    subtracted from every curve before anything tested it — and once
+    spread across them all, the per-curve test cannot find it. For the
+    same reason it precedes the baseline shift and the normalisation,
+    either of which one wild point would otherwise define.
+
+    Smoothing is NOT here: it is a display aid, and a fit of a smoothed
+    curve reports a goodness it did not earn.
+    """
+    figure = session.figure
+    series = derive_series(session, filtered_paths)
+    flags = {}
+    if figure.remove_outliers:
+        series, flags = without_outliers(series,
+                                         figure.outlier_threshold,
+                                         figure.outlier_window)
+    if figure.subtract_standard:
+        # After the outliers, before the visibility filter: the
+        # standards are the very curves a user hides once they are
+        # flat, and reading the baseline from the filtered set would
+        # let that click turn the correction off.
+        series = standard_corrected_series(session, series)
+    if visible_only:
+        series = visible_series(session, series)
+    if figure.subtract_first:
+        series = subtracted_series(series)
+    if figure.normalize:
+        series = normalized_series(series)
+    return series, flags

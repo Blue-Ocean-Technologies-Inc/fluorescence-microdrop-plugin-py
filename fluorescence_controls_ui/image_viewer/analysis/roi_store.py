@@ -33,7 +33,10 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
                   "second_derivative_vline", "second_derivative_hline",
                   "second_derivative_coords", "view_mode",
                   "log_x", "log_y", "normalize", "subtract_first",
-                  "subtract_standard")
+                  "subtract_standard",
+                  "remove_outliers", "outlier_threshold",
+                  "outlier_window", "smooth_method", "savgol_window",
+                  "savgol_order", "butter_order", "butter_cutoff")
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
                  "visible", "alpha")
 
@@ -332,7 +335,7 @@ def _normalised_columns(rows, rois, normalize_stat, pixel_area):
 
 def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
                         area_unit_label="px²", normalize_stat=None,
-                        correction=None):
+                        correction=None, outliers=None):
     """One row per (image, ROI), blank cells where that pair has no
     computed stats. ``rows``: [{"filename", "time_utc", "elapsed_sec",
     "group", "wavelength", "stats": {roi_id: stats_dict}}, ...].
@@ -358,7 +361,8 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
     # it is the difference between two exports that otherwise look
     # identical, and it keeps a row self-describing once files are
     # concatenated.
-    header += ["ring_gap_px", "ring_width_px", "ball_radius_px"]
+    header += ["outlier", "ring_gap_px", "ring_width_px",
+               "ball_radius_px"]
     settings = list(correction if correction is not None else (0, 0, 0))
     normalised = ({} if normalize_stat is None
                   else _normalised_columns(rows, rois, normalize_stat,
@@ -379,6 +383,9 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
                            for stat in CSV_DERIVED_COLUMNS]
                 if normalize_stat is not None:
                     record += [normalised[roi.roi_id][index]]
+                flags = (outliers or {}).get(roi.roi_id) or []
+                record += [int(bool(flags[index]))
+                           if index < len(flags) else 0]
                 writer.writerow(record + settings)
 
 

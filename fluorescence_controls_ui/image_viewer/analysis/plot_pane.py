@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 from traits.api import Any, Instance
 from traitsui.api import (
-    EnumEditor, HGroup, Item, UItem, VGroup, View,
+    EnumEditor, HGroup, Item, RangeEditor, UItem, VGroup, View,
 )
 
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
@@ -48,8 +48,7 @@ from .curve_fit import (
 from .fit_equations import FitEquationsTable
 from .fit_presets import fit_arguments, method_label
 from .plot_series import (
-    derive_series, normalized_series, standard_corrected_series,
-    subtracted_series, visible_series,
+    SMOOTH_LABELS, SMOOTH_METHODS, analysed_series, smoothed_series,
 )
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
@@ -213,6 +212,66 @@ _plot_controls_view = View(
                   tooltip="Logarithmic value axis. Zero and negative "
                           "values cannot be drawn on it and are "
                           "counted in a note on the figure."),
+            UItem("figure.remove_outliers",
+                  editor=InPlaceToggleEditor(on_label="Outliers",
+                                             off_label="Outliers"),
+                  tooltip="Drop points that fail the Hampel test — a "
+                          "rolling median and MAD, so a spike cannot "
+                          "raise the threshold that would catch it. "
+                          "Dropped points are crossed out on the plot "
+                          "and flagged in the CSV, and are kept out of "
+                          "the fits."),
+            Item("figure.outlier_threshold", label="MADs",
+                 editor=RangeEditor(low=1.0, high=20.0,
+                                    mode="spinner", auto_set=True),
+                 enabled_when="figure.remove_outliers",
+                 tooltip="How far from the local median counts as an "
+                         "outlier, in scaled MADs — about what the "
+                         "same number of standard deviations would "
+                         "mean for clean data."),
+            Item("figure.outlier_window", label="win",
+                 editor=RangeEditor(low=3, high=51, mode="spinner",
+                                    auto_set=True),
+                 enabled_when="figure.remove_outliers",
+                 tooltip="Points either side used for the local median "
+                         "and MAD. Wide enough to describe the trend, "
+                         "narrow enough not to span a real change."),
+            Item("figure.smooth_method", label="Smooth",
+                 editor=EnumEditor(values=list(SMOOTH_METHODS),
+                                   format_func=SMOOTH_LABELS.get),
+                 tooltip="Smooth the DRAWN curves only. The fits keep "
+                         "the unsmoothed points: smoothing makes "
+                         "neighbouring values dependent, which "
+                         "flatters R² and shrinks the parameter "
+                         "uncertainties for the wrong reason."),
+            Item("figure.savgol_window", label="win",
+                 editor=RangeEditor(low=3, high=101, mode="spinner",
+                                    auto_set=True),
+                 visible_when="figure.smooth_method == 'savgol'",
+                 tooltip="Points per polynomial fit (forced odd)."),
+            Item("figure.savgol_order", label="order",
+                 editor=RangeEditor(low=1, high=6, mode="spinner",
+                                    auto_set=True),
+                 visible_when="figure.smooth_method == 'savgol'",
+                 tooltip="Polynomial order. Higher follows sharper "
+                         "features and smooths less."),
+            Item("figure.butter_order", label="order",
+                 editor=RangeEditor(low=1, high=8, mode="spinner",
+                                    auto_set=True),
+                 visible_when="figure.smooth_method == 'butterworth'",
+                 tooltip="Filter order: higher cuts more sharply at "
+                         "the cutoff."),
+            Item("figure.butter_cutoff", label="cutoff",
+                 editor=RangeEditor(low=0.01, high=0.99,
+                                    mode="spinner", auto_set=True),
+                 visible_when="figure.smooth_method == 'butterworth'",
+                 tooltip="Cutoff as a fraction of the Nyquist "
+                         "frequency: smaller keeps only the slowest "
+                         "changes. A fraction rather than Hz because a "
+                         "burst-captured series is not evenly spaced "
+                         "in time."),
+        ),
+        HGroup(
             UItem("figure.subtract_standard",
                   editor=InPlaceToggleEditor(on_label="Standard",
                                              off_label="Standard"),
@@ -296,6 +355,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._figure.tight_layout()
         self._lines = {}
         self._fit_artists = []
+        #: Set per redraw: which points the outlier test dropped.
+        self._outliers = {}
         self._redraw_pending = False
         self._detached = False
         #: Set once the user zooms or pans: their view then survives
@@ -422,22 +483,11 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if not self.isVisible():
             return                # showEvent reschedules
         session = self._model.session
-        derived = derive_series(session, self._model.filtered_paths)
+        # One pipeline, shared with the export, so a saved fit and the
+        # drawn one cannot disagree about which points they saw.
+        series, self._outliers = analysed_series(
+            session, self._model.filtered_paths)
         figure_settings = session.figure
-        if figure_settings.subtract_standard:
-            # Before the visibility filter: the standards are the very
-            # curves a user hides once they are flat, and reading the
-            # baseline from the filtered set would let that click turn
-            # the correction off.
-            derived = standard_corrected_series(session, derived)
-        # Filtered once here, so every view hides the same ROIs.
-        series = visible_series(session, derived)
-        if figure_settings.subtract_first:
-            series = subtracted_series(series)
-        if figure_settings.normalize:
-            # Once, before any view draws, so the lines, the fits, the
-            # d² curves and the bars cannot disagree.
-            series = normalized_series(series)
         for artist in self._fit_artists:
             artist.remove()
         self._fit_artists = []
@@ -493,19 +543,26 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # so relim() would read those as data and pin the y limits.
         self._shade_trimmed_tails(trim_edges)
         self._note_hidden_points(series, log_x, log_y)
+        self._note_dropped_outliers()
         self.draw_idle()
 
     def _refresh_intensity(self, series, figure_settings):
         session = self._model.session
+        # Smoothing is a display aid, so it goes no further than the
+        # lines: `series` — unsmoothed — is what the fits below see.
+        drawn = smoothed_series(series, figure_settings.smooth_method,
+                                figure_settings.savgol_window,
+                                figure_settings.savgol_order,
+                                figure_settings.butter_cutoff)             if figure_settings.smooth_method != "none" else series
         self._axes.set_ylabel(
             y_axis_label(session.plot_stat, session.scale,
                          figure_settings.normalize,
                          figure_settings.subtract_first,
                          figure_settings.subtract_standard))
         for roi_id in list(self._lines):
-            if roi_id not in series:
+            if roi_id not in drawn:
                 self._lines.pop(roi_id).remove()
-        for roi_id, (name, elapsed, values) in series.items():
+        for roi_id, (name, elapsed, values) in drawn.items():
             if roi_id not in self._lines:
                 (self._lines[roi_id],) = self._axes.plot([], [])
             line = self._lines[roi_id]
@@ -677,6 +734,30 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             f"{'point' if hidden == 1 else 'points'}",
             transform=self._axes.transAxes, ha="center",
             va="bottom", color="gray", fontsize="x-small"))
+
+    def _note_dropped_outliers(self):
+        """Say how many points the outlier test removed.
+
+        A removal leaves the same gap a missing measurement does, and
+        the two mean opposite things — one is data the app never had,
+        the other is data it decided to ignore. Counting them is the
+        cheapest way to keep that decision visible; the CSV carries
+        which ones, per point.
+
+        A count rather than a mark on each: the value that was dropped
+        belongs to the raw series, and by here the curve has been
+        baseline-shifted or normalised, so there is no honest y to draw
+        it at."""
+        dropped = sum(sum(1 for flag in flags if flag)
+                      for flags in self._outliers.values())
+        if not dropped:
+            return
+        self._fit_artists.append(self._axes.text(
+            0.5, 0.055,
+            f"{dropped} {'point' if dropped == 1 else 'points'} "
+            f"dropped as outliers",
+            transform=self._axes.transAxes, ha="center", va="bottom",
+            color="gray", fontsize="x-small"))
 
     def _draw_hint(self, message):
         self._fit_artists.append(self._axes.text(

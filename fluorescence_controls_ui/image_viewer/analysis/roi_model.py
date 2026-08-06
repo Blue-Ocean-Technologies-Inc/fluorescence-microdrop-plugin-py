@@ -17,6 +17,7 @@ from .consts import (
     RING_GAP_PX, RING_THICKNESS_PX, ROLLING_BALL_RADIUS_PX, VIEW_MODES,
 )
 from .curve_fit import FIT_METHODS
+from .plot_series import SMOOTH_METHODS
 from .fit_presets import choices_for
 
 #: Matches the "ROI N" names next_roi_name() itself produces, to find
@@ -90,6 +91,27 @@ class FigureSettings(HasTraits):
     log_x = Bool(False)
     log_y = Bool(False)
     normalize = Bool(False)
+    #: Drop points that fail the Hampel test — a rolling median and
+    #: MAD — before anything is fitted or drawn. They are marked on
+    #: the plot and flagged in the CSV rather than vanishing.
+    remove_outliers = Bool(False)
+    outlier_threshold = Range(1.0, 20.0, 3.0)
+    outlier_window = Range(3, 51, 5, mode="spinner")
+
+    #: Display-only smoothing of the drawn curves. The fits keep the
+    #: unsmoothed points: neighbouring values in a smoothed curve are
+    #: no longer independent, which flatters R² and shrinks the
+    #: parameter uncertainties for the wrong reason.
+    smooth_method = Enum(*SMOOTH_METHODS)
+    savgol_window = Range(3, 101, 7, mode="spinner")
+    savgol_order = Range(1, 6, 2, mode="spinner")
+    butter_order = Range(1, 8, 2, mode="spinner")
+    #: Cutoff as a fraction of the Nyquist frequency: 1.0 passes
+    #: everything, small values keep only the slowest changes. A
+    #: fraction rather than Hz because a burst-captured series is not
+    #: evenly spaced in time, and only the point spacing is knowable.
+    butter_cutoff = Range(0.01, 0.99, 0.2)
+
     #: Each curve less its own first value: change from baseline.
     subtract_first = Bool(False)
     #: Subtract the mean of the ROIs marked as background standards,
