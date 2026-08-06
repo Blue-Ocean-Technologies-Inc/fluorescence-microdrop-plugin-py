@@ -70,11 +70,12 @@ def test_wrong_board_whoami_relinquishes_port(published):
 def test_monitor_claims_only_fluo_identified_port(monkeypatch):
     claimed = {}
 
-    def fake_find(hwids, fragment, *, min_unidentified_scans=1):
+    def fake_claim(hwids, fragment, *, min_unidentified_scans=1):
         claimed["args"] = (list(hwids), fragment, min_unidentified_scans)
         return "COM7"
 
-    monkeypatch.setattr(base_monitor_mod, "find_port_by_device_id", fake_find)
+    monkeypatch.setattr(
+        base_monitor_mod, "claim_port_by_device_id", fake_claim)
     service = FluorescenceMonitorMixinService()
     port = service._find_port(["VID:PID=2E8A:0005"])
     assert port == "COM7"

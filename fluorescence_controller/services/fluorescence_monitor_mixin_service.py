@@ -26,5 +26,9 @@ class FluorescenceMonitorMixinService(PeripheralDeviceMonitorMixinService):
     _device_id_fragment = Str(DEVICE_ID_FRAGMENT)
 
     def _make_proxy(self, port_name):
+        # port_name is the base monitor's ClaimedPort: the proxy adopts its
+        # probe-time serial handle instead of reopening the port.
         return FluorescenceSerialProxy(
-            port=port_name, expected_device_id_fragment=DEVICE_ID_FRAGMENT)
+            port=str(port_name),
+            expected_device_id_fragment=DEVICE_ID_FRAGMENT,
+            serial_instance=getattr(port_name, "serial", None))
