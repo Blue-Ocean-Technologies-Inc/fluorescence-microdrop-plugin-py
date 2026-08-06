@@ -99,8 +99,10 @@ def test_experiment_switch_saves_and_reloads_stats(tmp_path, monkeypatch):
                                        analysis_model=viewer.roi_analysis)
     viewer.browsed_directory = str(exp_a / "captures")
 
-    key = ("img.png", 1.0, "abcd1234", "ellipse",
-           (5.0, 5.0, 2.0, 2.0, 0.0), (2, 4, 0))
+    # A key as the app builds them: the absolute path of a file under
+    # the experiment folder, which is what the store writes relative to.
+    key = (str(exp_a / "captures" / "img.png"), 1.0, "abcd1234",
+           "ellipse", (5.0, 5.0, 2.0, 2.0, 0.0), (2, 4, 0))
     controller.session.stats[key] = {"mean": 7.0, "count": 4.0}
     controller._mark_stats_dirty()
 

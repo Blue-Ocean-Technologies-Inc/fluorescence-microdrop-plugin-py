@@ -176,16 +176,54 @@ def load_session(experiment_directory) -> AnalysisSession:
     return session
 
 
+def _relative_to(experiment_directory, path):
+    """``path`` written against the experiment folder where it sits
+    inside it — shorter, and it survives the folder being moved or
+    copied, which an absolute path in a cache does not."""
+    try:
+        return Path(path).relative_to(
+            Path(experiment_directory)).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def save_roi_stats(experiment_directory, stats):
-    """Lossless dump of the computed-stats store (json allows the NaN
-    literal, which Python's parser reads back)."""
-    payload = {"version": 1, "entries": [{
-        "path": key[0], "mtime": key[1], "roi_id": key[2],
-        "kind": key[3], "geometry": list(key[4]),
-        "ring": list(key[5]), "stats": value,
-    } for key, value in stats.items()]}
+    """The computed-stats store, grouped by image and one measurement
+    per line (json allows the NaN literal, which Python's parser reads
+    back, so this stays lossless).
+
+    Grouped because the flat form repeated every image's path and mtime
+    once per ROI per settings combination — on a 12-image experiment
+    that was the same 126-character path written 48 times, a fifth of
+    the file. One measurement per line rather than pretty-printed
+    throughout: the record is the unit worth reading, and a file of one
+    record per line can be scanned, grepped and diffed."""
+    grouped = {}
+    for key, value in stats.items():
+        path, mtime, roi_id, kind, geometry, correction = key
+        grouped.setdefault((path, mtime), []).append({
+            "roi_id": roi_id, "kind": kind, "geometry": list(geometry),
+            "correction": list(correction), "stats": value,
+        })
+    lines = ['{', '  "version": 2,', '  "images": [']
+    images = sorted(grouped)
+    for index, (path, mtime) in enumerate(images):
+        file = _relative_to(experiment_directory, path)
+        lines.append("    {")
+        lines.append(f'      "file": {json.dumps(file)},')
+        lines.append(f'      "mtime": {json.dumps(mtime)},')
+        lines.append('      "measurements": [')
+        measurements = grouped[(path, mtime)]
+        for position, measurement in enumerate(measurements):
+            comma = "," if position < len(measurements) - 1 else ""
+            lines.append("        "
+                         + json.dumps(measurement) + comma)
+        lines.append("      ]")
+        lines.append("    }" + ("," if index < len(images) - 1 else ""))
+    lines.append("  ]")
+    lines.append("}")
     path = analysis_directory(experiment_directory) / ROI_STATS_FILENAME
-    path.write_text(json.dumps(payload))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _stats_key(entry):
@@ -208,21 +246,49 @@ def _stats_key(entry):
             tuple(ring) if ring is not None else None)
 
 
+def _flatten_images(experiment_directory, images):
+    """The grouped (version 2) form read back as the flat entries
+    _stats_key understands, with each file resolved against the
+    experiment folder it was written relative to."""
+    for image in images:
+        # Relative entries are resolved against the folder they were
+        # written under; an absolute one is a file that lives outside
+        # it and is stored, and used, as it stands.
+        stored = Path(image["file"])
+        path = (stored if stored.is_absolute()
+                else Path(experiment_directory) / stored)
+        for measurement in image["measurements"]:
+            yield {"path": str(path), "mtime": image["mtime"],
+                   "roi_id": measurement["roi_id"],
+                   "kind": measurement["kind"],
+                   "geometry": measurement["geometry"],
+                   "ring": measurement["correction"],
+                   "stats": measurement["stats"]}
+
+
 def load_roi_stats(experiment_directory) -> dict:
     """The persisted stats store, {} when absent/unreadable/unknown
     version. Entries that no longer match anything (moved ROI, changed
-    file) are simply never looked up — invalidation stays automatic."""
+    file) are simply never looked up — invalidation stays automatic.
+
+    Reads the flat version-1 form as well, so an experiment measured
+    before the file was grouped keeps its numbers."""
     path = (Path(experiment_directory) / ANALYSIS_DIR_NAME
             / ROI_STATS_FILENAME)
     if not path.is_file():
         return {}
     try:
-        payload = json.loads(path.read_text())
-        if payload["version"] != 1:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        version = payload["version"]
+        if version == 1:
+            entries = payload["entries"]
+        elif version == 2:
+            entries = _flatten_images(experiment_directory,
+                                      payload["images"])
+        else:
             logger.warning(f"Unknown ROI stats version in {path}")
             return {}
-        keyed = ((_stats_key(entry), entry["stats"])
-                 for entry in payload["entries"])
+        keyed = ((_stats_key(entry), entry["stats"]) for entry in entries)
         # An entry predating the background annulus can never match a
         # current key, and carrying it would break the next save (its
         # ring is None). Drop it here instead.

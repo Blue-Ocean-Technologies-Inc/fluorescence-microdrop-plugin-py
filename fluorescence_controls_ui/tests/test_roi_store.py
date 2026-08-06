@@ -2,6 +2,7 @@
 stats-store round-trip, and the CSV export layout."""
 import csv
 import json
+import shutil
 import math
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
@@ -410,3 +411,69 @@ def test_stats_survive_a_save_after_loading_pre_ring_entries(tmp_path):
     save_roi_stats(tmp_path, store)
 
     assert load_roi_stats(tmp_path)[fresh] == {"mean": 9.0}
+
+
+def _stats_key_for(image, roi_id="abcd1234", geometry=(5.0, 5.0, 2.0,
+                                                       2.0, 0.0)):
+    return (str(image), image.stat().st_mtime, roi_id, "ellipse",
+            geometry, (2, 4, 60))
+
+
+def test_stats_are_grouped_by_image_one_measurement_per_line(tmp_path):
+    image = tmp_path / "a_raw.png"
+    image.write_bytes(b"")
+    store = {
+        _stats_key_for(image, "roi_a"): {"mean": 1.0},
+        _stats_key_for(image, "roi_b"): {"mean": 2.0},
+    }
+    save_roi_stats(tmp_path, store)
+    text = (tmp_path / "analysis" / "roi_stats.json").read_text(
+        encoding="utf-8")
+    payload = json.loads(text)
+
+    # One image entry carrying both measurements: the path and mtime
+    # are written once, not once per ROI per settings combination.
+    assert payload["version"] == 2
+    (entry,) = payload["images"]
+    assert len(entry["measurements"]) == 2
+    assert text.count(entry["file"]) == 1
+    # Readable: a line per measurement rather than the whole store on
+    # one line.
+    assert len(text.splitlines()) > 5
+    assert load_roi_stats(tmp_path) == store
+
+
+def test_a_flat_version_1_stats_file_still_loads(tmp_path):
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    image = tmp_path / "a_raw.png"
+    image.write_bytes(b"")
+    (analysis / "roi_stats.json").write_text(json.dumps({
+        "version": 1, "entries": [{
+            "path": str(image), "mtime": image.stat().st_mtime,
+            "roi_id": "abcd1234", "kind": "ellipse",
+            "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
+            "ring": [2, 4, 60], "stats": {"mean": 7.0},
+        }],
+    }))
+    loaded = load_roi_stats(tmp_path)
+    assert loaded[_stats_key_for(image)] == {"mean": 7.0}
+    # Saving migrates it to the grouped form without losing anything.
+    save_roi_stats(tmp_path, loaded)
+    assert load_roi_stats(tmp_path) == loaded
+
+
+def test_moving_the_experiment_folder_keeps_the_cache(tmp_path):
+    # Paths are stored against the experiment folder, so copying or
+    # renaming it no longer throws every computed intensity away.
+    source = tmp_path / "before"
+    (source / "captures").mkdir(parents=True)
+    image = source / "captures" / "a_raw.png"
+    image.write_bytes(b"")
+    save_roi_stats(source, {_stats_key_for(image): {"mean": 7.0}})
+
+    moved = tmp_path / "after"
+    shutil.copytree(source, moved)
+    moved_image = moved / "captures" / "a_raw.png"
+    assert load_roi_stats(moved)[_stats_key_for(moved_image)] == \
+        {"mean": 7.0}
