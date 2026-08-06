@@ -347,3 +347,22 @@ def test_dock_pane_title_names_the_browsed_folder():
     # A user-picked folder shows its own name.
     assert _title_for(str(Path("D:/some/album"))) \
         == "Fluorescence Images\t\t-\t\talbum"
+
+
+def test_the_pane_puts_the_analysis_model_in_its_ui_context():
+    """TraitsUI checks every enabled_when when a trait changes on an
+    object IN the context, not on one reached through it. The
+    rolling-ball controls are enabled by a trait on the analysis model,
+    so it has to be a context object in its own right — otherwise the
+    toolbar toggle leaves them stale until an unrelated edit to the
+    viewer model (hovering the image writes the pixel readout) happens
+    to trigger the check."""
+    from fluorescence_controls_ui.image_viewer.dock_pane import (
+        FluorescenceImageViewerDockPane,
+    )
+
+    pane = FluorescenceImageViewerDockPane(
+        model=FluorescenceImageViewerModel())
+    context = pane.trait_context()
+    assert context["object"] is pane.model
+    assert context["analysis"] is pane.model.roi_analysis

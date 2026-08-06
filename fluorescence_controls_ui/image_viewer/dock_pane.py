@@ -83,6 +83,21 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         # follow experiment-folder switches).
         media_capture_event_model.observe(self._on_media_captured, "captured")
 
+    def trait_context(self):
+        """The pane's model and the analysis model.
+
+        TraitsUI checks every ``enabled_when`` when a trait changes on
+        an object IN THE CONTEXT, and not for nested traits reached
+        through one. The rolling-ball controls are enabled by a trait
+        on the analysis model, which is nested under the viewer model —
+        so without this the toolbar toggle left them stale until some
+        unrelated edit to the viewer model (hovering the image, which
+        writes the pixel readout) happened to trigger the check.
+        """
+        context = super().trait_context()
+        context["analysis"] = self.model.roi_analysis
+        return context
+
     def destroy(self):
         media_capture_event_model.observe(self._on_media_captured, "captured",
                                           remove=True)
