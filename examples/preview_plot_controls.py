@@ -5,8 +5,9 @@ enabled_when / visible_when behaves as it would in the app — but view
 only: nothing here touches plot_pane, and closing the window discards
 everything.
 
-- ``a`` grouped rows: one column of labelled sections; X and Y share a
-        row of spin boxes; each button sits in the section it acts on.
+- ``a`` collapsible sections: one column, each behind the sidebar's
+        chevron header; X and Y share a row of spin boxes and each
+        button sits in the section it acts on.
 - ``b`` tabbed: a one-row header (what is plotted) over tabs for
         Axes & Export / Fit / Cleanup / Transforms — the shortest, and
         nothing ever stretches.
@@ -25,14 +26,17 @@ import os
 import sys
 
 from pyface.qt.QtWidgets import QApplication
+from traits.api import Bool, HasTraits
 from traitsui.api import (
-    EnumEditor, HGroup, Item, RangeEditor, Tabbed, UItem, VGroup, View,
+    EnumEditor, HGroup, Item, Label, RangeEditor, Tabbed, UItem,
+    VGroup, View,
 )
 
 from microdrop_style.helpers import style_app
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
 from microdrop_utils.traitsui_qt_helpers import (
-    DoubleSpinBoxEditor, IconButtonEditor, InPlaceToggleEditor,
+    DoubleSpinBoxEditor, IconButtonEditor, IconToggleEditor,
+    InPlaceToggleEditor,
 )
 
 from fluorescence_controls_ui.image_viewer.analysis.consts import (
@@ -57,6 +61,28 @@ DROPDOWN_W = -130
 #: Axis-limit spin boxes: wide enough for any intensity the cameras
 #: produce, stepping by a whole count.
 AXIS_LIMIT_BOUNDS = (-1e9, 1e9)
+
+
+class PanelSections(HasTraits):
+    """Which sections are open — the sidebar's collapse flags,
+    for this panel. In the real pane these would persist with
+    the figure settings."""
+
+    show_axes = Bool(True)
+    show_export = Bool(True)
+    show_fit = Bool(True)
+    show_cleanup = Bool(True)
+    show_transforms = Bool(True)
+
+
+def section(flag, label, *content):
+    """A collapsible section: the image viewer sidebar's chevron
+    header over a body that folds away with it."""
+    return VGroup(
+        HGroup(UItem(f"panel.{flag}", editor=IconToggleEditor()),
+               Label(label)),
+        VGroup(*content, visible_when=f"panel.{flag}"),
+    )
 
 
 def _axis_spin(name, label, auto_flag):
@@ -105,7 +131,6 @@ def axes_group():
         Item("figure.y_auto", label="Y auto"),
         _axis_spin("figure.y_min", "min", "y_auto"),
         _axis_spin("figure.y_max", "max", "y_auto"),
-        label="Axes", show_border=True,
     )
 
 
@@ -116,7 +141,6 @@ def export_group():
              width=PARAM_SPIN_W),
         UItem("model.save_plot_button", editor=IconButtonEditor(
             glyph=ICON_SAVE, tooltip="Save the plot")),
-        label="Export", show_border=True,
     )
 
 
@@ -150,7 +174,6 @@ def fit_group():
                     enabled_when="figure.show_second_derivative_max "
                                  "or figure.show_second_derivative_min"),
         ),
-        label="Fit", show_border=True,
     )
 
 
@@ -179,7 +202,6 @@ def cleanup_group():
                   BUTTER_CUTOFF_BOUNDS,
                   visible_when="figure.smooth_method == 'butterworth'"),
         ),
-        label="Cleanup", show_border=True,
     )
 
 
@@ -190,7 +212,6 @@ def transforms_group():
         _toggle("figure.normalize", "Normalize"),
         _toggle("figure.log_x", "Log X"),
         _toggle("figure.log_y", "Log Y"),
-        label="Transforms", show_border=True,
     )
 
 
@@ -198,16 +219,18 @@ def transforms_group():
 # The variants.                                                       #
 # ------------------------------------------------------------------ #
 def variant_a():
-    """One column of labelled sections."""
+    """One column of collapsible sections."""
     return View(
         VGroup(
-            HGroup(what_group(), export_group()),
-            axes_group(),
-            fit_group(),
-            cleanup_group(),
-            transforms_group(),
+            what_group(),
+            section("show_axes", "Axes", axes_group()),
+            section("show_fit", "Fit", fit_group()),
+            section("show_cleanup", "Cleanup", cleanup_group()),
+            section("show_transforms", "Transforms",
+                    transforms_group()),
+            section("show_export", "Export", export_group()),
         ),
-        title="A — grouped rows", resizable=True)
+        title="A — collapsible sections", resizable=True)
 
 
 def variant_b():
@@ -216,11 +239,18 @@ def variant_b():
         VGroup(
             what_group(),
             Tabbed(
-                VGroup(axes_group(), export_group(),
+                VGroup(section("show_axes", "Axes", axes_group()),
+                       section("show_export", "Export",
+                               export_group()),
                        label="Axes & Export"),
-                VGroup(fit_group(), label="Fit"),
-                VGroup(cleanup_group(), label="Cleanup"),
-                VGroup(transforms_group(), label="Transforms"),
+                VGroup(section("show_fit", "Fit", fit_group()),
+                       label="Fit"),
+                VGroup(section("show_cleanup", "Cleanup",
+                               cleanup_group()),
+                       label="Cleanup"),
+                VGroup(section("show_transforms", "Transforms",
+                               transforms_group()),
+                       label="Transforms"),
             ),
         ),
         title="B — tabbed", resizable=True)
@@ -232,9 +262,14 @@ def variant_c():
         VGroup(
             what_group(),
             HGroup(
-                VGroup(axes_group(), export_group(),
-                       transforms_group()),
-                VGroup(fit_group(), cleanup_group()),
+                VGroup(section("show_axes", "Axes", axes_group()),
+                       section("show_export", "Export",
+                               export_group()),
+                       section("show_transforms", "Transforms",
+                               transforms_group())),
+                VGroup(section("show_fit", "Fit", fit_group()),
+                       section("show_cleanup", "Cleanup",
+                               cleanup_group())),
             ),
         ),
         title="C — two columns", resizable=True)
@@ -259,7 +294,8 @@ def main():
 
     model = RoiAnalysisModel()
     context = {"model": model, "session": model.session,
-               "figure": model.session.figure}
+               "figure": model.session.figure,
+               "panel": PanelSections()}
     wanted = (list(VARIANTS) if arguments.variant == "all"
               else [arguments.variant])
     uis = [VARIANTS[key]().ui(context=context, kind="live")
