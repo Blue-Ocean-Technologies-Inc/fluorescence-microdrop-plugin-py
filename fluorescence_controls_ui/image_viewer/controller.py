@@ -18,7 +18,9 @@ from .discovery import (
     discover_experiments,
 )
 from .display import load_image_array
-from .model import FluorescenceImageViewerModel, WAVELENGTH_FILTER_ALL
+from .model import (
+    BURST_FILTER_ALL, FluorescenceImageViewerModel, WAVELENGTH_FILTER_ALL,
+)
 
 logger = get_logger(__name__)
 
@@ -158,15 +160,17 @@ class FluorescenceImageViewerController(Controller):
 
     def _step_to_adjacent_group(self, direction, show):
         """Move to the next/previous image group (wrapping) and show its
-        first/last image. With a single group, wrap within it instead."""
-        names = self.model.burst_names
-        if len(names) <= 1:
+        first/last image. With the "All" choice (or a single group) the
+        visible list already spans everything: wrap within it."""
+        if (self.model.selected_burst == BURST_FILTER_ALL
+                or len(self.model.bursts) <= 1):
             paths = self.model.paths
             self.model.current_path = str(paths[0] if direction > 0
                                           else paths[-1])
             return
-        self._jump_to_burst(
-            (self.model.burst_index + direction) % len(names), show)
+        group_index = (self.model.burst_index - 1 + direction) \
+            % len(self.model.bursts)
+        self._jump_to_burst(group_index + 1, show)
 
     # ------------------------------------------------------------------ #
     # Burst dropdown / burst slider / wavelength filter                    #
@@ -293,9 +297,12 @@ class FluorescenceImageViewerController(Controller):
         # "Following newest" = showing the newest visible image of the
         # newest burst (or nothing yet) — those users ride along as new
         # captures land; anyone parked elsewhere stays parked.
+        on_all = self.model.selected_burst == BURST_FILTER_ALL
         following_newest = (
             not self.model.current_path or not self.model.paths
-            or (self.model.burst_names
+            or (on_all
+                and self.model.current_path == str(self.model.paths[-1]))
+            or (not on_all and self.model.burst_names
                 and self.model.selected_burst == self.model.burst_names[-1]
                 and self.model.current_path == str(self.model.paths[-1])))
         self.model.bursts = bursts
@@ -314,7 +321,10 @@ class FluorescenceImageViewerController(Controller):
             self.model.selected_image = ""
             return
         if following_newest:
-            self._jump_to_burst(-1, "last")
+            if on_all:
+                self._refresh_visible("last")
+            else:
+                self._jump_to_burst(-1, "last")
         elif self.model.selected_burst not in names:
             # The parked burst vanished (folder pruned): fall to newest.
             self._jump_to_burst(-1, "first")

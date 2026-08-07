@@ -260,9 +260,9 @@ def test_rescan_follows_newest_burst_and_populates_wavelengths(
         monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
-    assert model.burst_names == ["Mix_1.2_a", "Rinse_3_b"]
+    assert model.burst_names == ["All", "Mix_1.2_a", "Rinse_3_b"]
     assert model.selected_burst == "Rinse_3_b"
-    assert model.burst_index == 1
+    assert model.burst_index == 2
     assert model.current_path == str(paths["new_blue"])
     assert model.wavelength_names == [
         WAVELENGTH_FILTER_ALL, "Blue (460 nm)", "Green (540 nm)"]
@@ -272,7 +272,7 @@ def test_selecting_older_burst_shows_its_first_image(monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
     model.selected_burst = "Mix_1.2_a"
-    assert model.burst_index == 0
+    assert model.burst_index == 1
     assert [p.name for p in model.paths] == [
         "Blue_460_nm_1_t1_raw.png", "Green_540_nm_2_t2_raw.png"]
     assert model.current_path == str(paths["old_blue"])
@@ -282,6 +282,8 @@ def test_burst_slider_drives_selection(monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
     model.burst_index = 0
+    assert model.selected_burst == "All"
+    model.burst_index = 1
     assert model.selected_burst == "Mix_1.2_a"
 
 
@@ -318,10 +320,10 @@ def test_seek_sliders_are_one_based_twins(monkeypatch, tmp_path):
     drives the 0-based index and vice versa."""
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
-    assert model.burst_number == model.burst_index + 1 == 2
-    assert model.max_burst_number == 2
-    model.burst_number = 1
-    assert model.burst_index == 0 and model.selected_burst == "Mix_1.2_a"
+    assert model.burst_number == model.burst_index + 1 == 3
+    assert model.max_burst_number == 3
+    model.burst_number = 2
+    assert model.burst_index == 1 and model.selected_burst == "Mix_1.2_a"
     assert model.max_image_number == len(model.paths) == 2
     model.image_number = 2
     assert model.image_index == 1
@@ -338,10 +340,29 @@ def test_dock_pane_title_names_the_browsed_folder():
     from pathlib import Path
 
     from fluorescence_controls_ui.image_viewer.dock_pane import _title_for
-    assert _title_for("") == "Fluorescence Images"
+    assert _title_for("") == "Image Viewer"
     # Default (experiment) captures dir: the experiment folder names it.
     assert _title_for(str(Path("Experiments/2026_07_20-17_41_31/captures"))) \
-        == "Fluorescence Images\t\t-\t\t2026_07_20-17_41_31"
+        == "Image Viewer\t\t-\t\t2026_07_20-17_41_31"
     # A user-picked folder shows its own name.
     assert _title_for(str(Path("D:/some/album"))) \
-        == "Fluorescence Images\t\t-\t\talbum"
+        == "Image Viewer\t\t-\t\talbum"
+
+
+def test_the_pane_puts_the_analysis_model_in_its_ui_context():
+    """TraitsUI checks every enabled_when when a trait changes on an
+    object IN the context, not on one reached through it. The
+    rolling-ball controls are enabled by a trait on the analysis model,
+    so it has to be a context object in its own right — otherwise the
+    toolbar toggle leaves them stale until an unrelated edit to the
+    viewer model (hovering the image writes the pixel readout) happens
+    to trigger the check."""
+    from fluorescence_controls_ui.image_viewer.dock_pane import (
+        FluorescenceImageViewerDockPane,
+    )
+
+    pane = FluorescenceImageViewerDockPane(
+        model=FluorescenceImageViewerModel())
+    context = pane.trait_context()
+    assert context["object"] is pane.model
+    assert context["analysis"] is pane.model.roi_analysis

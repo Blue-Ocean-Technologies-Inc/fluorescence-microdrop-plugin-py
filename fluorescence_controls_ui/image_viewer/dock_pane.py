@@ -11,6 +11,7 @@ in :class:`FluorescenceImageViewerController`, widgets in ``view.py``.
 This pane only assembles them, owns the Qt timers (the view-injected
 schedulers), and binds the persisted display-window preferences.
 """
+import threading
 from pathlib import Path
 
 from pyface.tasks.api import TraitsDockPane
@@ -26,13 +27,18 @@ from logger.logger_service import get_logger
 
 from ..consts import PKG
 from ..consts import DISCOVERY_POLL_INTERVAL_MS, SLIDESHOW_INTERVAL_MS
+from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
+from .analysis.roi_batch import _shared_executor
+from .analysis.roi_controller import RoiAnalysisController
 from .controller import FluorescenceImageViewerController
 from .model import FluorescenceImageViewerModel
 from .view import ImageViewerView
 
 logger = get_logger(__name__)
 
-_dock_pane_name = "Fluorescence Images"
+#: Named for what it is rather than for the plugin it currently ships
+#: in: the viewer is on its way to a plugin of its own.
+_dock_pane_name = "Image Viewer"
 
 
 def _title_for(browsed_directory: str) -> str:
@@ -59,17 +65,40 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
 
     model = Instance(FluorescenceImageViewerModel)
     controller = Instance(FluorescenceImageViewerController)
+    analysis_controller = Instance(RoiAnalysisController)
     _poll_timer = Any()
     _play_timer = Any()
+    _drain_timer = Any()
 
     def traits_init(self):
         self.model = FluorescenceImageViewerModel()
         self.controller = FluorescenceImageViewerController(model=self.model)
+        self.analysis_controller = RoiAnalysisController(
+            viewer_model=self.model,
+            analysis_model=self.model.roi_analysis)
+        # Warm the process pool off-thread so the first Calculate does
+        # not pay the Windows spawn cost (~seconds for cv2 workers).
+        threading.Thread(target=_shared_executor, daemon=True).start()
         # Event-driven refresh: the device viewer fires this the moment a
         # capture file finishes writing, so new images appear immediately
         # instead of on the next poll tick (the poll below stays only to
         # follow experiment-folder switches).
         media_capture_event_model.observe(self._on_media_captured, "captured")
+
+    def trait_context(self):
+        """The pane's model and the analysis model.
+
+        TraitsUI checks every ``enabled_when`` when a trait changes on
+        an object IN THE CONTEXT, and not for nested traits reached
+        through one. The rolling-ball controls are enabled by a trait
+        on the analysis model, which is nested under the viewer model —
+        so without this the toolbar toggle left them stale until some
+        unrelated edit to the viewer model (hovering the image, which
+        writes the pixel readout) happened to trigger the check.
+        """
+        context = super().trait_context()
+        context["analysis"] = self.model.roi_analysis
+        return context
 
     def destroy(self):
         media_capture_event_model.observe(self._on_media_captured, "captured",
@@ -93,8 +122,16 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self._poll_timer.setInterval(DISCOVERY_POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self.controller.rescan)
         self._poll_timer.start()
+        self._drain_timer = QTimer(control)
+        self._drain_timer.setInterval(ANALYSIS_RESULT_DRAIN_INTERVAL_MS)
+        self._drain_timer.timeout.connect(self._drain_tick)
+        self._drain_timer.start()
         self.controller.rescan()
         return control
+
+    def _drain_tick(self):
+        self.analysis_controller.drain_results()
+        self.analysis_controller.flush_stats()
 
     @observe("model:browsed_directory")
     def _update_title(self, event):
