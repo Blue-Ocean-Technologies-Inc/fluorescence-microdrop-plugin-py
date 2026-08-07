@@ -1,3 +1,130 @@
+## v2.2.0 (2026-08-07)
+
+### Feat
+
+- **analysis**: collapsible sections in the controls mockups
+- **analysis**: standalone mockups for the plot controls
+- **analysis**: add an outlier demo, and fix the stale plot
+- **analysis**: drop outliers and smooth the drawn curves
+- **analysis**: draw the rolling ball on the image as a guide
+- **analysis**: record fit quality and range with the parameters
+- **analysis**: write the fitted parameters beside each export
+- **analysis**: move the correction settings onto the image
+- **analysis**: rolling-ball background correction
+- **analysis**: correct against ROIs marked as standards
+- **analysis**: theme the chart, and let the pane's sections resize
+- **fluorescence**: follow the app's light/dark theme
+- **analysis**: set a starting value per fit parameter
+- **analysis**: edit the fit equation from the table
+- **analysis**: fit any equation the user types
+- **analysis**: light up the armed tool, delete on Del
+- **analysis**: keep draw tools armed, and copy/paste ROIs
+- **analysis**: round a box's corners from a grip
+- **analysis**: add the subtract-first transform
+- **analysis**: draw the background ring on the canvas
+- **analysis**: put the ring parameters in the cache key
+- **analysis**: zoom, pan and scroll the plot pane
+- **analysis**: say when the worker pool is starting
+- **analysis**: count the batch progress image by image
+- **analysis**: export the normalised series beside the raw
+- **analysis**: apply log scales and count hidden points
+- **analysis**: add log and normalise plot toggles
+- **analysis**: normalise each ROI series to its own range
+- **analysis**: report ROI area in the table and the CSV
+- **analysis**: label the per-area axis with its unit
+- **analysis**: derive integrated and per-area statistics
+- **analysis**: add pixel area and its unit label
+- **viewer**: add the scale controls and readout
+- **viewer**: draw the map-style scale bar on the image
+- **viewer**: rubber-band a scale calibration line
+- **viewer**: persist a per-experiment scale calibration
+- **viewer**: add the scale-bar units and snapping maths
+- **analysis**: swap the plot checkboxes for in-place toggles
+- **analysis**: add eye and alpha editors to the ROI table
+- **analysis**: give each ROI a plot visibility and alpha
+- **analysis**: draw contour ROIs by placing nodes
+- **analysis**: add the contour ROI item with node grips
+- **analysis**: add the polygon ROI kind and its tool mode
+- **analysis**: mask contour ROIs from a vertex list
+- **analysis**: draw capsule ROIs from the toolbar
+- **analysis**: add a rotation grip and ellipse resizing
+- **analysis**: migrate ROI kinds to ellipse/box/capsule
+- **analysis**: mask rotated ellipses, boxes and capsules
+- **analysis**: add canonical ROI geometry with an angle
+- **analysis**: add the "Trim poor tail" plot control
+- **analysis**: trim poor fits to the leading points
+- **examples**: sigmoid demo disk with fastest-change ground truth
+- **analysis**: plot view modes (d2 curves, fastest-change bars)
+- **analysis**: persist plot view_mode figure setting
+- **analysis**: sigmoid fit, first derivative, fastest-change time
+- **examples**: fit-demo experiment generator with ground truth
+- **analysis**: fit controls, legend toggle and equations popup
+- **analysis**: draw fits, equations and derivative markers
+- **analysis**: persist fit, legend and derivative-marker settings
+- **analysis**: curve-fitting core with second-derivative extrema
+- **viewer**: sidebar layout with vertical analysis toolbar
+- **analysis**: axis limit controls and publication export
+- **analysis**: ROI table with rename, styles, live stats
+- **analysis**: plot stat selector and per-ROI line styling
+- **analysis**: persist stats per experiment, warm pool at startup
+- **analysis**: session + stats-store persistence (v2 config)
+- **analysis**: add AnalysisSession, RoiStyle, FigureSettings traits
+- **image-viewer**: add ROI intensity plot dock pane
+- **image-viewer**: add ROI analysis toolbutton row
+- **image-viewer**: orchestrate ROI batch analysis
+- **image-viewer**: draw/edit ROI layer on the canvas
+- **image-viewer**: persist ROI config and intensity CSV
+- **image-viewer**: add ROI batch compute runner
+- **image-viewer**: add pure ROI stats compute layer
+- **image-viewer**: add ROI analysis model layer
+- **image-viewer**: add All choice to image-group filter
+- **image-viewer**: parse capture time from filenames
+
+### Fix
+
+- **analysis**: enable the ball controls the moment they are toggled
+- **fluorescence**: keep the icon font under the themed stylesheet
+- **analysis**: show the fit on opening, and repaint on refit
+- **analysis**: report the sigmoid's own 4PL parameters
+- **analysis**: stack the background ring above the image
+- **analysis**: drop pre-ring stats entries at load
+- **analysis**: measure background in a true annulus
+- **analysis**: advance the batch progress and show it once
+- **analysis**: format the area cell in significant figures
+- **analysis**: remove bar container, not bars, on plot refresh
+- **analysis**: proportional equation-table columns, compact R2
+- **analysis**: make plot margins WYSIWYG and pane split draggable
+- **analysis**: guard pane teardown for never-created panes
+- **analysis**: address final-review findings
+- **analysis**: defer capture_service import in ROI export
+- **analysis**: guard handle drags in sync, heal broken pool
+- **analysis**: address final-review findings
+- **image-viewer**: make instant ROI stats robust to batch restarts
+- **controller**: adopt the monitor's claimed serial handle
+- **controller**: relinquish port on wrong-board whoami identity
+
+### Refactor
+
+- **analysis**: compact toggles and Bkg Ref labelling
+- **analysis**: rebuild the plot controls as the reviewed tabs
+- **analysis**: align the Axes table with a real Qt grid
+- **analysis**: settle the controls mockup on the tabbed layout
+- **analysis**: restructure the controls mockups per review
+- **analysis**: name the bare numbers
+- **analysis**: rename standards to background references
+- **analysis**: group the stats store by image, one per line
+- **analysis**: export intensities long rather than wide
+- **analysis**: draw the ROI eye as a cell, not a button
+- **analysis**: always show the scale bar
+- **analysis**: split ROI handles and canvas layer out
+- **analysis**: TraitsUI plot controls, scrollable pane
+- **analysis**: plot pane derives its own series from the session
+- **analysis**: move per-experiment state into AnalysisSession
+
+### Perf
+
+- **analysis**: run the ROI batch on threads, and show the ring as a band
+
 ## v2.1.0 (2026-07-23)
 
 ### Fix
