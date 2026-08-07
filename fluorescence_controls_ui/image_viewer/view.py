@@ -29,6 +29,10 @@ from microdrop_utils.traitsui_qt_helpers import (
 )
 
 from ..cameras.asi_thread import frame_to_qimage
+from .analysis.consts import (
+    RING_GAP_BOUNDS_PX, RING_THICKNESS_BOUNDS_PX,
+    ROLLING_BALL_RADIUS_BOUNDS_PX,
+)
 from .analysis.roi_canvas_layer import RoiCanvasLayer
 from .analysis.roi_compute import subtract_rolling_ball
 from .display import stretch_to_8bit
@@ -39,6 +43,21 @@ from .scale_layer import ScaleCanvasLayer
 
 #: Inset of the scale bar from the viewport's bottom-left corner.
 SCALE_BAR_MARGIN_PX = 12
+
+#: One wheel notch's zoom on the image canvas, in and out. The
+#: plot canvas mirrors these (PLOT_ZOOM_STEP) so the two feel the
+#: same.
+IMAGE_ZOOM_IN_FACTOR = 1.25
+IMAGE_ZOOM_OUT_FACTOR = 0.8
+
+#: The scale bar's backdrop and lettering, in viewport pixels:
+#: padding around the bar, the backdrop height, the end ticks, and
+#: the text row above the bar.
+SCALE_BAR_PAD_PX = 6
+SCALE_BAR_BOX_HEIGHT_PX = 32
+SCALE_BAR_TICK_PX = 5
+SCALE_BAR_TEXT_RISE_PX = 24
+SCALE_BAR_TEXT_HEIGHT_PX = 18
 
 #: Keeps the status row's progress bar from bulking up the row.
 PROGRESS_BAR_HEIGHT_PX = 16
@@ -119,7 +138,9 @@ class _ImageView(QGraphicsView):
 
     def wheelEvent(self, event):
         self._auto_fit = False
-        factor = 1.25 if event.angleDelta().y() > 0 else 0.8
+        factor = (IMAGE_ZOOM_IN_FACTOR
+                  if event.angleDelta().y() > 0
+                  else IMAGE_ZOOM_OUT_FACTOR)
         self.scale(factor, factor)
         event.accept()
 
@@ -211,14 +232,23 @@ class _ImageView(QGraphicsView):
         viewport = self.viewport().rect()
         left = viewport.left() + SCALE_BAR_MARGIN_PX
         bottom = viewport.bottom() - SCALE_BAR_MARGIN_PX
-        painter.fillRect(QRectF(left - 6, bottom - 26, bar_px + 12, 32),
-                         QColor(0, 0, 0, 110))
+        painter.fillRect(
+            QRectF(left - SCALE_BAR_PAD_PX,
+                   bottom - SCALE_BAR_BOX_HEIGHT_PX
+                   + SCALE_BAR_PAD_PX,
+                   bar_px + 2 * SCALE_BAR_PAD_PX,
+                   SCALE_BAR_BOX_HEIGHT_PX),
+            QColor(0, 0, 0, 110))
         painter.setPen(QPen(QColor(255, 255, 255), 2))
         painter.drawLine(left, bottom, int(left + bar_px), bottom)
-        painter.drawLine(left, bottom - 5, left, bottom)
-        painter.drawLine(int(left + bar_px), bottom - 5,
+        painter.drawLine(left, bottom - SCALE_BAR_TICK_PX, left,
+                         bottom)
+        painter.drawLine(int(left + bar_px),
+                         bottom - SCALE_BAR_TICK_PX,
                          int(left + bar_px), bottom)
-        painter.drawText(QRectF(left, bottom - 24, bar_px, 18),
+        painter.drawText(QRectF(left,
+                                bottom - SCALE_BAR_TEXT_RISE_PX,
+                                bar_px, SCALE_BAR_TEXT_HEIGHT_PX),
                          Qt.AlignmentFlag.AlignCenter, label)
         painter.restore()
 
@@ -362,7 +392,8 @@ class _ImageCanvasEditor(QtEditor):
         radius = int(round(radius))
         # The trait is a Range; anything outside it would raise rather
         # than clamp, and a drag can reach either end.
-        ball.radius_px = max(min(radius, 500), 5)
+        low, high = ROLLING_BALL_RADIUS_BOUNDS_PX
+        ball.radius_px = max(min(radius, high), low)
 
     def _push_scale(self):
         """One path for a session swap and a fresh calibration."""
@@ -660,20 +691,24 @@ correction_group = HGroup(
     # reads it, or the batch finds nothing missing and reports "up to
     # date" against the old ring.
     Item("object.roi_analysis.session.ring.gap_px", label="gap",
-         editor=RangeEditor(low=0, high=50, mode="spinner",
-                            auto_set=True),
+         editor=RangeEditor(low=RING_GAP_BOUNDS_PX[0],
+                            high=RING_GAP_BOUNDS_PX[1],
+                            mode="spinner", auto_set=True),
          tooltip="Pixels between an ROI's edge and the ring its "
                  "background is read from. Fluorescence bleeds a pixel "
                  "or two past the boundary and that halo is not "
                  "background."),
     Item("object.roi_analysis.session.ring.thickness_px", label="width",
-         editor=RangeEditor(low=1, high=50, mode="spinner",
-                            auto_set=True),
+         editor=RangeEditor(low=RING_THICKNESS_BOUNDS_PX[0],
+                            high=RING_THICKNESS_BOUNDS_PX[1],
+                            mode="spinner", auto_set=True),
          tooltip="Thickness of the background ring, in pixels. "
                  "Changing either value recomputes the statistics."),
     Item("object.roi_analysis.session.ball.radius_px", label="Ball r",
-         editor=RangeEditor(low=5, high=500, mode="spinner",
-                            auto_set=True),
+         editor=RangeEditor(
+             low=ROLLING_BALL_RADIUS_BOUNDS_PX[0],
+             high=ROLLING_BALL_RADIUS_BOUNDS_PX[1],
+             mode="spinner", auto_set=True),
          enabled_when="object.roi_analysis.rolling_ball_enabled",
          tooltip="Ball radius in pixels — the scale of the unevenness "
                  "removed. Keep it comfortably larger than the "

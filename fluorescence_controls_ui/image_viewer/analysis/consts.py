@@ -11,6 +11,43 @@ RING_THICKNESS_PX = 4
 #: than a droplet, or the ball rolls over the signal too.
 ROLLING_BALL_RADIUS_PX = 50
 
+# --------------------------------------------------------------------
+# (min, max) bounds of every user-editable number. Each is read by the
+# model trait AND by the spinner that edits it — and, for the ball, by
+# the canvas drag that sets it — so one definition keeps the copies
+# from drifting apart.
+# --------------------------------------------------------------------
+#: Ring gap / thickness (px). Gap may be 0 (ring hugs the shape); the
+#: ring itself needs at least one pixel of width to exist.
+RING_GAP_BOUNDS_PX = (0, 50)
+RING_THICKNESS_BOUNDS_PX = (1, 50)
+#: Rolling-ball radius (px): below 5 the ball is smaller than the
+#: features it must clear; 500 exceeds any unevenness a frame carries.
+ROLLING_BALL_RADIUS_BOUNDS_PX = (5, 500)
+#: Per-ROI plot opacity, as a percentage.
+ROI_ALPHA_BOUNDS_PCT = (0, 100)
+#: Hampel outlier test: how far from the local median counts (in
+#: scaled MADs, so 3 reads like "3 sigma"), and the window it is
+#: judged in (odd sizes centre; 3 is the fewest with any neighbours).
+OUTLIER_THRESHOLD_BOUNDS_MAD = (1.0, 20.0)
+OUTLIER_THRESHOLD_MAD = 3.0
+OUTLIER_WINDOW_BOUNDS_PTS = (3, 51)
+OUTLIER_WINDOW_PTS = 5
+#: Savitzky-Golay smoothing: points per polynomial fit and its order
+#: (the filter itself needs order < window; 6 is past any curvature a
+#: capture series shows).
+SAVGOL_WINDOW_BOUNDS_PTS = (3, 101)
+SAVGOL_WINDOW_PTS = 7
+SAVGOL_ORDER_BOUNDS = (1, 6)
+SAVGOL_ORDER = 2
+#: Butterworth smoothing: filter order (8 is already a sharp cliff)
+#: and cutoff as a fraction of the Nyquist frequency (1.0 would pass
+#: everything; 0.99 keeps the filter well-posed).
+BUTTER_ORDER_BOUNDS = (1, 8)
+BUTTER_ORDER = 2
+BUTTER_CUTOFF_BOUNDS = (0.01, 0.99)
+BUTTER_CUTOFF = 0.2
+
 #: Prefix on the outline-ring stat columns (outline_mean, outline_std, ...).
 OUTLINE_STATS_PREFIX = "outline_"
 

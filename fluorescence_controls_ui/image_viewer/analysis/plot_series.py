@@ -5,6 +5,12 @@ import math
 
 from logger.logger_service import get_logger
 
+from .consts import (
+    BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS, BUTTER_ORDER,
+    BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_MAD,
+    OUTLIER_WINDOW_PTS, SAVGOL_ORDER, SAVGOL_WINDOW_PTS,
+)
+
 from ..scale_bar import pixel_area
 
 logger = get_logger(__name__)
@@ -102,6 +108,16 @@ MAD_TO_SIGMA = 1.4826
 #: one collapses to zero (see _robust_scale).
 MEAN_ABS_TO_SIGMA = 1.2533
 
+#: Fewest finite points a median or a Hampel window can say
+#: anything about — below three there are no neighbours to
+#: disagree with.
+_MIN_MEDIAN_POINTS = 3
+
+#: filtfilt pads the signal with a few filter-lengths of
+#: reflection at each end; scipy needs the series longer than
+#: this multiple of the order, or it raises.
+_FILTFILT_MIN_LENGTH_MULTIPLE = 3
+
 
 def _robust_scale(values, centre):
     """A spread for ``values`` about ``centre``, in units comparable
@@ -125,7 +141,8 @@ def _window_slice(values, index, window):
     return values[max(index - half, 0):index + half + 1]
 
 
-def outlier_mask(values, threshold=3.0, window=5):
+def outlier_mask(values, threshold=OUTLIER_THRESHOLD_MAD,
+                 window=OUTLIER_WINDOW_PTS):
     """Which points are outliers, by the Hampel test: each point
     against the median and median-absolute-deviation of the window
     around it.
@@ -145,9 +162,9 @@ def outlier_mask(values, threshold=3.0, window=5):
     the window spans real changes in the signal. Isolated spikes, the
     usual case, are what this catches."""
     finite = [value for value in values if value == value]
-    if len(finite) < 3:
+    if len(finite) < _MIN_MEDIAN_POINTS:
         return [False] * len(values)
-    window = max(int(window), 3)
+    window = max(int(window), _MIN_MEDIAN_POINTS)
     overall_scale = _robust_scale(finite, _median(finite))
     flags = []
     for index, value in enumerate(values):
@@ -157,7 +174,7 @@ def outlier_mask(values, threshold=3.0, window=5):
         neighbours = [other for other in _window_slice(values, index,
                                                        window)
                       if other == other]
-        if len(neighbours) < 3:
+        if len(neighbours) < _MIN_MEDIAN_POINTS:
             flags.append(False)
             continue
         middle = _median(neighbours)
@@ -177,7 +194,8 @@ def _median(values):
     return (ordered[middle - 1] + ordered[middle]) / 2.0
 
 
-def without_outliers(series, threshold=3.0, window=5):
+def without_outliers(series, threshold=OUTLIER_THRESHOLD_MAD,
+                     window=OUTLIER_WINDOW_PTS):
     """``series`` with outlying points replaced by NaN — the same hole
     an uncomputed image leaves, so everything downstream already knows
     how to skip it. Returns (series, {roi_id: [flags]}) so the plot can
@@ -312,7 +330,8 @@ def _restore_gaps(values, gaps):
             for value, gap in zip(values, gaps)]
 
 
-def smoothed_values(values, method, window=7, order=2, cutoff=0.2):
+def smoothed_values(values, method, window=SAVGOL_WINDOW_PTS,
+                    order=SAVGOL_ORDER, cutoff=BUTTER_CUTOFF):
     """One series smoothed, or returned untouched when it is too short
     for the filter asked for — a curve that cannot be smoothed is shown
     as it is rather than not at all.
@@ -333,21 +352,27 @@ def smoothed_values(values, method, window=7, order=2, cutoff=0.2):
         if method == "savgol":
             # An even window has no centre point, and the polynomial
             # needs more points than its own order to be determined.
-            length = min(max(int(window), 3), count)
+            length = min(max(int(window), _MIN_MEDIAN_POINTS),
+                         count)
             if length % 2 == 0:
                 length -= 1
             polyorder = min(max(int(order), 1), length - 1)
-            if length < 3:
+            if length < _MIN_MEDIAN_POINTS:
                 return list(values)
             smoothed = savgol_filter(filled, length, polyorder)
         else:
             # filtfilt runs the filter forwards and back, so the result
             # has no phase shift — a smoothed peak stays where it was.
             # It needs a few times the filter length in samples.
-            filter_order = min(max(int(order), 1), 8)
-            if count <= 3 * (filter_order + 1):
+            filter_order = min(max(int(order),
+                                   BUTTER_ORDER_BOUNDS[0]),
+                               BUTTER_ORDER_BOUNDS[1])
+            if count <= (_FILTFILT_MIN_LENGTH_MULTIPLE
+                         * (filter_order + 1)):
                 return list(values)
-            normalized = min(max(float(cutoff), 1e-3), 0.99)
+            normalized = min(max(float(cutoff),
+                                 BUTTER_CUTOFF_BOUNDS[0]),
+                             BUTTER_CUTOFF_BOUNDS[1])
             numerator, denominator = butter(filter_order, normalized,
                                             btype="low")
             smoothed = filtfilt(numerator, denominator, filled)
@@ -356,7 +381,8 @@ def smoothed_values(values, method, window=7, order=2, cutoff=0.2):
     return _restore_gaps([float(value) for value in smoothed], gaps)
 
 
-def smoothed_series(series, method, window=7, order=2, cutoff=0.2):
+def smoothed_series(series, method, window=SAVGOL_WINDOW_PTS,
+                    order=SAVGOL_ORDER, cutoff=BUTTER_CUTOFF):
     """``series`` with every curve smoothed by ``method``."""
     if method not in ("savgol", "butterworth"):
         return series

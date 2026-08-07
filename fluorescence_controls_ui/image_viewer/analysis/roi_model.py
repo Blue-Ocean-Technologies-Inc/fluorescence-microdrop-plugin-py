@@ -14,7 +14,14 @@ from traits.api import (
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
 from .consts import (
-    RING_GAP_PX, RING_THICKNESS_PX, ROLLING_BALL_RADIUS_PX, VIEW_MODES,
+    BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS, BUTTER_ORDER,
+    BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_BOUNDS_MAD,
+    OUTLIER_THRESHOLD_MAD, OUTLIER_WINDOW_BOUNDS_PTS,
+    OUTLIER_WINDOW_PTS, RING_GAP_BOUNDS_PX, RING_GAP_PX,
+    RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, ROI_ALPHA_BOUNDS_PCT,
+    ROLLING_BALL_RADIUS_BOUNDS_PX, ROLLING_BALL_RADIUS_PX,
+    SAVGOL_ORDER, SAVGOL_ORDER_BOUNDS, SAVGOL_WINDOW_BOUNDS_PTS,
+    SAVGOL_WINDOW_PTS, VIEW_MODES,
 )
 from .curve_fit import FIT_METHODS
 from .plot_series import SMOOTH_METHODS
@@ -49,7 +56,8 @@ class RoiStyle(HasTraits):
     #: stats table, and still exported to CSV. Range needs the explicit
     #: default, or it would start every ROI fully transparent.
     visible = Bool(True)
-    alpha = Range(0, 100, 100, mode="spinner")
+    alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1],
+                  mode="spinner")
 
     @property
     def plot_alpha(self):
@@ -95,22 +103,27 @@ class FigureSettings(HasTraits):
     #: MAD — before anything is fitted or drawn. They are marked on
     #: the plot and flagged in the CSV rather than vanishing.
     remove_outliers = Bool(False)
-    outlier_threshold = Range(1.0, 20.0, 3.0)
-    outlier_window = Range(3, 51, 5, mode="spinner")
+    outlier_threshold = Range(*OUTLIER_THRESHOLD_BOUNDS_MAD,
+                              OUTLIER_THRESHOLD_MAD)
+    outlier_window = Range(*OUTLIER_WINDOW_BOUNDS_PTS,
+                           OUTLIER_WINDOW_PTS, mode="spinner")
 
     #: Display-only smoothing of the drawn curves. The fits keep the
     #: unsmoothed points: neighbouring values in a smoothed curve are
     #: no longer independent, which flatters R² and shrinks the
     #: parameter uncertainties for the wrong reason.
     smooth_method = Enum(*SMOOTH_METHODS)
-    savgol_window = Range(3, 101, 7, mode="spinner")
-    savgol_order = Range(1, 6, 2, mode="spinner")
-    butter_order = Range(1, 8, 2, mode="spinner")
+    savgol_window = Range(*SAVGOL_WINDOW_BOUNDS_PTS,
+                          SAVGOL_WINDOW_PTS, mode="spinner")
+    savgol_order = Range(*SAVGOL_ORDER_BOUNDS, SAVGOL_ORDER,
+                         mode="spinner")
+    butter_order = Range(*BUTTER_ORDER_BOUNDS, BUTTER_ORDER,
+                         mode="spinner")
     #: Cutoff as a fraction of the Nyquist frequency: 1.0 passes
     #: everything, small values keep only the slowest changes. A
     #: fraction rather than Hz because a burst-captured series is not
     #: evenly spaced in time, and only the point spacing is knowable.
-    butter_cutoff = Range(0.01, 0.99, 0.2)
+    butter_cutoff = Range(*BUTTER_CUTOFF_BOUNDS, BUTTER_CUTOFF)
 
     #: Each curve less its own first value: change from baseline.
     subtract_first = Bool(False)
@@ -156,7 +169,8 @@ class RollingBall(HasTraits):
     rolls over them and takes the signal with the background."""
 
     enabled = Bool(False)
-    radius_px = Range(5, 500, ROLLING_BALL_RADIUS_PX, mode="spinner")
+    radius_px = Range(*ROLLING_BALL_RADIUS_BOUNDS_PX,
+                      ROLLING_BALL_RADIUS_PX, mode="spinner")
 
     #: Draw the ball on the image at its true size, as a guide for
     #: choosing the radius by eye. Display only — it is measured with
@@ -176,8 +190,10 @@ class BackgroundRing(HasTraits):
 
     #: Pixels between the ROI's edge and the ring — fluorescence bleeds
     #: past the boundary and that halo is not background.
-    gap_px = Range(0, 50, RING_GAP_PX, mode="spinner")
-    thickness_px = Range(1, 50, RING_THICKNESS_PX, mode="spinner")
+    gap_px = Range(*RING_GAP_BOUNDS_PX, RING_GAP_PX,
+                   mode="spinner")
+    thickness_px = Range(*RING_THICKNESS_BOUNDS_PX,
+                         RING_THICKNESS_PX, mode="spinner")
     show_on_canvas = Bool(True)
 
 

@@ -22,6 +22,15 @@ WAVELENGTH_FILTER_ALL = "All"
 BURST_FILTER_ALL = "All"
 
 
+#: Ceiling of a 16-bit capture, the deepest frame the cameras
+#: produce; the contrast window slides inside it.
+UINT16_MAX = 65535.0
+
+#: Default white point: raw fluorescence sits far below the 16-bit
+#: ceiling, so opening at full range would show a black frame.
+DEFAULT_WINDOW_MAX = 10000.0
+
+
 class FluorescenceImageViewerModel(HasTraits):
     """State for the 16-bit capture viewer."""
 
@@ -129,8 +138,8 @@ class FluorescenceImageViewerModel(HasTraits):
     )
     window_max = RangeWithViewHints(
         1.0,
-        65535.0,
-        10000.0,
+        UINT16_MAX,
+        DEFAULT_WINDOW_MAX,
         desc="intensity displayed as white"
     )
 

@@ -55,6 +55,32 @@ _CUSTOM_SEEDS = (1.0, 0.0)
 #: enough that the second difference doesn't drown in float noise.
 _DERIVATIVE_STEP_FRACTION = 1e-3
 
+#: Iteration budget handed to curve_fit. The default (a few
+#: hundred) gives up on the stiffer seeds well before they
+#: converge; this is generous because a failed solve costs a
+#: recompute the user notices, while spare iterations cost
+#: nothing on the fits that converge early.
+_MAX_FIT_EVALUATIONS = 10000
+
+#: Below this a float difference is numerical noise, not a
+#: value: used to catch degenerate spans, flat derivatives and
+#: zero residuals without dividing by them.
+_NEGLIGIBLE = 1e-12
+
+#: Points sampled when a derivative extremum or the fastest
+#: change has to be searched for on a grid rather than read off
+#: a parameter — fine enough that the answer lands within a
+#: fraction of a capture interval on any series this app sees.
+_SEARCH_GRID_POINTS = 512
+
+#: Rate seeds, per unit of the fitted t-span: an exponential
+#: decaying over roughly the span, and a sigmoid rising across
+#: roughly a quarter of it — the shapes a fluorescence series
+#: actually takes, near enough for the optimizer to finish the
+#: job.
+_EXPONENTIAL_RATE_SEED = -1.0
+_SIGMOID_RATE_SEED = 4.0
+
 #: Poor-fit tail trim (opt-in, see fit_series): R² a fit must reach to
 #: be accepted, the share of points each retry keeps, and the fewest
 #: points worth fitting however poor R² stays.
@@ -108,7 +134,7 @@ def _r_squared(values, fitted):
     ss_res = float(np.sum(residual ** 2))
     ss_tot = float(np.sum((values - np.mean(values)) ** 2))
     if ss_tot == 0.0:
-        return 1.0 if ss_res < 1e-12 else 0.0
+        return 1.0 if ss_res < _NEGLIGIBLE else 0.0
     return 1.0 - ss_res / ss_tot
 
 
@@ -139,11 +165,13 @@ def _fit_exponential(elapsed, values):
     t_span = float(elapsed[-1] - elapsed[0]) or 1.0
     offset0 = float(values[-1])
     amplitude0 = float(values[0] - offset0)
-    if abs(amplitude0) < 1e-12:
+    if abs(amplitude0) < _NEGLIGIBLE:
         amplitude0 = float(np.ptp(values)) or 1.0
     params, _ = curve_fit(_exponential, elapsed, values,
-                          p0=(amplitude0, -1.0 / t_span, offset0),
-                          maxfev=10000)
+                          p0=(amplitude0,
+                              _EXPONENTIAL_RATE_SEED / t_span,
+                              offset0),
+                          maxfev=_MAX_FIT_EVALUATIONS)
     amplitude, rate, offset = (float(value) for value in params)
     if not all(math.isfinite(value)
                for value in (amplitude, rate, offset)):
@@ -179,14 +207,14 @@ def _fit_sigmoid(elapsed, values):
     t_span = float(elapsed[-1] - elapsed[0]) or 1.0
     initial0 = float(values[0])
     final0 = float(values[-1])
-    if abs(final0 - initial0) < 1e-12:
+    if abs(final0 - initial0) < _NEGLIGIBLE:
         final0 = initial0 + (float(np.ptp(values)) or 1.0)
     half = (initial0 + final0) / 2.0
     midpoint0 = float(elapsed[int(np.argmin(np.abs(values - half)))])
     params, _ = curve_fit(_logistic_4p, elapsed, values,
                           p0=(initial0, final0, midpoint0,
-                              4.0 / t_span),
-                          maxfev=10000)
+                              _SIGMOID_RATE_SEED / t_span),
+                          maxfev=_MAX_FIT_EVALUATIONS)
     initial, final, midpoint, rate = (float(value) for value in params)
     if not all(math.isfinite(value)
                for value in (initial, final, midpoint, rate)):
@@ -274,7 +302,7 @@ def _solve_from(expression, elapsed, values, seed):
     not converge to something finite."""
     try:
         solved, _ = curve_fit(expression, elapsed, values, p0=seed,
-                              maxfev=10000)
+                              maxfev=_MAX_FIT_EVALUATIONS)
     except Exception:
         return None
     solved = [float(value) for value in solved]
@@ -459,13 +487,14 @@ def second_derivative_extrema(fit, t_start, t_end):
     [t_start, t_end] — the y is the FITTED CURVE's value there, so the
     marker sits on the curve. {} when d² is flat (linear/quadratic):
     no meaningful extremum, draw nothing rather than mislead."""
-    grid = np.linspace(float(t_start), float(t_end), 512)
+    grid = np.linspace(float(t_start), float(t_end),
+                       _SEARCH_GRID_POINTS)
     d2 = np.asarray(fit.second_derivative(grid), dtype=float)
     if d2.shape != grid.shape:      # scalar-returning closure
         d2 = np.full_like(grid, float(d2))
     if not np.all(np.isfinite(d2)):
         return {}
-    if float(np.ptp(d2)) <= 1e-12 * max(1.0, float(np.max(np.abs(d2)))):
+    if float(np.ptp(d2)) <= _NEGLIGIBLE * max(1.0, float(np.max(np.abs(d2)))):
         return {}
     t_max = float(grid[int(np.argmax(d2))])
     t_min = float(grid[int(np.argmin(d2))])
@@ -481,13 +510,14 @@ def fastest_change_time(fit, t_start, t_end):
     None when the speed is flat (linear fits): no meaningful "fastest"
     moment exists, so callers draw nothing rather than an arbitrary
     bar."""
-    grid = np.linspace(float(t_start), float(t_end), 512)
+    grid = np.linspace(float(t_start), float(t_end),
+                       _SEARCH_GRID_POINTS)
     speed = np.abs(np.asarray(fit.first_derivative(grid), dtype=float))
     if speed.shape != grid.shape:   # scalar-returning closure
         speed = np.full_like(grid, float(speed))
     if not np.all(np.isfinite(speed)):
         return None
-    if float(np.ptp(speed)) <= 1e-12 * max(1.0, float(np.max(speed))):
+    if float(np.ptp(speed)) <= _NEGLIGIBLE * max(1.0, float(np.max(speed))):
         return None
     # Outside the window the parameter is no answer to "when, in what
     # we plotted?" — there the rate is monotonic and the edge is.

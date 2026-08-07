@@ -20,6 +20,7 @@ from microdrop_style.icons.icons import (
     ICON_VISIBILITY, ICON_VISIBILITY_OFF,
 )
 
+from .consts import ROI_ALPHA_BOUNDS_PCT
 from ..scale_bar import area_unit, pixel_area
 from .plot_series import stat_value
 
@@ -43,6 +44,10 @@ _BACKGROUND_REF_COLUMN = 2
 #: Point size of the eye glyph, matching the device viewer's own
 #: visibility column.
 EYE_GLYPH_POINT_SIZE = 15
+
+#: Marker-size spinner's reach (pt): 1 is barely visible, 30
+#: swallows the curve it marks.
+MARKER_SIZE_BOUNDS_PT = (1.0, 30.0)
 
 _HEADERS = ("Name", "", "Bg ref", "Alpha", "Color", "Line", "Marker",
             "Size") + _STAT_COLUMNS
@@ -269,7 +274,7 @@ class RoiStatsTable(QTableWidget):
 
     def _alpha_spin(self, roi):
         spin = QSpinBox(self)
-        spin.setRange(0, 100)
+        spin.setRange(*ROI_ALPHA_BOUNDS_PCT)
         spin.setSuffix("%")
         spin.setValue(roi.style.alpha)
         spin.setToolTip("Opacity of this ROI's line on the plot")
@@ -300,7 +305,7 @@ class RoiStatsTable(QTableWidget):
 
     def _size_spin(self, roi):
         spin = QDoubleSpinBox(self)
-        spin.setRange(1.0, 30.0)
+        spin.setRange(*MARKER_SIZE_BOUNDS_PT)
         spin.setValue(roi.style.marker_size)
         spin.valueChanged.connect(
             lambda value, roi=roi:

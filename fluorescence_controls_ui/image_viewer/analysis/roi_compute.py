@@ -9,16 +9,34 @@ import cv2
 import numpy as np
 
 from .consts import (
-    OUTLINE_STATS_PREFIX, RING_GAP_PX, RING_THICKNESS_PX,
+    MIN_POLYGON_POINTS, OUTLINE_STATS_PREFIX, RING_GAP_PX,
+    RING_THICKNESS_PX,
 )
 from .roi_geometry import normalize, outline_of
 
 #: Stats computed for every mask, in column order.
 STAT_NAMES = ("mean", "std", "median", "min", "max", "count")
 
+#: A mask is 8-bit: this is "inside", and 0 is "outside". Every mask
+#: here is drawn, tested and combined with it, so it is one name rather
+#: than a 255 sprinkled through the file.
+MASK_ON = 255
+
+#: Sweep passed to cv2.ellipse for a whole ellipse rather than an arc.
+_FULL_SWEEP_DEGREES = (0, 360)
+
+#: How far a rolling ball's estimate is shrunk before it is computed,
+#: by ball radius: (radius at or below which, shrink factor). ImageJ's
+#: own ladder, and for its reason — the estimate can only follow the
+#: background as finely as the ball is wide, so shrinking below that
+#: costs nothing and saves the work, while a small ball needs the
+#: pixels kept or the shrink becomes the coarser of the two.
+_SHRINK_LADDER = ((10, 1), (30, 2), (100, 4))
+_SHRINK_FACTOR_MAX = 8
+
 
 def interior_mask(shape, kind, geometry):
-    """The uint8 mask (255 inside) of one ROI on an image of ``shape``
+    """The uint8 mask (MASK_ON inside) of one ROI on an image of ``shape``
     (height, width); cv2 clips to the image bounds. Geometry is
     normalized first, so a pre-rotation config still computes the same
     pixels it always did."""
@@ -33,21 +51,25 @@ def interior_mask(shape, kind, geometry):
             # the call every already-cached statistic was computed
             # with: reopening an experiment cannot shift its numbers,
             # nor leave one series half in each convention.
-            cv2.circle(interior, centre, int(round(radius_x)), 255, -1)
+            cv2.circle(interior, centre, int(round(radius_x)),
+                       MASK_ON, cv2.FILLED)
         else:
             axes = (int(round(radius_x)), int(round(radius_y)))
-            cv2.ellipse(interior, centre, axes, angle, 0, 360, 255, -1)
+            cv2.ellipse(interior, centre, axes, angle,
+                        *_FULL_SWEEP_DEGREES, MASK_ON, cv2.FILLED)
     else:
         polygon = outline_of(kind, geometry)
         if len(polygon):
             cv2.fillPoly(interior, [np.round(polygon).astype(np.int32)],
-                         255)
+                         MASK_ON)
     return interior
 
 
 def _disk(radius):
-    return cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                     (2 * radius + 1, 2 * radius + 1))
+    """A disk-shaped structuring element of ``radius``. Odd-sized —
+    diameter plus the centre pixel — so it has a centre to sit on."""
+    size = 2 * radius + 1
+    return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
 
 
 def ring_mask(interior, gap_px=RING_GAP_PX,
@@ -64,6 +86,8 @@ def ring_mask(interior, gap_px=RING_GAP_PX,
     if not len(rows):
         return ring
     # Dilate on a crop, so cost tracks the ROI rather than the frame.
+    # One pixel past the ring's own reach, so the dilation has room and
+    # nothing is clipped by the crop's edge.
     pad = gap_px + thickness_px + 1
     top = max(int(rows.min()) - pad, 0)
     bottom = min(int(rows.max()) + pad + 1, interior.shape[0])
@@ -94,7 +118,7 @@ def ring_contours(shape, kind, geometry, gap_px=RING_GAP_PX,
     found, _hierarchy = cv2.findContours(ring, cv2.RETR_LIST,
                                          cv2.CHAIN_APPROX_SIMPLE)
     return [points.reshape(-1, 2).astype(float) for points in found
-            if len(points) >= 3]
+            if len(points) >= MIN_POLYGON_POINTS]
 
 
 def _shrink_factor(radius_px):
@@ -104,11 +128,10 @@ def _shrink_factor(radius_px):
     follow the background as finely as the ball is wide, so shrinking
     below that costs nothing and saves the work. It backs off for small
     radii, where the shrink would start to be the coarser of the two."""
-    if radius_px <= 10:
-        return 1
-    if radius_px <= 30:
-        return 2
-    return 4 if radius_px <= 100 else 8
+    for limit, factor in _SHRINK_LADDER:
+        if radius_px <= limit:
+            return factor
+    return _SHRINK_FACTOR_MAX
 
 
 def rolling_ball_background(array, radius_px):
@@ -152,7 +175,7 @@ def subtract_rolling_ball(array, radius_px):
 def masked_stats(array, mask):
     """mean/std/median/min/max/count of ``array`` under ``mask`` — NaN
     stats with count 0 for an empty mask (ROI fully outside the image)."""
-    pixels = array[mask == 255]
+    pixels = array[mask == MASK_ON]
     if pixels.size == 0:
         stats = {name: float("nan") for name in STAT_NAMES}
         stats["count"] = 0.0
@@ -202,7 +225,7 @@ def compute_image_stats(image_path, effective_rois,
             cv2.bitwise_or(union, interior, union)
         for roi_id, ring in rings.items():
             others = cv2.subtract(union, interiors[roi_id])
-            ring[others == 255] = 0
+            ring[others == MASK_ON] = 0
             stats = masked_stats(array, interiors[roi_id])
             for name, value in masked_stats(array, ring).items():
                 stats[OUTLINE_STATS_PREFIX + name] = value

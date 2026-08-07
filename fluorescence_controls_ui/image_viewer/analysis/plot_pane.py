@@ -36,7 +36,10 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ...consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
+    BUTTER_CUTOFF_BOUNDS, BUTTER_ORDER_BOUNDS,
+    OUTLIER_THRESHOLD_BOUNDS_MAD, OUTLIER_WINDOW_BOUNDS_PTS,
     PLOT_ZOOM_STEP, ROI_PLOT_BATCH_COALESCE_MS,
+    SAVGOL_ORDER_BOUNDS, SAVGOL_WINDOW_BOUNDS_PTS,
     ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
     ROI_PLOT_COALESCE_MS, ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX, VIEW_MODE_LABELS, VIEW_MODES,
@@ -98,6 +101,27 @@ def _fit_method_label(key):
     (which the singleton model carries)."""
     return method_label(key, roi_analysis_model.fit_presets)
 
+
+#: Points the fitted curve is sampled at for its dashed overlay
+#: and the d² view — dense enough to stay smooth at any zoom the
+#: pane allows.
+FIT_CURVE_SAMPLES = 200
+
+#: The corner equation box, in axes fractions: left margin, the
+#: first line's top, and the drop per further line.
+EQUATION_BOX_X = 0.02
+EQUATION_BOX_TOP_Y = 0.97
+EQUATION_LINE_STEP_Y = 0.06
+
+#: Footnotes along the bottom edge, in axes fractions: the
+#: log-axis hidden-point count at the bottom, the dropped-outlier
+#: count one line above it so the two never overprint.
+NOTE_HIDDEN_Y = 0.02
+NOTE_OUTLIERS_Y = 0.055
+
+#: The grey wash over a trimmed-away tail: visible over white,
+#: faint enough to read the curves through.
+TRIM_SHADE_ALPHA = 0.12
 
 #: matplotlib linestyle codes for RoiStyle.line_style.
 LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":",
@@ -222,16 +246,20 @@ _plot_controls_view = View(
                           "and flagged in the CSV, and are kept out of "
                           "the fits."),
             Item("figure.outlier_threshold", label="MADs",
-                 editor=RangeEditor(low=1.0, high=20.0,
-                                    mode="spinner", auto_set=True),
+                 editor=RangeEditor(
+                     low=OUTLIER_THRESHOLD_BOUNDS_MAD[0],
+                     high=OUTLIER_THRESHOLD_BOUNDS_MAD[1],
+                     mode="spinner", auto_set=True),
                  enabled_when="figure.remove_outliers",
                  tooltip="How far from the local median counts as an "
                          "outlier, in scaled MADs — about what the "
                          "same number of standard deviations would "
                          "mean for clean data."),
             Item("figure.outlier_window", label="win",
-                 editor=RangeEditor(low=3, high=51, mode="spinner",
-                                    auto_set=True),
+                 editor=RangeEditor(
+                     low=OUTLIER_WINDOW_BOUNDS_PTS[0],
+                     high=OUTLIER_WINDOW_BOUNDS_PTS[1],
+                     mode="spinner", auto_set=True),
                  enabled_when="figure.remove_outliers",
                  tooltip="Points either side used for the local median "
                          "and MAD. Wide enough to describe the trend, "
@@ -245,25 +273,33 @@ _plot_controls_view = View(
                          "flatters R² and shrinks the parameter "
                          "uncertainties for the wrong reason."),
             Item("figure.savgol_window", label="win",
-                 editor=RangeEditor(low=3, high=101, mode="spinner",
-                                    auto_set=True),
+                 editor=RangeEditor(
+                     low=SAVGOL_WINDOW_BOUNDS_PTS[0],
+                     high=SAVGOL_WINDOW_BOUNDS_PTS[1],
+                     mode="spinner", auto_set=True),
                  visible_when="figure.smooth_method == 'savgol'",
                  tooltip="Points per polynomial fit (forced odd)."),
             Item("figure.savgol_order", label="order",
-                 editor=RangeEditor(low=1, high=6, mode="spinner",
-                                    auto_set=True),
+                 editor=RangeEditor(
+                     low=SAVGOL_ORDER_BOUNDS[0],
+                     high=SAVGOL_ORDER_BOUNDS[1],
+                     mode="spinner", auto_set=True),
                  visible_when="figure.smooth_method == 'savgol'",
                  tooltip="Polynomial order. Higher follows sharper "
                          "features and smooths less."),
             Item("figure.butter_order", label="order",
-                 editor=RangeEditor(low=1, high=8, mode="spinner",
-                                    auto_set=True),
+                 editor=RangeEditor(
+                     low=BUTTER_ORDER_BOUNDS[0],
+                     high=BUTTER_ORDER_BOUNDS[1],
+                     mode="spinner", auto_set=True),
                  visible_when="figure.smooth_method == 'butterworth'",
                  tooltip="Filter order: higher cuts more sharply at "
                          "the cutoff."),
             Item("figure.butter_cutoff", label="cutoff",
-                 editor=RangeEditor(low=0.01, high=0.99,
-                                    mode="spinner", auto_set=True),
+                 editor=RangeEditor(
+                     low=BUTTER_CUTOFF_BOUNDS[0],
+                     high=BUTTER_CUTOFF_BOUNDS[1],
+                     mode="spinner", auto_set=True),
                  visible_when="figure.smooth_method == 'butterworth'",
                  tooltip="Cutoff as a fraction of the Nyquist "
                          "frequency: smaller keeps only the slowest "
@@ -624,7 +660,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             finite_t = np.asarray(elapsed, dtype=float)[
                 np.isfinite(np.asarray(values, dtype=float))]
             trim_edges.append((fit.fitted_end, finite_t.max()))
-            dense = np.linspace(finite_t.min(), finite_t.max(), 200)
+            dense = np.linspace(finite_t.min(), finite_t.max(),
+                                FIT_CURVE_SAMPLES)
             d2 = np.asarray(fit.second_derivative(dense), dtype=float)
             if d2.shape != dense.shape:
                 d2 = np.full_like(dense, float(d2))
@@ -712,7 +749,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._fit_artists.append(self._axes.axvspan(
             min(fitted_end for fitted_end, _ in dropped),
             max(series_end for _, series_end in dropped),
-            color="gray", alpha=0.12, zorder=0))
+            color="gray", alpha=TRIM_SHADE_ALPHA, zorder=0))
 
     def _apply_legend(self, wanted):
         if wanted:
@@ -737,7 +774,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if not hidden:
             return
         self._fit_artists.append(self._axes.text(
-            0.5, 0.02,
+            0.5, NOTE_HIDDEN_Y,
             f"Log axis hides {hidden} non-positive "
             f"{'point' if hidden == 1 else 'points'}",
             transform=self._axes.transAxes, ha="center",
@@ -761,7 +798,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if not dropped:
             return
         self._fit_artists.append(self._axes.text(
-            0.5, 0.055,
+            0.5, NOTE_OUTLIERS_Y,
             f"{dropped} {'point' if dropped == 1 else 'points'} "
             f"dropped as outliers",
             transform=self._axes.transAxes, ha="center", va="bottom",
@@ -793,7 +830,8 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             finite_t = np.asarray(elapsed, dtype=float)[
                 np.isfinite(np.asarray(values, dtype=float))]
             trim_edges.append((fit.fitted_end, finite_t.max()))
-            dense = np.linspace(finite_t.min(), finite_t.max(), 200)
+            dense = np.linspace(finite_t.min(), finite_t.max(),
+                                FIT_CURVE_SAMPLES)
             (overlay,) = self._axes.plot(
                 dense, fit.predict(dense), linestyle="--",
                 alpha=0.8 * roi.style.plot_alpha,
@@ -808,7 +846,9 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if figure_settings.show_fit_equations:
             for index, (color, alpha, text) in enumerate(equation_lines):
                 self._fit_artists.append(self._axes.text(
-                    0.02, 0.97 - 0.06 * index, text,
+                    EQUATION_BOX_X,
+                    EQUATION_BOX_TOP_Y
+                    - EQUATION_LINE_STEP_Y * index, text,
                     transform=self._axes.transAxes, va="top",
                     fontsize="x-small", color=color, alpha=alpha))
         return trim_edges

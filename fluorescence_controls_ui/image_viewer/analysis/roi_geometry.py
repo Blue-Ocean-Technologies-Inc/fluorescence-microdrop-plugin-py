@@ -25,6 +25,11 @@ GEOMETRY_LENGTHS = {"box": 6}
 #: pixel for the corner radii a 400-px frame allows.
 BOX_CORNER_SAMPLES = 12
 
+#: Points sampled along each of a capsule's semicircular caps.
+#: Chord error at the radii the canvas allows stays under a
+#: pixel, matching BOX_CORNER_SAMPLES' reasoning.
+CAPSULE_CAP_SAMPLES = 32
+
 #: Pre-rotation kind that could only ever be a circle.
 _LEGACY_KINDS = {"circle": "ellipse"}
 
@@ -116,7 +121,7 @@ def box_polygon(geometry):
     return _rotated(points, centre_of("box", values), angle)
 
 
-def capsule_polygon(geometry, samples=32):
+def capsule_polygon(geometry, samples=CAPSULE_CAP_SAMPLES):
     """The stadium outline: both semicircular caps sampled with
     ``samples`` points each and joined by the flanks, in one winding."""
     _, values = normalize("capsule", geometry)

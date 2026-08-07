@@ -37,6 +37,11 @@ RING_ALPHA = 200
 RING_FILL_ALPHA = 60
 RING_DASH = Qt.PenStyle.DashLine
 
+#: A freshly dragged capsule starts with its radius at this
+#: fraction of the drawn axis — slim enough to read as a capsule,
+#: thick enough to grab the radius grip.
+CAPSULE_DRAFT_RADIUS_FRACTION = 0.25
+
 #: Stacking: the image pixmap sits at z 0, so a ring below that is
 #: invisible — it has to sit above the image and below the shapes.
 RING_Z = 0.5
@@ -284,7 +289,9 @@ class RoiCanvasLayer:
                     abs(span_x), abs(span_y), 0.0, 0.0]
         length = math.hypot(span_x, span_y)
         return [press.x() + span_x / 2, press.y() + span_y / 2,
-                length / 2, max(length / 4, MIN_ROI_SIZE_PX),
+                length / 2,
+                max(length * CAPSULE_DRAFT_RADIUS_FRACTION,
+                    MIN_ROI_SIZE_PX),
                 math.degrees(math.atan2(span_y, span_x))]
 
     # ------------------------------------------------------------------ #
