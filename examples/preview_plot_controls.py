@@ -1,18 +1,27 @@
 """Preview mockups of the ROI Intensities control panel, standalone.
 
-Three candidate layouts over the real analysis model, so every
-enabled_when / visible_when behaves as it would in the app — but view
-only: nothing here touches plot_pane, and closing the window discards
-everything.
+Candidate layouts over the real analysis model, so every enabled_when
+/ visible_when behaves as it would in the app — but view only: nothing
+here touches plot_pane, and closing the window discards everything.
 
-- ``a`` collapsible sections: one column, each behind the sidebar's
-        chevron header; X and Y share a row of spin boxes and each
-        button sits in the section it acts on.
-- ``b`` tabbed: a one-row header (what is plotted) over tabs for
-        Axes & Export / Fit / Cleanup / Transforms — the shortest, and
-        nothing ever stretches.
-- ``c`` two columns: axes and export on the left, fit and cleanup on
-        the right — widest, but every row is short.
+Shared structure, per review:
+
+- The top row is always visible: what is plotted (View, Plot) and the
+  export controls (DPI, Format, save).
+- Axes puts X and Y on their own rows, with the display transforms
+  under them — Log X / Log Y first, then Normalize / Subtract first /
+  Bg ref.
+- Fit is two groups: Method (the fit dropdown, Trim tail, Equations,
+  the ƒ table) and Advanced metrics (the d² markers and dressing).
+- Cleanup is the outlier test and the smoothing.
+
+Variants:
+
+- ``a`` one column of collapsible sections (the image viewer sidebar's
+        chevron headers).
+- ``b`` tabs: Axes / Fit / Cleanup, the Fit tab holding the two
+        chevron groups.
+- ``c`` two columns of the same sections — widest, for comparison.
 
 Run (from src/fluorescence-microdrop-plugin-py):
     pixi run --manifest-path ../../pyproject.toml \\
@@ -64,15 +73,14 @@ AXIS_LIMIT_BOUNDS = (-1e9, 1e9)
 
 
 class PanelSections(HasTraits):
-    """Which sections are open — the sidebar's collapse flags,
-    for this panel. In the real pane these would persist with
-    the figure settings."""
+    """Which sections are open — the sidebar's collapse flags, for
+    this panel. In the real pane these would persist with the figure
+    settings."""
 
     show_axes = Bool(True)
-    show_export = Bool(True)
-    show_fit = Bool(True)
+    show_method = Bool(True)
+    show_metrics = Bool(True)
     show_cleanup = Bool(True)
-    show_transforms = Bool(True)
 
 
 def section(flag, label, *content):
@@ -111,7 +119,8 @@ def _toggle(name, label, enabled_when="", tooltip=""):
 # ------------------------------------------------------------------ #
 # The sections, shared by every variant.                              #
 # ------------------------------------------------------------------ #
-def what_group():
+def top_row():
+    """Always visible: what is plotted, and how it exports."""
     return HGroup(
         Item("figure.view_mode", label="View", width=DROPDOWN_W,
              editor=EnumEditor(values=list(VIEW_MODES),
@@ -119,23 +128,6 @@ def what_group():
         Item("session.plot_stat", label="Plot", width=DROPDOWN_W,
              editor=EnumEditor(values=list(PLOT_STATS),
                                format_func=PLOT_STAT_LABELS.get)),
-    )
-
-
-def axes_group():
-    """X and Y on ONE row each side: auto, then min/max spinners."""
-    return HGroup(
-        Item("figure.x_auto", label="X auto"),
-        _axis_spin("figure.x_min", "min", "x_auto"),
-        _axis_spin("figure.x_max", "max", "x_auto"),
-        Item("figure.y_auto", label="Y auto"),
-        _axis_spin("figure.y_min", "min", "y_auto"),
-        _axis_spin("figure.y_max", "max", "y_auto"),
-    )
-
-
-def export_group():
-    return HGroup(
         Item("figure.export_dpi", label="DPI", width=PARAM_SPIN_W),
         Item("figure.export_format", label="Format",
              width=PARAM_SPIN_W),
@@ -144,36 +136,63 @@ def export_group():
     )
 
 
-def fit_group():
+def axes_group():
+    """X and Y on their own rows, the display transforms under them:
+    the log scales first, then the value rewrites."""
     return VGroup(
         HGroup(
-            Item("figure.fit_method", label="Fit", width=DROPDOWN_W,
-                 editor=EnumEditor(name="model.fit_method_choices",
-                                   format_func=_fit_method_label)),
-            _toggle("figure.trim_poor_fit", "Trim tail",
-                    enabled_when="figure.fit_method != 'none'"),
-            _toggle("figure.show_fit_equations", "Equations",
-                    enabled_when="figure.fit_method != 'none'"),
-            UItem("model.fit_equations_button",
-                  editor=IconButtonEditor(
-                      glyph=ICON_FUNCTION,
-                      tooltip="Fitted parameters per ROI")),
+            Item("figure.x_auto", label="X auto"),
+            _axis_spin("figure.x_min", "min", "x_auto"),
+            _axis_spin("figure.x_max", "max", "x_auto"),
         ),
         HGroup(
-            _toggle("figure.show_second_derivative_max", "d² max",
-                    enabled_when="figure.fit_method != 'none'"),
-            _toggle("figure.show_second_derivative_min", "d² min",
-                    enabled_when="figure.fit_method != 'none'"),
-            _toggle("figure.second_derivative_vline", "V-line",
-                    enabled_when="figure.show_second_derivative_max "
-                                 "or figure.show_second_derivative_min"),
-            _toggle("figure.second_derivative_hline", "H-line",
-                    enabled_when="figure.show_second_derivative_max "
-                                 "or figure.show_second_derivative_min"),
-            _toggle("figure.second_derivative_coords", "Coords",
-                    enabled_when="figure.show_second_derivative_max "
-                                 "or figure.show_second_derivative_min"),
+            Item("figure.y_auto", label="Y auto"),
+            _axis_spin("figure.y_min", "min", "y_auto"),
+            _axis_spin("figure.y_max", "max", "y_auto"),
         ),
+        HGroup(
+            _toggle("figure.log_x", "Log X"),
+            _toggle("figure.log_y", "Log Y"),
+        ),
+        HGroup(
+            _toggle("figure.normalize", "Normalize"),
+            _toggle("figure.subtract_first", "Subtract first"),
+            _toggle("figure.subtract_background_ref", "Bg ref"),
+        ),
+    )
+
+
+def method_group():
+    return HGroup(
+        Item("figure.fit_method", label="Method", width=DROPDOWN_W,
+             editor=EnumEditor(name="model.fit_method_choices",
+                               format_func=_fit_method_label)),
+        _toggle("figure.trim_poor_fit", "Trim tail",
+                enabled_when="figure.fit_method != 'none'"),
+        _toggle("figure.show_fit_equations", "Equations",
+                enabled_when="figure.fit_method != 'none'"),
+        UItem("model.fit_equations_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_FUNCTION,
+                  tooltip="Fitted parameters per ROI")),
+    )
+
+
+def metrics_group():
+    return HGroup(
+        _toggle("figure.show_second_derivative_max", "d² max",
+                enabled_when="figure.fit_method != 'none'"),
+        _toggle("figure.show_second_derivative_min", "d² min",
+                enabled_when="figure.fit_method != 'none'"),
+        _toggle("figure.second_derivative_vline", "V-line",
+                enabled_when="figure.show_second_derivative_max "
+                             "or figure.show_second_derivative_min"),
+        _toggle("figure.second_derivative_hline", "H-line",
+                enabled_when="figure.show_second_derivative_max "
+                             "or figure.show_second_derivative_min"),
+        _toggle("figure.second_derivative_coords", "Coords",
+                enabled_when="figure.show_second_derivative_max "
+                             "or figure.show_second_derivative_min"),
     )
 
 
@@ -205,16 +224,6 @@ def cleanup_group():
     )
 
 
-def transforms_group():
-    return HGroup(
-        _toggle("figure.subtract_background_ref", "Bg ref"),
-        _toggle("figure.subtract_first", "Subtract first"),
-        _toggle("figure.normalize", "Normalize"),
-        _toggle("figure.log_x", "Log X"),
-        _toggle("figure.log_y", "Log Y"),
-    )
-
-
 # ------------------------------------------------------------------ #
 # The variants.                                                       #
 # ------------------------------------------------------------------ #
@@ -222,54 +231,49 @@ def variant_a():
     """One column of collapsible sections."""
     return View(
         VGroup(
-            what_group(),
+            top_row(),
             section("show_axes", "Axes", axes_group()),
-            section("show_fit", "Fit", fit_group()),
+            section("show_method", "Method", method_group()),
+            section("show_metrics", "Advanced metrics",
+                    metrics_group()),
             section("show_cleanup", "Cleanup", cleanup_group()),
-            section("show_transforms", "Transforms",
-                    transforms_group()),
-            section("show_export", "Export", export_group()),
         ),
         title="A — collapsible sections", resizable=True)
 
 
 def variant_b():
-    """A one-row header over tabs."""
+    """The top row over tabs; the Fit tab holds the two groups."""
     return View(
         VGroup(
-            what_group(),
+            top_row(),
             Tabbed(
-                VGroup(section("show_axes", "Axes", axes_group()),
-                       section("show_export", "Export",
-                               export_group()),
-                       label="Axes & Export"),
-                VGroup(section("show_fit", "Fit", fit_group()),
-                       label="Fit"),
-                VGroup(section("show_cleanup", "Cleanup",
-                               cleanup_group()),
-                       label="Cleanup"),
-                VGroup(section("show_transforms", "Transforms",
-                               transforms_group()),
-                       label="Transforms"),
+                VGroup(axes_group(), label="Axes"),
+                VGroup(
+                    section("show_method", "Method", method_group()),
+                    section("show_metrics", "Advanced metrics",
+                            metrics_group()),
+                    label="Fit",
+                ),
+                VGroup(cleanup_group(), label="Cleanup"),
             ),
         ),
         title="B — tabbed", resizable=True)
 
 
 def variant_c():
-    """Two side-by-side columns."""
+    """Two side-by-side columns of the same sections."""
     return View(
         VGroup(
-            what_group(),
+            top_row(),
             HGroup(
-                VGroup(section("show_axes", "Axes", axes_group()),
-                       section("show_export", "Export",
-                               export_group()),
-                       section("show_transforms", "Transforms",
-                               transforms_group())),
-                VGroup(section("show_fit", "Fit", fit_group()),
-                       section("show_cleanup", "Cleanup",
-                               cleanup_group())),
+                VGroup(section("show_axes", "Axes", axes_group())),
+                VGroup(
+                    section("show_method", "Method", method_group()),
+                    section("show_metrics", "Advanced metrics",
+                            metrics_group()),
+                    section("show_cleanup", "Cleanup",
+                            cleanup_group()),
+                ),
             ),
         ),
         title="C — two columns", resizable=True)
