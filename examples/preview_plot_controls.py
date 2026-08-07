@@ -33,12 +33,10 @@ import sys
 
 from pyface.qt.QtWidgets import QApplication
 from traits.api import Bool, HasTraits
-from pyface.qt.QtWidgets import QDoubleSpinBox
 from traitsui.api import (
-    BasicEditorFactory, EnumEditor, HGroup, Item, Label, RangeEditor,
-    Tabbed, UItem, VGroup, View,
+    EnumEditor, HGroup, Item, Label, RangeEditor, Tabbed, UItem,
+    VGrid, VGroup, View,
 )
-from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.helpers import style_app
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
@@ -132,88 +130,26 @@ def top_row():
     )
 
 
-class _AxesGridEditor(QtEditor):
-    """The axes as a real Qt grid: rows X and Y under centred Auto /
-    Min / Max / Log headers, with uniform column spacing — the
-    alignment TraitsUI's VGrid cannot do, since it lays nested groups
-    out as rows of their own.
-
-    Bound to the FigureSettings object (via any of its traits); the
-    six axis traits are wired by hand and unhooked on dispose."""
-
-    #: (axis label, auto trait, min trait, max trait, log trait)
-    ROWS = (("X", "x_auto", "x_min", "x_max", "log_x"),
-            ("Y", "y_auto", "y_min", "y_max", "log_y"))
-    HEADERS = ("", "Auto", "Min", "Max", "Log")
-
-    def init(self, parent):
-        from pyface.qt.QtCore import Qt
-        from pyface.qt.QtWidgets import (
-            QCheckBox, QGridLayout, QLabel, QPushButton, QWidget,
-        )
-
-        figure = self.object
-        self.control = QWidget()
-        grid = QGridLayout(self.control)
-        grid.setHorizontalSpacing(18)
-        grid.setVerticalSpacing(6)
-        for column, title in enumerate(self.HEADERS):
-            label = QLabel(title)
-            grid.addWidget(label, 0, column, Qt.AlignHCenter)
-        self._widgets = []
-        for row, (axis, auto, low, high, log) in enumerate(self.ROWS,
-                                                          start=1):
-            grid.addWidget(QLabel(axis), row, 0, Qt.AlignHCenter)
-            check = QCheckBox()
-            check.setChecked(getattr(figure, auto))
-            check.toggled.connect(
-                lambda on, name=auto: setattr(figure, name, on))
-            grid.addWidget(check, row, 1, Qt.AlignHCenter)
-            for column, name in ((2, low), (3, high)):
-                spin = QDoubleSpinBox()
-                spin.setRange(*AXIS_LIMIT_BOUNDS)
-                spin.setDecimals(1)
-                spin.setFixedWidth(-VALUE_SPIN_W)
-                spin.setValue(getattr(figure, name))
-                spin.setEnabled(not getattr(figure, auto))
-                spin.valueChanged.connect(
-                    lambda value, name=name: setattr(figure, name,
-                                                     value))
-                grid.addWidget(spin, row, column, Qt.AlignHCenter)
-                self._widgets.append((auto, spin))
-            button = QPushButton("Log")
-            button.setCheckable(True)
-            button.setChecked(getattr(figure, log))
-            button.setMaximumWidth(56)
-            button.toggled.connect(
-                lambda on, name=log: setattr(figure, name, on))
-            grid.addWidget(button, row, 4, Qt.AlignHCenter)
-        grid.setColumnStretch(len(self.HEADERS), 1)
-        figure.observe(self._on_auto_changed, "x_auto, y_auto")
-
-    def _on_auto_changed(self, event):
-        # Min/Max grey out while their axis autoscales.
-        for auto, spin in self._widgets:
-            spin.setEnabled(not getattr(self.object, auto))
-
-    def update_editor(self):
-        """The traits are wired directly in init."""
-
-    def dispose(self):
-        self.object.observe(self._on_auto_changed, "x_auto, y_auto",
-                            remove=True)
-        super().dispose()
-
-
-class AxesGridEditor(BasicEditorFactory):
-    klass = _AxesGridEditor
-
-
 def axes_tab():
-    """The axes table, bound through any one figure trait — the editor
-    reaches its siblings through the object."""
+    """The axes as a table: rows X and Y, columns Auto / Min / Max /
+    Log. The row names the axis, so the Log toggle needs no axis in
+    its label."""
     return VGroup(
-        UItem("figure.x_auto", editor=AxesGridEditor()),
+        VGrid(
+            Label(""), Label("Auto"), Label("Min"), Label("Max"),
+            Label("Log"),
+            Label("X"),
+            UItem("figure.x_auto"),
+            _axis_spin("figure.x_min", "x_auto"),
+            _axis_spin("figure.x_max", "x_auto"),
+            _toggle("figure.log_x", "Log"),
+            Label("Y"),
+            UItem("figure.y_auto"),
+            _axis_spin("figure.y_min", "y_auto"),
+            _axis_spin("figure.y_max", "y_auto"),
+            _toggle("figure.log_y", "Log"),
+            columns=5, show_labels=False,
+        ),
         label="Axes",
     )
 
@@ -222,7 +158,7 @@ def fit_tab():
     return VGroup(
         section("show_method", "Method", HGroup(
             UItem("figure.fit_method",
-                 width=DROPDOWN_W,
+                  width=DROPDOWN_W,
                  editor=EnumEditor(name="model.fit_method_choices",
                                    format_func=_fit_method_label)),
             _toggle("figure.trim_poor_fit", "Trim tail",
@@ -322,10 +258,7 @@ def main():
     style_app(app)
 
     model = RoiAnalysisModel()
-    # "object" must exist: a Spring is an Item named "spring", and
-    # TraitsUI resolves an unqualified item against context["object"].
-    context = {"object": model, "model": model,
-               "session": model.session,
+    context = {"model": model, "session": model.session,
                "figure": model.session.figure,
                "panel": PanelSections()}
     ui = build_view().ui(context=context, kind="live")
