@@ -16,7 +16,7 @@ Structure:
   tail, Equations, the ƒ table) and Advanced metrics (the d² markers
   and their dressing).
 - **Cleanup** is the outlier test, the smoothing, and the value
-  rewrites (Normalize, Subtract first, Bg ref).
+  rewrites (Normalize, Subtract first, Bkg Ref).
 - **Export** carries DPI and Format on their own rows; the save button
   itself stays on the top row, where it is always reachable.
 
@@ -223,7 +223,7 @@ def cleanup_tab():
         HGroup(
             _toggle("figure.normalize", "Normalize"),
             _toggle("figure.subtract_first", "Subtract first"),
-            _toggle("figure.subtract_background_ref", "Bg ref"),
+            _toggle("figure.subtract_background_ref", "Bkg Ref"),
         ),
         label="Cleanup",
     )

@@ -49,7 +49,7 @@ EYE_GLYPH_POINT_SIZE = 15
 #: swallows the curve it marks.
 MARKER_SIZE_BOUNDS_PT = (1.0, 30.0)
 
-_HEADERS = ("Name", "", "Bg ref", "Alpha", "Color", "Line", "Marker",
+_HEADERS = ("Name", "", "Bkg Ref", "Alpha", "Color", "Line", "Marker",
             "Size") + _STAT_COLUMNS
 _LINE_CHOICES = ("solid", "dashed", "dotted", "dashdot")
 _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")

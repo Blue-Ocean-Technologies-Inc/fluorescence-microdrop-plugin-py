@@ -32,7 +32,7 @@ from traitsui.api import (
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor, IconButtonEditor, IconToggleEditor,
-    InPlaceToggleEditor,
+    InPlaceToggleEditor, toggle_editor_default_style_sheet_factory
 )
 
 from ...consts import PKG
@@ -92,7 +92,7 @@ def y_axis_label(plot_stat, scale, normalize=False,
                  unit=area_unit(scale.metres_per_pixel, scale.unit)))
     # In the order they were applied, so the axis reads as the recipe.
     if subtract_background_ref:
-        label = f"{label} (bg-ref corrected)"
+        label = f"{label} (bkg-ref corrected)"
     if subtract_first:
         label = f"{label} (change from first)"
     return f"{label} (% of range)" if normalize else label
@@ -167,10 +167,13 @@ def _param_spin(name, label, bounds, enabled_when="", visible_when="",
                 enabled_when=enabled_when, visible_when=visible_when,
                 tooltip=tooltip)
 
+def custom_stylesheet(checked):
+    return toggle_editor_default_style_sheet_factory(checked, padding="2px 4px")
 
 def _toggle(name, label, enabled_when="", tooltip=""):
     return UItem(name, editor=InPlaceToggleEditor(on_label=label,
-                                                  off_label=label),
+                                                  off_label=label,
+                                                  custom_style_sheet_factory=custom_stylesheet),
                  enabled_when=enabled_when, tooltip=tooltip)
 
 
@@ -203,7 +206,7 @@ def _axes_tab():
             UItem("figure.x_auto"),
             _axis_spin("figure.x_min", "x_auto"),
             _axis_spin("figure.x_max", "x_auto"),
-            _toggle("figure.log_x", "Log",
+            UItem("figure.log_x",
                     tooltip="Logarithmic time axis. Points at t = 0 "
                             "cannot be drawn on it and are counted in "
                             "a note on the figure."),
@@ -211,7 +214,7 @@ def _axes_tab():
             UItem("figure.y_auto"),
             _axis_spin("figure.y_min", "y_auto"),
             _axis_spin("figure.y_max", "y_auto"),
-            _toggle("figure.log_y", "Log",
+            UItem("figure.log_y",
                     tooltip="Logarithmic value axis. Zero and negative "
                             "values cannot be drawn on it and are "
                             "counted in a note on the figure."),
@@ -344,9 +347,9 @@ def _cleanup_tab():
             _toggle("figure.subtract_first", "Subtract first",
                     tooltip="Each curve less its own first value: "
                             "change from baseline"),
-            _toggle("figure.subtract_background_ref", "Bg ref",
+            _toggle("figure.subtract_background_ref", "Bkg Ref",
                     tooltip="Subtract the mean of the ROIs ticked as "
-                            "Bg ref in the table — a background "
+                            "Background Ref in the table — a background "
                             "reference measured in the same frame. "
                             "Stacks with the ring correction and "
                             "with Subtract first."),
@@ -677,7 +680,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             # Asked of the session, not the drawn series: a reference
             # that is merely hidden still corrects, and saying it does
             # not would be worse than saying nothing.
-            self._draw_hint("No ROI is ticked as Bg ref, so there is "
+            self._draw_hint("No ROI is ticked as Bkg Ref, so there is "
                             "no background reference to subtract")
         trim_edges = []
         if figure_settings.fit_method != "none":
