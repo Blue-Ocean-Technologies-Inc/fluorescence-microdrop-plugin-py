@@ -192,19 +192,19 @@ def without_outliers(series, threshold=3.0, window=5):
     return cleaned, flagged
 
 
-def standard_baseline(session, series):
-    """The per-image background from the ROIs marked as standards: the
-    mean of their values at each point, over whichever of them have
-    one. None when no ROI is marked — the caller reports that rather
-    than correcting by nothing.
+def background_ref_baseline(session, series):
+    """The per-image background from the ROIs marked as background
+    references: the mean of their values at each point, over whichever
+    of them have one. None when no ROI is marked — the caller reports
+    that rather than correcting by nothing.
 
-    NaN where no standard has a value for an image, so the correction
+    NaN where no reference has a value for an image, so the correction
     gaps there instead of quietly leaving that image uncorrected among
     corrected ones."""
     columns = [values for roi_id, (_name, _elapsed, values)
                in series.items()
                if (session.roi_by_id(roi_id) is not None
-                   and session.roi_by_id(roi_id).is_standard)]
+                   and session.roi_by_id(roi_id).is_background_ref)]
     if not columns:
         return None
     baseline = []
@@ -217,15 +217,16 @@ def standard_baseline(session, series):
     return baseline
 
 
-def standard_corrected_series(session, series):
-    """``series`` less the standards' mean at each image — an internal
-    control measured in the same frame as the samples.
+def background_ref_corrected_series(session, series):
+    """``series`` less the background references' mean at each image —
+    regions holding no signal, measured in the same frame as the
+    samples.
 
-    Pass the FULL series, before hidden ROIs are dropped: the standards
-    are exactly the curves a user hides once they have served their
-    purpose, and reading the baseline from the filtered set would let
-    that click switch the correction off."""
-    baseline = standard_baseline(session, series)
+    Pass the FULL series, before hidden ROIs are dropped: the
+    references are exactly the curves a user hides once they have
+    served their purpose, and reading the baseline from the filtered
+    set would let that click switch the correction off."""
+    baseline = background_ref_baseline(session, series)
     if baseline is None:
         return series
     corrected = {}
@@ -373,8 +374,8 @@ def analysed_series(session, filtered_paths, visible_only=True):
     """(series, outlier flags): everything a fit sees, in the order the
     corrections have to happen.
 
-    Outliers go first. A spike inside a standard ROI would otherwise be
-    subtracted from every curve before anything tested it — and once
+    Outliers go first. A spike inside a reference ROI would otherwise
+    be subtracted from every curve before anything tested it — and once
     spread across them all, the per-curve test cannot find it. For the
     same reason it precedes the baseline shift and the normalisation,
     either of which one wild point would otherwise define.
@@ -395,14 +396,15 @@ def analysed_series(session, filtered_paths, visible_only=True):
         steps.append(f"outliers({figure.outlier_threshold:g} MAD, "
                      f"window {figure.outlier_window}) dropped "
                      f"{dropped}")
-    if figure.subtract_standard:
+    if figure.subtract_background_ref:
         # After the outliers, before the visibility filter: the
-        # standards are the very curves a user hides once they are
+        # references are the very curves a user hides once they are
         # flat, and reading the baseline from the filtered set would
         # let that click turn the correction off.
-        series = standard_corrected_series(session, series)
-        steps.append(f"standard({sum(1 for roi in session.rois
-                                     if roi.is_standard)} marked)")
+        series = background_ref_corrected_series(session, series)
+        steps.append(f"background-ref({sum(1 for roi in session.rois
+                                          if roi.is_background_ref)} "
+                     f"marked)")
     if visible_only:
         series = visible_series(session, series)
     if figure.subtract_first:

@@ -37,7 +37,7 @@ Run:
     pixi run bash -c "cd src/fluorescence-microdrop-plugin-py && \\
         python examples/generate_rolling_ball_demo.py [output_dir]"
 
-Then in MicroDrop: Fluorescence Images pane -> folder button ->
+Then in MicroDrop: Image Viewer pane -> folder button ->
 select ``<output>/rolling_ball_demo/captures``.
 """
 import argparse

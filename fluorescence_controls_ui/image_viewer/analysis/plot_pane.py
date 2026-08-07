@@ -77,7 +77,7 @@ _Y_LABEL_TEMPLATES = {
 
 
 def y_axis_label(plot_stat, scale, normalize=False,
-                 subtract_first=False, subtract_standard=False):
+                 subtract_first=False, subtract_background_ref=False):
     """The y-axis text for a stat, with the area unit spliced in where
     the stat depends on it and each transform noted where it
     applies."""
@@ -86,8 +86,8 @@ def y_axis_label(plot_stat, scale, normalize=False,
              else template.format(
                  unit=area_unit(scale.metres_per_pixel, scale.unit)))
     # In the order they were applied, so the axis reads as the recipe.
-    if subtract_standard:
-        label = f"{label} (standard-corrected)"
+    if subtract_background_ref:
+        label = f"{label} (bg-ref corrected)"
     if subtract_first:
         label = f"{label} (change from first)"
     return f"{label} (% of range)" if normalize else label
@@ -272,13 +272,13 @@ _plot_controls_view = View(
                          "in time."),
         ),
         HGroup(
-            UItem("figure.subtract_standard",
-                  editor=InPlaceToggleEditor(on_label="Standard",
-                                             off_label="Standard"),
-                  tooltip="Subtract the mean of the ROIs ticked as Std "
-                          "in the table — an internal control measured "
-                          "in the same frame. Stacks with the ring "
-                          "correction and with Subtract first."),
+            UItem("figure.subtract_background_ref",
+                  editor=InPlaceToggleEditor(on_label="Bg ref",
+                                             off_label="Bg ref"),
+                  tooltip="Subtract the mean of the ROIs ticked as Bg "
+                          "ref in the table — a background reference "
+                          "measured in the same frame. Stacks with the "
+                          "ring correction and with Subtract first."),
             UItem("figure.subtract_first",
                   editor=InPlaceToggleEditor(on_label="Subtract first",
                                              off_label="Subtract first"),
@@ -327,7 +327,7 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:log_x, session:figure:log_y, "
                "session:figure:normalize, "
                "session:figure:subtract_first, "
-               "session:figure:subtract_standard, "
+               "session:figure:subtract_background_ref, "
                "session:figure:remove_outliers, "
                "session:figure:outlier_threshold, "
                "session:figure:outlier_window, "
@@ -336,7 +336,7 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:savgol_order, "
                "session:figure:butter_order, "
                "session:figure:butter_cutoff, "
-               "session:rois:items:is_standard")
+               "session:rois:items:is_background_ref")
 
 #: Changes that mean "show me everything again", releasing a view the
 #: user zoomed or panned into.
@@ -566,7 +566,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             y_axis_label(session.plot_stat, session.scale,
                          figure_settings.normalize,
                          figure_settings.subtract_first,
-                         figure_settings.subtract_standard))
+                         figure_settings.subtract_background_ref))
         for roi_id in list(self._lines):
             if roi_id not in drawn:
                 self._lines.pop(roi_id).remove()
@@ -587,13 +587,13 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         if not series and self._model.session.rois:
             self._draw_hint("All ROIs are hidden (eye icons in the "
                             "table)")
-        elif (figure_settings.subtract_standard
-                and not any(roi.is_standard for roi in session.rois)):
-            # Asked of the session, not the drawn series: a standard
+        elif (figure_settings.subtract_background_ref
+                and not any(roi.is_background_ref for roi in session.rois)):
+            # Asked of the session, not the drawn series: a reference
             # that is merely hidden still corrects, and saying it does
             # not would be worse than saying nothing.
-            self._draw_hint("No ROI is ticked as Std, so there is no "
-                            "standard to subtract")
+            self._draw_hint("No ROI is ticked as Bg ref, so there is "
+                            "no background reference to subtract")
         trim_edges = []
         if figure_settings.fit_method != "none":
             trim_edges = self._draw_fits(series, figure_settings)
@@ -888,7 +888,7 @@ class FluorescenceRoiPlotDockPane(DockPane):
     """ROI intensity vs time for the filtered image series."""
 
     id = PKG + ".image_viewer.roi_plot_dock_pane"
-    name = "Fluorescence ROI Intensities"
+    name = "ROI Intensities"
 
     canvas = Instance(RoiPlotCanvas)
     table = Instance(RoiStatsTable)

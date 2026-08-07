@@ -33,7 +33,7 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
                   "second_derivative_vline", "second_derivative_hline",
                   "second_derivative_coords", "view_mode",
                   "log_x", "log_y", "normalize", "subtract_first",
-                  "subtract_standard",
+                  "subtract_background_ref",
                   "remove_outliers", "outlier_threshold",
                   "outlier_window", "smooth_method", "savgol_window",
                   "savgol_order", "butter_order", "butter_cutoff")
@@ -81,7 +81,7 @@ def save_session(experiment_directory, session):
                           for anchor, geometry in roi.overrides.items()},
             "style": {name: getattr(roi.style, name)
                       for name in _STYLE_FIELDS},
-            "is_standard": roi.is_standard,
+            "is_background_ref": roi.is_background_ref,
         } for roi in session.rois],
     }
     path = analysis_directory(experiment_directory) / ROI_CONFIG_FILENAME
@@ -100,9 +100,12 @@ def _roi_from(entry):
                overrides={
                    float(anchor): normalize(kind, override)[1]
                    for anchor, override in entry["overrides"].items()},
-               # Absent in configs written before standards existed,
-               # where no ROI was one.
-               is_standard=bool(entry.get("is_standard", False)),
+               # "is_standard" is what this was called before the
+               # rename, and absent entirely in configs written before
+               # the feature — where no ROI was one either way.
+               is_background_ref=bool(
+                   entry.get("is_background_ref",
+                             entry.get("is_standard", False))),
                style=style)
 
 
@@ -142,9 +145,16 @@ def load_session(experiment_directory) -> AnalysisSession:
                            f"{error}")
         try:
             figure = FigureSettings()
-            figure.trait_set(**{name: payload.get("figure", {})[name]
+            stored = dict(payload.get("figure", {}))
+            # Renamed from "standard": a reference is what it is, and
+            # a config written before the rename still means it.
+            if ("subtract_background_ref" not in stored
+                    and "subtract_standard" in stored):
+                stored["subtract_background_ref"] = stored[
+                    "subtract_standard"]
+            figure.trait_set(**{name: stored[name]
                                 for name in _FIGURE_FIELDS
-                                if name in payload.get("figure", {})})
+                                if name in stored})
             session.figure = figure
         except Exception as error:
             logger.warning(f"Ignoring invalid figure settings in "
@@ -351,7 +361,7 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
     one without counting columns. It is also what pandas, R and every
     plotting library want handed to them."""
     header = (["index", "time_utc", "elapsed_sec", "filename", "group",
-               "wavelength", "roi", "is_standard"]
+               "wavelength", "roi", "is_background_ref"]
               + list(CSV_STAT_COLUMNS)
               + [f"area_{area_unit_label}"]
               + list(CSV_DERIVED_COLUMNS[1:]))
@@ -376,7 +386,7 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
                       row["filename"], row["group"], row["wavelength"]]
             for roi in rois:
                 stats = row["stats"].get(roi.roi_id, {})
-                record = shared + [roi.name, int(roi.is_standard)]
+                record = shared + [roi.name, int(roi.is_background_ref)]
                 record += [stats.get(stat, "")
                            for stat in CSV_STAT_COLUMNS]
                 record += [_csv_cell(stats, stat, pixel_area)

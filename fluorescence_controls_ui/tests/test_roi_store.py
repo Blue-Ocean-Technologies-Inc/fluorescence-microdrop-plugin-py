@@ -242,7 +242,7 @@ def test_write_intensity_csv_layout(tmp_path):
     # not grow with the ROI count and every stat is named once.
     assert records[0][:8] == ["index", "time_utc", "elapsed_sec",
                               "filename", "group", "wavelength",
-                              "roi", "is_standard"]
+                              "roi", "is_background_ref"]
     assert "mean" in records[0] and "outline_count" in records[0]
     assert not [name for name in records[0] if name.startswith("ROI 1")]
     mean_column = records[0].index("mean")
@@ -336,7 +336,7 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
     # Three ROIs over two images is six rows of a fixed width, where
     # the wide layout was two rows of ever-growing width.
     rois = [Roi(name=f"ROI {index}", kind="box",
-                geometry=[1.0, 1.0, 5.0, 5.0], is_standard=index == 3)
+                geometry=[1.0, 1.0, 5.0, 5.0], is_background_ref=index == 3)
             for index in (1, 2, 3)]
     rows = [{
         "filename": f"img{image}_raw.png",
@@ -357,9 +357,10 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
     assert [row[roi_column] for row in body] == [
         "ROI 1", "ROI 2", "ROI 3"] * 2
     assert [row[header.index("index")] for row in body] ==         ["0"] * 3 + ["1"] * 3
-    # The standard flag rides with its ROI, not in a separate file.
-    standard_column = header.index("is_standard")
-    assert [row[standard_column] for row in body[:3]] == ["0", "0", "1"]
+    # The reference flag rides with its ROI, not in a separate
+    # file.
+    background_ref_column = header.index("is_background_ref")
+    assert [row[background_ref_column] for row in body[:3]] == ["0", "0", "1"]
     # And every row says what it was measured with.
     for row in body:
         assert row[-3:] == ["2", "4", "60"]
@@ -541,3 +542,24 @@ def test_an_unreadable_fit_file_is_no_fits(tmp_path):
     analysis.mkdir()
     (analysis / "fit_equations.json").write_text("{not json")
     assert load_fit_equations(tmp_path) == {}
+
+
+def test_a_config_written_before_the_rename_keeps_its_references(
+        tmp_path):
+    # These were called "standards" until the rename; an experiment
+    # marked before it must not quietly lose the marking.
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "roi_config.json").write_text(json.dumps({
+        "version": 2, "plot_stat": "mean",
+        "figure": {"subtract_standard": True},
+        "rois": [{
+            "roi_id": "abcd1234", "name": "Blank", "kind": "ellipse",
+            "geometry": [5.0, 5.0, 2.0, 2.0, 0.0], "overrides": {},
+            "base_anchor": 0.0, "is_standard": True,
+        }],
+    }))
+    session = load_session(tmp_path)
+    (roi,) = session.rois
+    assert roi.is_background_ref is True
+    assert session.figure.subtract_background_ref is True

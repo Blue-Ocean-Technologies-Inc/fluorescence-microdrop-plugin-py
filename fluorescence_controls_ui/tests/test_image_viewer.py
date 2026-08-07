@@ -340,13 +340,13 @@ def test_dock_pane_title_names_the_browsed_folder():
     from pathlib import Path
 
     from fluorescence_controls_ui.image_viewer.dock_pane import _title_for
-    assert _title_for("") == "Fluorescence Images"
+    assert _title_for("") == "Image Viewer"
     # Default (experiment) captures dir: the experiment folder names it.
     assert _title_for(str(Path("Experiments/2026_07_20-17_41_31/captures"))) \
-        == "Fluorescence Images\t\t-\t\t2026_07_20-17_41_31"
+        == "Image Viewer\t\t-\t\t2026_07_20-17_41_31"
     # A user-picked folder shows its own name.
     assert _title_for(str(Path("D:/some/album"))) \
-        == "Fluorescence Images\t\t-\t\talbum"
+        == "Image Viewer\t\t-\t\talbum"
 
 
 def test_the_pane_puts_the_analysis_model_in_its_ui_context():

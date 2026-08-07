@@ -41,7 +41,7 @@ Run:
     pixi run bash -c "cd src/fluorescence-microdrop-plugin-py && \\
         python examples/generate_fit_demo_experiment.py [output_dir]"
 
-Then in MicroDrop: Fluorescence Images pane -> folder button ->
+Then in MicroDrop: Image Viewer pane -> folder button ->
 select ``<output>/fit_demo_experiment/captures``.
 """
 import argparse

@@ -59,7 +59,7 @@ not drawn.
 ```
 measured stats
    -> outliers dropped        <- feeds everything below
-   -> standard correction
+   -> background-ref correction
    -> visibility filter
    -> subtract first
    -> normalise
@@ -67,7 +67,7 @@ measured stats
    -> smoothing               <- drawn only
 ```
 
-**Outliers go first.** A spike inside a standard ROI would otherwise
+**Outliers go first.** A spike inside a reference ROI would otherwise
 be subtracted from every curve before anything tested it, and once
 spread across them all the per-curve test cannot find it. Same reason
 it precedes the baseline shift and the normalisation, either of which

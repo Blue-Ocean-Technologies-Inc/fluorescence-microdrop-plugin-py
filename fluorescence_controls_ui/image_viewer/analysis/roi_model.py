@@ -25,7 +25,7 @@ from .fit_presets import choices_for
 ROI_NAME_PATTERN = re.compile(r"^ROI (\d+)$")
 
 #: Stats the plot can show. "bg_corrected" is interior mean minus the
-#: outline-ring mean — the standard fluorescence background correction
+#: outline-ring mean — the usual fluorescence background correction
 #: the ring exists for. The last four are size-aware: "integrated" is
 #: the ROI's total signal, and "per_area" its density — which is the
 #: mean times a constant, since the pixel counts cancel (see the
@@ -114,9 +114,9 @@ class FigureSettings(HasTraits):
 
     #: Each curve less its own first value: change from baseline.
     subtract_first = Bool(False)
-    #: Subtract the mean of the ROIs marked as background standards,
+    #: Subtract the mean of the ROIs marked as background references,
     #: per image. Stacks with the ring correction and subtract_first.
-    subtract_standard = Bool(False)
+    subtract_background_ref = Bool(False)
     show_legend = Bool(True)
     #: Corner box with each ROI's fitted equation.
     show_fit_equations = Bool(False)
@@ -215,10 +215,11 @@ class Roi(HasTraits):
     #: Plot styling (line color/style/marker); persisted with the ROI.
     style = Instance(RoiStyle, ())
 
-    #: A region that should hold no signal, used as an internal
-    #: control: the marked ROIs' mean is subtracted from every ROI when
-    #: the standard correction is on (see standard_corrected_series).
-    is_standard = Bool(False)
+    #: A region that should hold no signal, used as a background
+    #: reference: the marked ROIs' mean is subtracted from every ROI
+    #: when that correction is on (see
+    #: background_ref_corrected_series).
+    is_background_ref = Bool(False)
 
     def _roi_id_default(self):
         return uuid.uuid4().hex[:8]

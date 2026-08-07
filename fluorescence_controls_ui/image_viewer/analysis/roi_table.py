@@ -35,15 +35,16 @@ _STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max",
 #: expects it.
 _VISIBLE_COLUMN = 1
 
-#: Ticking this marks the ROI as a background standard — an internal
-#: control whose mean the plot can subtract from every ROI.
-_STANDARD_COLUMN = 2
+#: Ticking this marks the ROI as a background reference — a region
+#: holding no signal, whose mean the plot can subtract from every
+#: ROI.
+_BACKGROUND_REF_COLUMN = 2
 
 #: Point size of the eye glyph, matching the device viewer's own
 #: visibility column.
 EYE_GLYPH_POINT_SIZE = 15
 
-_HEADERS = ("Name", "", "Std", "Alpha", "Color", "Line", "Marker",
+_HEADERS = ("Name", "", "Bg ref", "Alpha", "Color", "Line", "Marker",
             "Size") + _STAT_COLUMNS
 _LINE_CHOICES = ("solid", "dashed", "dotted", "dashdot")
 _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
@@ -51,7 +52,7 @@ _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
 #: Row count/editors/cell identities change — triggers a full rebuild.
 _TABLE_STRUCTURE = ("session, session:rois.items, "
                     "session:rois:items:name, "
-                    "session:rois:items:is_standard, "
+                    "session:rois:items:is_background_ref, "
                     "session:rois:items:style:color, "
                     "session:scale:metres_per_pixel, "
                     "session:scale:unit")
@@ -132,7 +133,7 @@ class RoiStatsTable(QTableWidget):
             name_item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
             self.setItem(row, 0, name_item)
             self.setItem(row, _VISIBLE_COLUMN, self._visible_item(roi))
-            self.setItem(row, _STANDARD_COLUMN, self._standard_item(roi))
+            self.setItem(row, _BACKGROUND_REF_COLUMN, self._background_ref_item(roi))
             self.setCellWidget(row, 3, self._alpha_spin(roi))
             self.setCellWidget(row, 4, self._color_button(roi))
             self.setCellWidget(
@@ -206,11 +207,11 @@ class RoiStatsTable(QTableWidget):
     def _on_item_changed(self, item):
         if self._rebuilding:
             return
-        if item.column() == _STANDARD_COLUMN:
+        if item.column() == _BACKGROUND_REF_COLUMN:
             roi = self._model.session.roi_by_id(
                 item.data(Qt.ItemDataRole.UserRole))
             if roi is not None:
-                roi.is_standard = (
+                roi.is_background_ref = (
                     item.checkState() == Qt.CheckState.Checked)
             return
         if item.column() != 0:
@@ -240,17 +241,17 @@ class RoiStatsTable(QTableWidget):
         item.setToolTip("Show or hide this ROI on the plot")
         return item
 
-    def _standard_item(self, roi):
-        """Tick to make this ROI a background standard: the marked
-        ROIs' mean is what the standard correction subtracts."""
+    def _background_ref_item(self, roi):
+        """Tick to make this ROI a background reference: the marked
+        ROIs' mean is what the correction subtracts."""
         item = QTableWidgetItem()
         item.setFlags(Qt.ItemFlag.ItemIsEnabled
                       | Qt.ItemFlag.ItemIsSelectable
                       | Qt.ItemFlag.ItemIsUserCheckable)
-        item.setCheckState(Qt.CheckState.Checked if roi.is_standard
+        item.setCheckState(Qt.CheckState.Checked if roi.is_background_ref
                            else Qt.CheckState.Unchecked)
         item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
-        item.setToolTip("Use this ROI as a background standard — the "
+        item.setToolTip("Use this ROI as a background reference — the "
                         "plot can subtract the marked ROIs' mean")
         return item
 

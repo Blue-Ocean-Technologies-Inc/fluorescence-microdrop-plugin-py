@@ -36,7 +36,9 @@ from .view import ImageViewerView
 
 logger = get_logger(__name__)
 
-_dock_pane_name = "Fluorescence Images"
+#: Named for what it is rather than for the plugin it currently ships
+#: in: the viewer is on its way to a plugin of its own.
+_dock_pane_name = "Image Viewer"
 
 
 def _title_for(browsed_directory: str) -> str:

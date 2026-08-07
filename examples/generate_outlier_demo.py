@@ -36,7 +36,7 @@ Run:
     pixi run --manifest-path ../../pyproject.toml \\
         python examples/generate_outlier_demo.py [output_dir]
 
-Then in MicroDrop: Fluorescence Images pane -> folder button ->
+Then in MicroDrop: Image Viewer pane -> folder button ->
 select ``<output>/outlier_demo/captures``.
 """
 import argparse
