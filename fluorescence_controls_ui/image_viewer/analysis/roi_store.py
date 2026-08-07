@@ -36,7 +36,8 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
                   "subtract_background_ref",
                   "remove_outliers", "outlier_threshold",
                   "outlier_window", "smooth_method", "savgol_window",
-                  "savgol_order", "butter_order", "butter_cutoff")
+                  "savgol_order", "butter_order", "butter_cutoff",
+                  "show_method_group", "show_metrics_group")
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
                  "visible", "alpha")
 

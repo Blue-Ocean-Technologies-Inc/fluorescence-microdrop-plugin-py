@@ -25,12 +25,14 @@ from PySide6.QtWidgets import (
 )
 from traits.api import Any, Instance
 from traitsui.api import (
-    EnumEditor, HGroup, Item, RangeEditor, UItem, VGroup, View,
+    EnumEditor, HGroup, Item, Label, RangeEditor, Tabbed, UItem,
+    VGrid, VGroup, View,
 )
 
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
 from microdrop_utils.traitsui_qt_helpers import (
-    IconButtonEditor, InPlaceToggleEditor,
+    DoubleSpinBoxEditor, IconButtonEditor, IconToggleEditor,
+    InPlaceToggleEditor,
 )
 
 from ...consts import PKG
@@ -127,144 +129,180 @@ TRIM_SHADE_ALPHA = 0.12
 LINE_STYLES = {"solid": "-", "dashed": "--", "dotted": ":",
                "dashdot": "-."}
 
-#: Controls over the per-session plot/export traits. Rebuilt against the
-#: new session on every swap (TraitsUI resolves context objects at build
-#: time), which replaces all hand-written widget<->trait syncing. Two
-#: rows keep the pane's un-scrolled minimum width small; `figure` is its
-#: own context key because enabled_when only re-evaluates on trait
-#: changes of direct context objects.
-_plot_controls_view = View(
-    VGroup(
-        HGroup(
-            Item("figure.view_mode", label="View",
-                 editor=EnumEditor(values=list(VIEW_MODES),
-                                   format_func=VIEW_MODE_LABELS.get)),
-            Item("session.plot_stat", label="Plot",
-                 editor=EnumEditor(values=list(PLOT_STATS),
-                                   format_func=PLOT_STAT_LABELS.get)),
-            Item("figure.x_auto", label="X auto"),
-            Item("figure.x_min", label="min",
-                 enabled_when="not figure.x_auto"),
-            Item("figure.x_max", label="max",
-                 enabled_when="not figure.x_auto"),
+#: Fixed pixel widths, so nothing stretches to fill its row: a value
+#: spinner, a small parameter spinner, and a dropdown.
+VALUE_SPIN_W = -78
+PARAM_SPIN_W = -58
+DROPDOWN_W = -130
+
+#: Axis-limit spin boxes: wide enough for any intensity the cameras
+#: produce, stepping by a whole count.
+AXIS_LIMIT_BOUNDS = (-1e9, 1e9)
+
+
+def _section(flag, label, *content):
+    """A collapsible group: the image viewer sidebar's chevron header
+    over a body that folds away with it. ``flag`` is a Bool on the
+    figure settings, so the open/closed state persists with them."""
+    return VGroup(
+        HGroup(UItem(f"figure.{flag}", editor=IconToggleEditor()),
+               Label(label)),
+        VGroup(*content, visible_when=f"figure.{flag}"),
+    )
+
+
+def _axis_spin(name, auto_flag):
+    return UItem(name, width=VALUE_SPIN_W,
+                 editor=DoubleSpinBoxEditor(low=AXIS_LIMIT_BOUNDS[0],
+                                            high=AXIS_LIMIT_BOUNDS[1],
+                                            decimals=1, step=1.0),
+                 enabled_when=f"not figure.{auto_flag}")
+
+
+def _param_spin(name, label, bounds, enabled_when="", visible_when="",
+                tooltip=""):
+    return Item(name, label=label, width=PARAM_SPIN_W,
+                editor=RangeEditor(low=bounds[0], high=bounds[1],
+                                   mode="spinner", auto_set=True),
+                enabled_when=enabled_when, visible_when=visible_when,
+                tooltip=tooltip)
+
+
+def _toggle(name, label, enabled_when="", tooltip=""):
+    return UItem(name, editor=InPlaceToggleEditor(on_label=label,
+                                                  off_label=label),
+                 enabled_when=enabled_when, tooltip=tooltip)
+
+
+def _top_row():
+    """Always visible above the tabs: what is plotted, and the save
+    button — saving never needs a tab switch."""
+    return HGroup(
+        Item("figure.view_mode", label="View", width=DROPDOWN_W,
+             editor=EnumEditor(values=list(VIEW_MODES),
+                               format_func=VIEW_MODE_LABELS.get)),
+        Item("session.plot_stat", label="Plot", width=DROPDOWN_W,
+             editor=EnumEditor(values=list(PLOT_STATS),
+                               format_func=PLOT_STAT_LABELS.get)),
+        UItem("model.save_plot_button", editor=IconButtonEditor(
+            glyph=ICON_SAVE,
+            tooltip="Save the plot to the experiment's analysis "
+                    "folder at the Export tab's DPI and format")),
+    )
+
+
+def _axes_tab():
+    """The axes as a table: rows X and Y, columns Auto / Min / Max /
+    Log. The row names the axis, so the Log toggle needs no axis in
+    its label."""
+    return VGroup(
+        VGrid(
+            Label(""), Label("Auto"), Label("Min"), Label("Max"),
+            Label("Log"),
+            Label("X"),
+            UItem("figure.x_auto"),
+            _axis_spin("figure.x_min", "x_auto"),
+            _axis_spin("figure.x_max", "x_auto"),
+            _toggle("figure.log_x", "Log",
+                    tooltip="Logarithmic time axis. Points at t = 0 "
+                            "cannot be drawn on it and are counted in "
+                            "a note on the figure."),
+            Label("Y"),
+            UItem("figure.y_auto"),
+            _axis_spin("figure.y_min", "y_auto"),
+            _axis_spin("figure.y_max", "y_auto"),
+            _toggle("figure.log_y", "Log",
+                    tooltip="Logarithmic value axis. Zero and negative "
+                            "values cannot be drawn on it and are "
+                            "counted in a note on the figure."),
+            columns=5, show_labels=False,
         ),
         HGroup(
-            Item("figure.y_auto", label="Y auto"),
-            Item("figure.y_min", label="min",
-                 enabled_when="not figure.y_auto"),
-            Item("figure.y_max", label="max",
-                 enabled_when="not figure.y_auto"),
-            Item("figure.export_dpi", label="DPI"),
-            Item("figure.export_format", label="Format"),
-            UItem("model.save_plot_button", editor=IconButtonEditor(
-                glyph=ICON_SAVE,
-                tooltip="Save the plot to the experiment's analysis "
-                        "folder at the chosen format and DPI")),
+            _toggle("figure.show_legend", "Legend",
+                    tooltip="Show the ROI legend on the figure"),
         ),
-        # Toggles carry their own label and show their state in colour
-        # (green on, grey off), so they take UItem — a separate Item
-        # label would repeat the button's text.
+        label="Axes",
+    )
+
+
+def _fit_tab():
+    return VGroup(
+        _section("show_method_group", "Method", HGroup(
+            UItem("figure.fit_method", width=DROPDOWN_W,
+                  editor=EnumEditor(name="model.fit_method_choices",
+                                    format_func=_fit_method_label)),
+            _toggle("figure.trim_poor_fit", "Trim tail",
+                    enabled_when="figure.fit_method != 'none'",
+                    tooltip="Refit on a shorter leading slice while "
+                            "R² is below 0.99, for series whose tail "
+                            "the model does not describe (a bleached "
+                            "plateau). The dropped span is shaded."),
+            _toggle("figure.show_fit_equations", "Equations",
+                    enabled_when="figure.fit_method != 'none'",
+                    tooltip="Write each ROI's fitted equation into "
+                            "the figure's corner"),
+            UItem("model.fit_equations_button",
+                  editor=IconButtonEditor(
+                      glyph=ICON_FUNCTION,
+                      tooltip="Show the fitted equation for every ROI "
+                              "in a table")),
+        )),
+        _section("show_metrics_group", "Advanced metrics", HGroup(
+            _toggle("figure.show_second_derivative_max", "d² max",
+                    enabled_when="figure.fit_method != 'none'",
+                    tooltip="Mark where the fitted curve's second "
+                            "derivative peaks"),
+            _toggle("figure.show_second_derivative_min", "d² min",
+                    enabled_when="figure.fit_method != 'none'",
+                    tooltip="Mark where the fitted curve's second "
+                            "derivative troughs"),
+            _toggle("figure.second_derivative_vline", "V-line",
+                    enabled_when="figure.show_second_derivative_max "
+                                 "or figure.show_second_derivative_min",
+                    tooltip="Drop a vertical line through each marker"),
+            _toggle("figure.second_derivative_hline", "H-line",
+                    enabled_when="figure.show_second_derivative_max "
+                                 "or figure.show_second_derivative_min",
+                    tooltip="Run a horizontal line through each "
+                            "marker"),
+            _toggle("figure.second_derivative_coords", "Coords",
+                    enabled_when="figure.show_second_derivative_max "
+                                 "or figure.show_second_derivative_min",
+                    tooltip="Write each marker's (t, y) beside it"),
+        )),
+        label="Fit",
+    )
+
+
+def _cleanup_tab():
+    return VGroup(
         HGroup(
-            Item("figure.fit_method", label="Fit",
-                 editor=EnumEditor(name="model.fit_method_choices",
-                                   format_func=_fit_method_label)),
-            UItem("figure.trim_poor_fit",
-                  editor=InPlaceToggleEditor(on_label="Trim tail",
-                                             off_label="Trim tail"),
-                  tooltip="Refit on a shorter leading slice while R² is "
-                          "below 0.99, for series whose tail the model "
-                          "does not describe (a bleached plateau). The "
-                          "dropped span is shaded.",
-                  enabled_when="figure.fit_method != 'none'"),
-            UItem("figure.show_legend",
-                  editor=InPlaceToggleEditor(on_label="Legend",
-                                             off_label="Legend"),
-                  tooltip="Show the ROI legend on the figure"),
-            UItem("figure.show_fit_equations",
-                  editor=InPlaceToggleEditor(on_label="Equations",
-                                             off_label="Equations"),
-                  tooltip="Write each ROI's fitted equation into the "
-                          "figure's corner",
-                  enabled_when="figure.fit_method != 'none'"),
-            UItem("model.fit_equations_button", editor=IconButtonEditor(
-                glyph=ICON_FUNCTION,
-                tooltip="Show the fitted equation for every ROI in a "
-                        "table")),
+            _toggle("figure.remove_outliers", "Outliers",
+                    tooltip="Drop points that fail the Hampel test — "
+                            "a rolling median and MAD, so a spike "
+                            "cannot raise the threshold that would "
+                            "catch it. Dropped points are counted on "
+                            "the plot, flagged in the CSV, and kept "
+                            "out of the fits."),
+            _param_spin("figure.outlier_threshold", "MADs",
+                        OUTLIER_THRESHOLD_BOUNDS_MAD,
+                        enabled_when="figure.remove_outliers",
+                        tooltip="How far from the local median counts "
+                                "as an outlier, in scaled MADs — "
+                                "about what the same number of "
+                                "standard deviations would mean for "
+                                "clean data."),
+            _param_spin("figure.outlier_window", "win",
+                        OUTLIER_WINDOW_BOUNDS_PTS,
+                        enabled_when="figure.remove_outliers",
+                        tooltip="Points either side used for the "
+                                "local median and MAD. Wide enough to "
+                                "describe the trend, narrow enough "
+                                "not to span a real change."),
         ),
         HGroup(
-            UItem("figure.show_second_derivative_max",
-                  editor=InPlaceToggleEditor(on_label="d² max",
-                                             off_label="d² max"),
-                  tooltip="Mark where the fitted curve's second "
-                          "derivative peaks",
-                  enabled_when="figure.fit_method != 'none'"),
-            UItem("figure.show_second_derivative_min",
-                  editor=InPlaceToggleEditor(on_label="d² min",
-                                             off_label="d² min"),
-                  tooltip="Mark where the fitted curve's second "
-                          "derivative troughs",
-                  enabled_when="figure.fit_method != 'none'"),
-            UItem("figure.second_derivative_vline",
-                  editor=InPlaceToggleEditor(on_label="V-line",
-                                             off_label="V-line"),
-                  tooltip="Drop a vertical line through each marker",
-                  enabled_when="figure.show_second_derivative_max or "
-                               "figure.show_second_derivative_min"),
-            UItem("figure.second_derivative_hline",
-                  editor=InPlaceToggleEditor(on_label="H-line",
-                                             off_label="H-line"),
-                  tooltip="Run a horizontal line through each marker",
-                  enabled_when="figure.show_second_derivative_max or "
-                               "figure.show_second_derivative_min"),
-            UItem("figure.second_derivative_coords",
-                  editor=InPlaceToggleEditor(on_label="Coords",
-                                             off_label="Coords"),
-                  tooltip="Annotate each marker with its coordinates",
-                  enabled_when="figure.show_second_derivative_max or "
-                               "figure.show_second_derivative_min"),
-        ),
-        HGroup(
-            UItem("figure.log_x",
-                  editor=InPlaceToggleEditor(on_label="Log X",
-                                             off_label="Log X"),
-                  tooltip="Logarithmic time axis. Points at t = 0 "
-                          "cannot be drawn on it and are counted in a "
-                          "note on the figure."),
-            UItem("figure.log_y",
-                  editor=InPlaceToggleEditor(on_label="Log Y",
-                                             off_label="Log Y"),
-                  tooltip="Logarithmic value axis. Zero and negative "
-                          "values cannot be drawn on it and are "
-                          "counted in a note on the figure."),
-            UItem("figure.remove_outliers",
-                  editor=InPlaceToggleEditor(on_label="Outliers",
-                                             off_label="Outliers"),
-                  tooltip="Drop points that fail the Hampel test — a "
-                          "rolling median and MAD, so a spike cannot "
-                          "raise the threshold that would catch it. "
-                          "Dropped points are crossed out on the plot "
-                          "and flagged in the CSV, and are kept out of "
-                          "the fits."),
-            Item("figure.outlier_threshold", label="MADs",
-                 editor=RangeEditor(
-                     low=OUTLIER_THRESHOLD_BOUNDS_MAD[0],
-                     high=OUTLIER_THRESHOLD_BOUNDS_MAD[1],
-                     mode="spinner", auto_set=True),
-                 enabled_when="figure.remove_outliers",
-                 tooltip="How far from the local median counts as an "
-                         "outlier, in scaled MADs — about what the "
-                         "same number of standard deviations would "
-                         "mean for clean data."),
-            Item("figure.outlier_window", label="win",
-                 editor=RangeEditor(
-                     low=OUTLIER_WINDOW_BOUNDS_PTS[0],
-                     high=OUTLIER_WINDOW_BOUNDS_PTS[1],
-                     mode="spinner", auto_set=True),
-                 enabled_when="figure.remove_outliers",
-                 tooltip="Points either side used for the local median "
-                         "and MAD. Wide enough to describe the trend, "
-                         "narrow enough not to span a real change."),
             Item("figure.smooth_method", label="Smooth",
+                 width=DROPDOWN_W,
                  editor=EnumEditor(values=list(SMOOTH_METHODS),
                                    format_func=SMOOTH_LABELS.get),
                  tooltip="Smooth the DRAWN curves only. The fits keep "
@@ -272,63 +310,74 @@ _plot_controls_view = View(
                          "neighbouring values dependent, which "
                          "flatters R² and shrinks the parameter "
                          "uncertainties for the wrong reason."),
-            Item("figure.savgol_window", label="win",
-                 editor=RangeEditor(
-                     low=SAVGOL_WINDOW_BOUNDS_PTS[0],
-                     high=SAVGOL_WINDOW_BOUNDS_PTS[1],
-                     mode="spinner", auto_set=True),
-                 visible_when="figure.smooth_method == 'savgol'",
-                 tooltip="Points per polynomial fit (forced odd)."),
-            Item("figure.savgol_order", label="order",
-                 editor=RangeEditor(
-                     low=SAVGOL_ORDER_BOUNDS[0],
-                     high=SAVGOL_ORDER_BOUNDS[1],
-                     mode="spinner", auto_set=True),
-                 visible_when="figure.smooth_method == 'savgol'",
-                 tooltip="Polynomial order. Higher follows sharper "
-                         "features and smooths less."),
-            Item("figure.butter_order", label="order",
-                 editor=RangeEditor(
-                     low=BUTTER_ORDER_BOUNDS[0],
-                     high=BUTTER_ORDER_BOUNDS[1],
-                     mode="spinner", auto_set=True),
-                 visible_when="figure.smooth_method == 'butterworth'",
-                 tooltip="Filter order: higher cuts more sharply at "
-                         "the cutoff."),
-            Item("figure.butter_cutoff", label="cutoff",
-                 editor=RangeEditor(
-                     low=BUTTER_CUTOFF_BOUNDS[0],
-                     high=BUTTER_CUTOFF_BOUNDS[1],
-                     mode="spinner", auto_set=True),
-                 visible_when="figure.smooth_method == 'butterworth'",
-                 tooltip="Cutoff as a fraction of the Nyquist "
-                         "frequency: smaller keeps only the slowest "
-                         "changes. A fraction rather than Hz because a "
-                         "burst-captured series is not evenly spaced "
-                         "in time."),
+            _param_spin("figure.savgol_window", "win",
+                        SAVGOL_WINDOW_BOUNDS_PTS,
+                        visible_when="figure.smooth_method == "
+                                     "'savgol'",
+                        tooltip="Points per polynomial fit (forced "
+                                "odd)."),
+            _param_spin("figure.savgol_order", "order",
+                        SAVGOL_ORDER_BOUNDS,
+                        visible_when="figure.smooth_method == "
+                                     "'savgol'",
+                        tooltip="Polynomial order. Higher follows "
+                                "sharper features and smooths less."),
+            _param_spin("figure.butter_order", "order",
+                        BUTTER_ORDER_BOUNDS,
+                        visible_when="figure.smooth_method == "
+                                     "'butterworth'",
+                        tooltip="Filter order: higher cuts more "
+                                "sharply at the cutoff."),
+            _param_spin("figure.butter_cutoff", "cutoff",
+                        BUTTER_CUTOFF_BOUNDS,
+                        visible_when="figure.smooth_method == "
+                                     "'butterworth'",
+                        tooltip="Cutoff as a fraction of the Nyquist "
+                                "frequency: smaller keeps only the "
+                                "slowest changes."),
         ),
         HGroup(
-            UItem("figure.subtract_background_ref",
-                  editor=InPlaceToggleEditor(on_label="Bg ref",
-                                             off_label="Bg ref"),
-                  tooltip="Subtract the mean of the ROIs ticked as Bg "
-                          "ref in the table — a background reference "
-                          "measured in the same frame. Stacks with the "
-                          "ring correction and with Subtract first."),
-            UItem("figure.subtract_first",
-                  editor=InPlaceToggleEditor(on_label="Subtract first",
-                                             off_label="Subtract first"),
-                  tooltip="Subtract each ROI's own first value, so "
-                          "every curve starts at zero and shows change "
-                          "from baseline."),
-            UItem("figure.normalize",
-                  editor=InPlaceToggleEditor(on_label="Normalize",
-                                             off_label="Normalize"),
-                  tooltip="Stretch each ROI to 0-100% of its own "
-                          "range, to compare shape and timing. Fitted "
-                          "midpoints and R² are unchanged; amplitudes "
-                          "become percentages."),
+            _toggle("figure.normalize", "Normalize",
+                    tooltip="Stretch each ROI to 0-100% of its own "
+                            "range, to compare shape and timing "
+                            "across brightness"),
+            _toggle("figure.subtract_first", "Subtract first",
+                    tooltip="Each curve less its own first value: "
+                            "change from baseline"),
+            _toggle("figure.subtract_background_ref", "Bg ref",
+                    tooltip="Subtract the mean of the ROIs ticked as "
+                            "Bg ref in the table — a background "
+                            "reference measured in the same frame. "
+                            "Stacks with the ring correction and "
+                            "with Subtract first."),
         ),
+        label="Cleanup",
+    )
+
+
+def _export_tab():
+    """DPI and Format on their own rows; the save button lives on the
+    top row, so saving never needs a tab switch."""
+    return VGroup(
+        HGroup(Item("figure.export_dpi", label="DPI",
+                    width=PARAM_SPIN_W)),
+        HGroup(Item("figure.export_format", label="Format",
+                    width=PARAM_SPIN_W)),
+        label="Export",
+    )
+
+
+#: Controls over the per-session plot/export traits, in the tabbed
+#: layout settled by review. Rebuilt against the new session on every
+#: swap (TraitsUI resolves context objects at build time), which
+#: replaces all hand-written widget<->trait syncing; `figure` is its
+#: own context key because enabled_when only re-evaluates on trait
+#: changes of direct context objects.
+_plot_controls_view = View(
+    VGroup(
+        _top_row(),
+        Tabbed(_axes_tab(), _fit_tab(), _cleanup_tab(),
+               _export_tab()),
     ),
 )
 

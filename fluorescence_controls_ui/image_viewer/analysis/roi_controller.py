@@ -565,6 +565,8 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:figure:savgol_order, "
              "analysis_model:session:figure:butter_order, "
              "analysis_model:session:figure:butter_cutoff, "
+             "analysis_model:session:figure:show_method_group, "
+             "analysis_model:session:figure:show_metrics_group, "
              "analysis_model:session:rois:items:name, "
              "analysis_model:session:rois:items:is_background_ref, "
              "analysis_model:session:rois:items:style:color, "

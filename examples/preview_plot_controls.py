@@ -134,21 +134,27 @@ def axes_tab():
     """The axes as a table: rows X and Y, columns Auto / Min / Max /
     Log. The row names the axis, so the Log toggle needs no axis in
     its label."""
+
     return VGroup(
         VGrid(
-            Label(""), Label("Auto"), Label("Min"), Label("Max"),
-            Label("Log"),
+            Label(""), Label("Auto"), Label("   Min"), Label("  Max"), Label("Log"),
+
+            # X Row
             Label("X"),
             UItem("figure.x_auto"),
-            _axis_spin("figure.x_min", "x_auto"),
+            _axis_spin("figure.x_min", "x_auto"),  # Ensure these return items with fixed widths too!
             _axis_spin("figure.x_max", "x_auto"),
-            _toggle("figure.log_x", "Log"),
+            UItem("figure.log_x"),
+
+            # Y Row
             Label("Y"),
             UItem("figure.y_auto"),
             _axis_spin("figure.y_min", "y_auto"),
             _axis_spin("figure.y_max", "y_auto"),
-            _toggle("figure.log_y", "Log"),
-            columns=5, show_labels=False,
+            UItem("figure.log_y"),
+
+            columns=5,
+            show_labels=False,
         ),
         label="Axes",
     )

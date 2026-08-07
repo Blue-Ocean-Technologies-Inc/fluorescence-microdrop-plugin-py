@@ -143,6 +143,11 @@ class FigureSettings(HasTraits):
     #: Which chart the plot pane renders.
     view_mode = Enum(*VIEW_MODES)
 
+    #: Which of the Fit tab's groups are open — display state, but
+    #: persisted so the panel reopens the way it was left.
+    show_method_group = Bool(True)
+    show_metrics_group = Bool(True)
+
 
 class ScaleCalibration(HasTraits):
     """Image scale for the on-canvas bar (persisted per experiment).
