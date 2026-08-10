@@ -525,6 +525,23 @@ class ImageCanvasEditor(BasicEditorFactory):
 # Compact icon row above the image: browse/navigate/playback plus the
 # position and folder-info readouts.
 buttons_group = HGroup(
+    # The workhorse actions, top-left where they are found first: run
+    # the plot, save the data, and start the ROI set over.
+    UItem("object.roi_analysis.calculate_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SHOW_CHART,
+              tooltip="Calculate ROI intensities across the "
+                      "filtered images and plot them")),
+    UItem("object.roi_analysis.export_csv_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SAVE,
+              tooltip="Export the intensities to the experiment's "
+                      "analysis folder (calculates first if "
+                      "needed)")),
+    UItem("object.roi_analysis.clear_rois_button",
+          editor=IconButtonEditor(
+              glyph=ICON_DELETE_SWEEP,
+              tooltip="Remove all ROIs")),
     UItem("directory_button", editor=IconButtonEditor(
         glyph=ICON_FOLDER_OPEN,
         tooltip="Choose the image folder (defaults to the experiment's "
@@ -676,6 +693,12 @@ analysis_toolbar = VGroup(
                       "drag a node to reshape a contour, click to "
                       "select. Editing on a later image adds a drift "
                       "override from there on")),
+    # Delete-selected sits directly under the edit toggle: selecting
+    # (edit mode) and deleting the selection are one motion.
+    UItem("object.roi_analysis.delete_roi_button",
+          editor=IconButtonEditor(
+              glyph=ICON_DELETE,
+              tooltip="Delete the selected ROI (Del)")),
     UItem("object.roi_analysis.copy_roi_button",
           editor=IconButtonEditor(
               glyph=ICON_COPY,
@@ -685,25 +708,6 @@ analysis_toolbar = VGroup(
               glyph=ICON_PASTE,
               tooltip="Paste the copied shape as a new ROI, offset "
                       "from the original (Ctrl+V)")),
-    UItem("object.roi_analysis.delete_roi_button",
-          editor=IconButtonEditor(
-              glyph=ICON_DELETE,
-              tooltip="Delete the selected ROI (Del)")),
-    UItem("object.roi_analysis.clear_rois_button",
-          editor=IconButtonEditor(
-              glyph=ICON_DELETE_SWEEP,
-              tooltip="Remove all ROIs")),
-    UItem("object.roi_analysis.calculate_button",
-          editor=IconButtonEditor(
-              glyph=ICON_SHOW_CHART,
-              tooltip="Calculate ROI intensities across the "
-                      "filtered images and plot them")),
-    UItem("object.roi_analysis.export_csv_button",
-          editor=IconButtonEditor(
-              glyph=ICON_SAVE,
-              tooltip="Export the intensities to the experiment's "
-                      "analysis folder (calculates first if "
-                      "needed)")),
     UItem("object.roi_analysis.reset_cache_button",
           editor=IconButtonEditor(
               glyph=ICON_RESET_WRENCH,
