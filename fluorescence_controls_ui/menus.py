@@ -10,8 +10,10 @@ from microdrop_utils.firmware_upload_dialog.controller import (
     FirmwareUploadDialogController,
 )
 
+from .ai_install import install_ai_support
 from .consts import START_DEVICE_MONITORING, ASI_DRIVER_URL
 from .firmware_upload.controller import make_firmware_upload_controller
+from .image_viewer.analysis.roi_model import roi_analysis_model
 
 
 class InstallAsiDriverAction(Action):
@@ -20,6 +22,15 @@ class InstallAsiDriverAction(Action):
 
     def perform(self, event):
         webbrowser.open(ASI_DRIVER_URL)
+
+
+class InstallAiSupportAction(Action):
+    name = Str("Install &AI ROI Support...")
+    tooltip = "Install the SAM segmentation stack (osam) with pixi"
+
+    def perform(self, event):
+        if install_ai_support():
+            roi_analysis_model.ai_available = True
 
 
 class UploadFirmwareAction(Action):
@@ -38,8 +49,10 @@ class UploadFirmwareAction(Action):
 
 def help_menu_factory():
     """Help-menu group: the Windows camera-driver download link (the same
-    URL the launch notice points at)."""
-    return SGroup(InstallAsiDriverAction(), id="fluorescence_help_actions")
+    URL the launch notice points at) and the optional AI ROI support
+    installer."""
+    return SGroup(InstallAsiDriverAction(), InstallAiSupportAction(),
+                  id="fluorescence_help_actions")
 
 
 def fluorescence_tools_menu_factory():
