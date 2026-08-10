@@ -249,7 +249,12 @@ class SamJobRunner(HasTraits):
                 except queue.Empty:
                     break
             prefetcher.join(timeout=10)
-            self.track_running = False
+            # cancel (captured at this job's start) is this job's identity
+            # token: if a newer track has since superseded this one, the
+            # runner's shared _cancel has already moved on, and clearing
+            # track_running here would wrongly report the newer job done.
+            if self._cancel is cancel:
+                self.track_running = False
             results.put((TRACK_FINISHED, {
                 "frames_done": frames_done, "total": total,
             }))
