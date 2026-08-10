@@ -146,6 +146,13 @@ class _ImageView(QGraphicsView):
 
     def mousePressEvent(self, event):
         point = self.mapToScene(event.position().toPoint())
+        # A candidate under the cursor wins in every mode, ahead of the
+        # scale layer's own draw_scale handling as well as the ROI
+        # layer's — the scale ruler has no candidate awareness of its
+        # own, so this has to be checked before it gets a turn.
+        if self._roi_layer.candidate_click(point):
+            event.accept()
+            return
         if self._scale_layer.mouse_press(point):
             event.accept()
             return

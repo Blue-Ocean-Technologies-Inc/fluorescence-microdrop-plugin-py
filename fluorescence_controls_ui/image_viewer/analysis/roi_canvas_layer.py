@@ -131,9 +131,13 @@ class RoiCanvasLayer:
             item.set_editable(mode == "edit")
         if self._ball_item is not None:
             # A guide is a tool, not data: it stays draggable outside
-            # edit mode, but not while a draw tool is armed, where a
-            # click on it would swallow the first corner of a shape.
-            self._ball_item.set_editable(mode not in DRAW_KINDS)
+            # edit mode, but not while a draw tool is armed (a click on
+            # it would swallow the first corner of a shape) or while
+            # ai_pick is armed (its clicks never reach Qt's own item
+            # dispatch, so a "draggable" guide there could never
+            # actually be grabbed).
+            self._ball_item.set_editable(mode not in DRAW_KINDS
+                                         and mode != "ai_pick")
 
     def set_ball_reference(self, visible, radius_px):
         """Show the rolling ball at its true size, or take it away.
@@ -162,7 +166,8 @@ class RoiCanvasLayer:
                 self._on_ball_edited)
             self._ball_item.setZValue(ROI_Z)
             self._scene.addItem(self._ball_item)
-            self._ball_item.set_editable(self.mode not in DRAW_KINDS)
+            self._ball_item.set_editable(self.mode not in DRAW_KINDS
+                                         and self.mode != "ai_pick")
         elif not self._ball_item.is_dragging():
             self._ball_item.set_geometry(geometry)
 
@@ -196,13 +201,24 @@ class RoiCanvasLayer:
     def _candidate_at(self, scene_point):
         """The index of the topmost candidate under ``scene_point``, or
         None. Hit-tested against the filled outline (not just the
-        dashed stroke), and done here rather than left to Qt's own
-        item dispatch so a hit is caught ahead of every mode's own
-        mouse handling, draw tools included."""
+        dashed stroke)."""
         for index, item in reversed(list(self._candidate_items.items())):
             if item.path().contains(scene_point):
                 return index
         return None
+
+    def candidate_click(self, scene_point):
+        """Hit-test a candidate at ``scene_point`` and, on a hit, fire
+        ``on_candidate_clicked``. Meant to be called by the view ahead
+        of every other layer's mouse handling (the scale layer's
+        included), so a candidate wins the click in every mode — pan,
+        edit, any draw mode, draw_scale, and ai_pick alike — not only
+        the ones this layer's own mouse_press gets to see first."""
+        index = self._candidate_at(scene_point)
+        if index is None:
+            return False
+        self.on_candidate_clicked(index)
+        return True
 
     def set_ring(self, gap_px, thickness_px, visible):
         """The background annulus to draw around each ROI, from the
@@ -296,13 +312,10 @@ class RoiCanvasLayer:
     # Return True when handled (the view then skips its own handling).    #
     # ------------------------------------------------------------------ #
     def mouse_press(self, scene_point):
-        # A candidate under the cursor wins the click in every mode —
-        # ahead of starting a draw, panning, or prompting ai_pick — but
-        # a miss falls straight through to the mode's own handling.
-        candidate_index = self._candidate_at(scene_point)
-        if candidate_index is not None:
-            self.on_candidate_clicked(candidate_index)
-            return True
+        # A candidate hit is handled by the view via candidate_click()
+        # before this is ever called (ahead of the scale layer too),
+        # so it is never re-checked here — a click that reaches this
+        # point has already missed every candidate.
         if self.mode == "ai_pick":
             # No drag, no rubber-band: one click is the whole gesture.
             self.on_ai_pick(scene_point.x(), scene_point.y())
