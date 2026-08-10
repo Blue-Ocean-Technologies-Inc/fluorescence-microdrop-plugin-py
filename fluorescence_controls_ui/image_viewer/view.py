@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 from traits.api import Enum, Float, HasTraits
 from traitsui.api import (
     BasicEditorFactory, HGroup, HSplit, Item, Label, RangeEditor, UItem,
-    VGroup, View,
+    VGroup, View, spring,
 )
 from traitsui.qt.editor import Editor as QtEditor
 
@@ -676,6 +676,7 @@ analysis_toolbar = VGroup(
               glyph=ICON_RULER, mode="draw_scale",
               tooltip="Set the image scale: drag a line of known "
                       "length, then type what it measures")),
+    "12",   # measurement toggles
     UItem("object.roi_analysis.rolling_ball_enabled",
           editor=IconToggleEditor(
               on_glyph=ICON_TONALITY, off_glyph=ICON_TONALITY,
@@ -689,6 +690,7 @@ analysis_toolbar = VGroup(
               on_glyph=ICON_CROP, off_glyph=ICON_CROP,
               tooltip="Show the background ring each ROI's correction "
                       "is measured from")),
+    "12",   # select/edit the existing ROIs
     UItem("object.roi_analysis.edit_mode",
           editor=IconToggleEditor(
               on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
@@ -714,11 +716,13 @@ analysis_toolbar = VGroup(
               glyph=ICON_PASTE,
               tooltip="Paste the copied shape as a new ROI, offset "
                       "from the original (Ctrl+V)")),
+    "12",   # computed-results reset
     UItem("object.roi_analysis.reset_cache_button",
           editor=IconButtonEditor(
               glyph=ICON_RESET_WRENCH,
               tooltip="Reset calculated intensities (optionally "
                       "also the drift overrides)")),
+    "12",   # AI tools
     UItem("object.roi_analysis.ai_pick_button",
           editor=IconModeButtonEditor(
               glyph="wand_shine", mode="ai_pick",
@@ -743,6 +747,10 @@ analysis_toolbar = VGroup(
                       "kept. Install via Help > Install AI ROI "
                       "Support if disabled."),
           enabled_when="analysis.ai_available"),
+    # Takes the column's stretch so the cluster gaps above stay at
+    # their fixed 12 px instead of spreading down the pane (the fixed
+    # spacers are growable Minimum spacer items).
+    spring,
 )
 
 # Selector sidebar: the four collapsible sections stacked, hidden as one
