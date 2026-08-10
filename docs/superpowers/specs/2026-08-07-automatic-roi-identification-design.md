@@ -8,8 +8,8 @@ across the series for drift.
 
 ## Scope
 
-Three tools, all driven by the hardcoded `efficientsam:latest` model
-("EfficientSam (accuracy)"; no model dropdown):
+Three tools, all driven by one SAM model selected in Preferences
+(default `efficientsam:latest`, "EfficientSam (accuracy)"):
 
 1. **AI picker** — click a droplet, get one ROI (point-prompt segmentation).
 2. **Detect all** — point-grid sweep of the frame proposes every droplet-like
@@ -18,10 +18,38 @@ Three tools, all driven by the hardcoded `efficientsam:latest` model
 3. **Track drift** — re-segment the session's ROIs across later frames every
    N frames, writing capture-time overrides.
 
-Out of scope for v1: model selection UI, a detection-region rectangle
-(detect-all sweeps the whole frame), electrode-layout seeding (issue #11's
-alternative path), per-candidate manual geometry adjustment before accept
-(accept first, then edit with the normal handles).
+Out of scope for v1: a detection-region rectangle (detect-all sweeps the
+whole frame), electrode-layout seeding (issue #11's alternative path),
+per-candidate manual geometry adjustment before accept (accept first, then
+edit with the normal handles).
+
+## Model selection & weight download
+
+The prototype's full model list is offered in the plugin's Preferences tab
+(`FluorescencePreferences` / `FluorescencePreferencesPane` in
+`preferences.py`): EfficientSam speed/accuracy, Sam speed/balanced/accuracy,
+Sam2 speed/balanced/large — a new
+`fluorescence_ai_model = Str("efficientsam:latest")` trait rendered as a
+display-name dropdown in a new "AI ROI detection" group.
+
+Weights download **only when needed** (`osam` cache under `~/.cache/osam`;
+cached = `model_type.get_size() is not None`), at two trigger points:
+
+- **On selection**: when the preference changes to a model that is not
+  cached, the ported labelme download dialog (`download_ai_model` from the
+  prototype's `download.py`: per-file byte progress, window-modal,
+  cancellable) runs immediately. **Cancel or failure reverts the preference
+  to the previously selected model** — the selection only sticks once the
+  weights exist. Already-cached models switch instantly, no dialog.
+- **On first tool use**: launching any AI tool first ensures the selected
+  model is cached (covers the never-downloaded default); the same dialog
+  runs, and cancel aborts the tool cleanly without changing the preference.
+
+The observation lives in the image-viewer side (the controller observes the
+preferences helper trait), since the preferences pane itself cannot host the
+dialog flow. The Qt download dialog is ported as
+`fluorescence_controls_ui/image_viewer/sam_download.py` (it is Qt code, so it
+stays out of the Qt-free `analysis/` package).
 
 ## Architecture
 
@@ -33,6 +61,9 @@ alternative path), per-candidate manual geometry adjustment before accept
   `segment_grid` with degenerate-mask rejection), `suppress_with_votes`
   (IoU/containment dedup summing votes), percentile `normalize_to_uint8`
   contrast stretch (the viewer's 16-bit arrays are stretched before encoding).
+  The refiner is built for the preference-selected model and rebuilt (caches
+  dropped) when the preference changes; `MODEL_OPTIONS` (name ↔ display
+  label) is ported alongside it for the Preferences dropdown.
 - `Candidate` dataclass replaces the prototype's `Roi`: carries **both** the
   simplified polygon outline (`cv2.approxPolyDP`) and the fitted ellipse
   (`cv2.fitEllipse`), plus `votes`, `size` (mean ellipse diameter px),
@@ -89,8 +120,9 @@ installed — Help → Install AI support". New Help-menu action (in `menus.py`)
 `onnxruntime-directml` on Windows) as a background subprocess from the pixi
 project root, progress dialog via `microdrop_application.dialogs.pyface_wrapper`,
 re-probes `sam_available()` on success and enables the tools live; on failure
-shows pixi's output and stays disabled. Model weights auto-download to
-`~/.cache/osam` on first use, surfaced as a status message.
+shows pixi's output and stays disabled. Weight downloads are never silent —
+they always go through the cancellable dialog described in "Model selection &
+weight download".
 
 ## Controller & model changes
 
@@ -101,11 +133,14 @@ shows pixi's output and stays disabled. Model weights auto-download to
 `ai_available = Bool` (probed at startup and after install); progress/status
 strings. `interaction_mode` gains `"ai_pick"`.
 
-`RoiAnalysisController` gains the three job launchers, the queue drain hook
-(called from the dock pane's existing `_drain_timer`), candidate filtering
-(`_filtered_candidates()`), and `_create_rois(pairs, base_anchor)` — a bulk
+`RoiAnalysisController` gains the three job launchers (each preceded by the
+ensure-model-downloaded gate), the queue drain hook (called from the dock
+pane's existing `_drain_timer`), candidate filtering
+(`_filtered_candidates()`), `_create_rois(pairs, base_anchor)` — a bulk
 sibling of `_create_roi`: N appends, one `_save_config()`, one
-`_restart_batch_if_running()`, instant stats per ROI.
+`_restart_batch_if_running()`, instant stats per ROI — and the
+`fluorescence_ai_model` preference observer (download-or-revert flow,
+refiner rebuild on a successful switch).
 
 `RoiCanvasLayer` gains a candidate item set (distinct pen; hit-testing to
 toggle discard) and an `ai_pick` click callback, following the existing
