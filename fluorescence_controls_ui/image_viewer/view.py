@@ -525,8 +525,16 @@ class ImageCanvasEditor(BasicEditorFactory):
 # Compact icon row above the image: browse/navigate/playback plus the
 # position and folder-info readouts.
 buttons_group = HGroup(
-    # The workhorse actions, top-left where they are found first: run
-    # the plot, save the data, and start the ROI set over.
+    UItem("directory_button", editor=IconButtonEditor(
+        glyph=ICON_FOLDER_OPEN,
+        tooltip="Choose the image folder (defaults to the experiment's "
+                "raw captures)")),
+    UItem("home_button", editor=IconButtonEditor(
+        glyph=ICON_HOME,
+        tooltip="Back to the current experiment's captures (newest image)")),
+    # The workhorse actions — run the plot, save the data, start the ROI
+    # set over — as their own cluster right of the folder buttons.
+    "12",
     UItem("object.roi_analysis.calculate_button",
           editor=IconButtonEditor(
               glyph=ICON_SHOW_CHART,
@@ -542,13 +550,7 @@ buttons_group = HGroup(
           editor=IconButtonEditor(
               glyph=ICON_DELETE_SWEEP,
               tooltip="Remove all ROIs")),
-    UItem("directory_button", editor=IconButtonEditor(
-        glyph=ICON_FOLDER_OPEN,
-        tooltip="Choose the image folder (defaults to the experiment's "
-                "raw captures)")),
-    UItem("home_button", editor=IconButtonEditor(
-        glyph=ICON_HOME,
-        tooltip="Back to the current experiment's captures (newest image)")),
+    "12",
     UItem("fit_button", editor=IconButtonEditor(
         glyph=ICON_REFRESH, tooltip="Fit image to the pane")),
     UItem("previous_button", editor=IconButtonEditor(
