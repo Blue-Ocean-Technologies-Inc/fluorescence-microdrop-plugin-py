@@ -338,7 +338,9 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:ai_candidates, "
             "roi_analysis:ai_candidates.items, "
             "roi_analysis:ai_candidates:items:discarded, "
-            "roi_analysis:ai_output_kind")
+            "roi_analysis:ai_output_kind, "
+            "roi_analysis:ai_significance, "
+            "roi_analysis:ai_min_size")
 
     def dispose(self):
         self.object.observe(self._on_window_changed,
@@ -373,7 +375,9 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:ai_candidates, "
             "roi_analysis:ai_candidates.items, "
             "roi_analysis:ai_candidates:items:discarded, "
-            "roi_analysis:ai_output_kind",
+            "roi_analysis:ai_output_kind, "
+            "roi_analysis:ai_significance, "
+            "roi_analysis:ai_min_size",
             remove=True)
         super().dispose()
 
@@ -415,11 +419,18 @@ class _ImageCanvasEditor(QtEditor):
         self._push_candidates()
 
     def _push_candidates(self):
+        """Live, non-destructive preview: only filter-passing candidates
+        are drawn (sliding the significance/size spinners back reveals
+        the hidden ones); a user-discarded candidate stays visible but
+        dimmed. Original indices are kept so discard clicks land on the
+        right candidate."""
         analysis = self.object.roi_analysis
         self._roi_layer.set_candidates([
             (index, *candidate.geometry_for(analysis.ai_output_kind),
              candidate.discarded)
-            for index, candidate in enumerate(analysis.ai_candidates)])
+            for index, candidate in enumerate(analysis.ai_candidates)
+            if candidate.passes(analysis.ai_significance,
+                                analysis.ai_min_size)])
 
     def _on_ball_radius_dragged(self, radius):
         """The guide was resized on the canvas: that IS the setting, so
