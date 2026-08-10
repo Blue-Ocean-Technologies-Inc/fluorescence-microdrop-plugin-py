@@ -134,3 +134,23 @@ FIT_EQUATIONS_FILENAME = "fit_equations.json"
 #: Seconds of quiet since the last change before a debounced write of
 #: the stats store.
 STATS_SAVE_DEBOUNCE_S = 2.0
+
+# --------------------------------------------------------------------------- #
+# AI (SAM) ROI detection                                                       #
+# --------------------------------------------------------------------------- #
+#: Percentile stretch bounds fed to the SAM encoder (PROTO imaging.py:
+#: the high bound must sit below saturated glare or droplet rings vanish).
+AI_NORMALIZE_LOW_PERCENTILE = 1.0
+AI_NORMALIZE_HIGH_PERCENTILE = 99.5
+#: Width the frame is downscaled to before encoding (models resize to
+#: ~1024 internally, so nothing is lost).
+AI_ENCODE_WORK_WIDTH_PX = 1920
+#: Target prompt count for the detect-all grid sweep.
+AI_DETECT_GRID_TARGET_POINTS = 144
+#: Detect-all mask sanity bounds: reject specks and background grabs.
+AI_DETECT_MIN_MASK_AREA_PX = 500
+AI_DETECT_MAX_MASK_AREA_FRACTION = 0.35
+#: Default candidate filters and drift-check interval (options row).
+AI_SIGNIFICANCE_DEFAULT = 2
+AI_MIN_SIZE_DEFAULT_PX = 0
+AI_DRIFT_CHECK_INTERVAL_DEFAULT = 3
