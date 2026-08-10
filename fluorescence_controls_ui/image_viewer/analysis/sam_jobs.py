@@ -243,6 +243,11 @@ class SamJobRunner(HasTraits):
                     results.put((TRACK_FRAME, {
                         "capture_time": capture_time,
                         "candidates": candidates,
+                        # Progress in checked-frame units: done and total
+                        # both count only the frames the tracker segments
+                        # (every interval-th plus the last).
+                        "done": frames_done,
+                        "total": len(segment_frames),
                     }))
         except Exception as error:
             results.put((AI_FAILED, {"stage": "track", "error": str(error)}))
