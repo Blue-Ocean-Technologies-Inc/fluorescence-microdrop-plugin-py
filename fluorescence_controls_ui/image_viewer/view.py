@@ -561,7 +561,11 @@ buttons_group = HGroup(
     UItem("next_button", editor=IconButtonEditor(
         glyph=ICON_NEXT, tooltip="Next image")),
     UItem("position_text", style="readonly"),
-    UItem("info_text", style="readonly"),
+    # Springy: the readout's size policy is Ignored (a long filename
+    # must not dictate the pane width), so it only shows if the layout
+    # hands it the row's leftover width — which the fixed spacers above
+    # otherwise absorb (their Qt policy is Minimum, i.e. growable).
+    UItem("info_text", style="readonly", springy=True),
 )
 
 
