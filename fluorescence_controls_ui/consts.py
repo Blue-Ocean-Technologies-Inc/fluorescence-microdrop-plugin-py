@@ -73,3 +73,8 @@ SLIDESHOW_INTERVAL_MS = 1_500
 #: parses it back).
 CAPTURE_TIMESTAMP_FORMAT = "%Y_%m_%d-%H_%M_%S"
 
+
+#: Decoded frames kept in the viewer's navigation cache. Full 16-bit
+#: frames run ~20 MB decoded, so this bounds the cache near 160 MB while
+#: making back-and-forth seeking over recent frames instant.
+IMAGE_CACHE_FRAMES = 8

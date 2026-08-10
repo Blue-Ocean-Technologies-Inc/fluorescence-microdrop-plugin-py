@@ -135,6 +135,7 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         return control
 
     def _drain_tick(self):
+        self.controller.drain_loaded()
         # ai_controller first: its TRACK_FRAME handling marks
         # tracked-override config dirty, and analysis_controller's
         # drain_results/flush_stats should flush that in the same tick
