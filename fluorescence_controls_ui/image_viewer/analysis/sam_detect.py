@@ -31,6 +31,11 @@ try:
 except ImportError:          # optional dependency: Help menu installs it
     osam = None
 
+#: Set once _patch_osam_providers() has actually run, so a later
+#: sam_available() retry (after an in-process Help-menu install) and the
+#: module-bottom call below can't both patch the providers twice.
+_providers_patched = False
+
 #: (model_name, display_name) — PROTO sam.py MODEL_OPTIONS, labelme's
 #: point-prompt AI-assist list, speed -> accuracy within each family.
 AI_MODEL_OPTIONS = (
@@ -47,7 +52,19 @@ DEFAULT_AI_MODEL = "efficientsam:latest"
 
 
 def sam_available():
-    """Whether the optional osam stack imported."""
+    """Whether the optional osam stack imported -- retrying the import if
+    it was not present at module load time (e.g. the Help-menu installer
+    has since run `pixi add --pypi osam` in-process), so a successful
+    install becomes usable without an app restart."""
+    global osam
+    if osam is None:
+        try:
+            # optional dependency: Help menu installs it
+            import osam as _osam
+        except ImportError:
+            return False
+        osam = _osam
+    _patch_osam_providers_once()
     return osam is not None
 
 
@@ -253,6 +270,16 @@ def _patch_osam_providers():
     osam_model._load_inference_session = load_with_best_provider
 
 
+def _patch_osam_providers_once():
+    """Run _patch_osam_providers() at most once, however many times
+    sam_available() or the module-bottom call below try to trigger it."""
+    global _providers_patched
+    if _providers_patched or osam is None:
+        return
+    _patch_osam_providers()
+    _providers_patched = True
+
+
 class OsamSession(HasTraits):
     """Thread-safe: the tracking pipeline encodes the next frame on a
     prefetch thread while decode calls run on others (onnxruntime sessions
@@ -449,4 +476,4 @@ class SamRefiner(HasTraits):
 
 
 if osam is not None:
-    _patch_osam_providers()
+    _patch_osam_providers_once()

@@ -14,6 +14,7 @@ from .ai_install import install_ai_support
 from .consts import START_DEVICE_MONITORING, ASI_DRIVER_URL
 from .firmware_upload.controller import make_firmware_upload_controller
 from .image_viewer.analysis.roi_model import roi_analysis_model
+from .image_viewer.analysis.sam_detect import sam_available
 
 
 class InstallAsiDriverAction(Action):
@@ -30,7 +31,11 @@ class InstallAiSupportAction(Action):
 
     def perform(self, event):
         if install_ai_support():
-            roi_analysis_model.ai_available = True
+            # sam_available() retries the osam import in-process, so a
+            # successful install becomes usable without an app restart;
+            # a failed/partial install (returns False) still leaves the
+            # toolbar disabled instead of lying about availability.
+            roi_analysis_model.ai_available = sam_available()
 
 
 class UploadFirmwareAction(Action):

@@ -2,7 +2,12 @@
 toolbuttons and canvas events, gates every launch on the model being
 downloaded, and drains the off-GUI job runner's results into the shared
 analysis model. All observers run on the GUI thread; the only off-thread
-work is inside SamJobRunner."""
+work is inside SamJobRunner.
+
+Sanctioned exception to the analysis package's Qt-free rule: the model
+gate below (``_ensure_model_ready``) deliberately imports
+``download_ai_model`` from ``..sam_download``, a Qt view-layer module,
+because the blocking cancellable download progress dialog lives there."""
 import queue
 
 from traits.api import Bool, Either, Float, HasTraits, Instance, Str, observe
@@ -125,6 +130,10 @@ class AiRoiController(HasTraits):
     @observe("analysis_model:canvas_ai_pick")
     def _on_canvas_ai_pick(self, event):
         if not self._ensure_model_ready():
+            # Download was cancelled/failed: disarm the pick tool so the
+            # next canvas click doesn't re-open the modal download dialog.
+            if self.analysis_model.interaction_mode == "ai_pick":
+                self.analysis_model.interaction_mode = self._rest_mode()
             return
         current = self.viewer_model.current_path
         if not current or self.viewer_model.array is None:
@@ -239,8 +248,12 @@ class AiRoiController(HasTraits):
             if candidate is None:
                 model.progress_text = "No droplet found there"
                 return
-            current = self.viewer_model.current_path
-            anchor = capture_timestamp(current) if current else 0.0
+            # Anchor to the launch-time frame (payload["image_id"]), not
+            # viewer_model.current_path: the frame can have changed during
+            # the encode (slideshow advance or user navigation) by the
+            # time this result drains.
+            image_id = payload["image_id"]
+            anchor = capture_timestamp(image_id) if image_id else 0.0
             model.ai_rois_accepted = (
                 [candidate.geometry_for(model.ai_output_kind)], anchor)
             model.progress_text = "AI ROI added"
@@ -261,10 +274,20 @@ class AiRoiController(HasTraits):
                         candidate.geometry_for(model.ai_output_kind)[1])
         elif kind == TRACK_FINISHED:
             model.ai_track_running = False
+            # frames_done counts segmented frames actually processed (every
+            # interval-th frame, plus the last); total counts every later
+            # frame including the skipped ones the segmenter never touches
+            # -- the two aren't the same unit, so "m/n" always read like an
+            # early stop when interval > 1. Report only the honest count.
             model.progress_text = (
-                f"Drift tracking done ({payload['frames_done']}/"
-                f"{payload['total']} frames)")
+                f"Drift tracking done ({payload['frames_done']} "
+                f"frames checked)")
         elif kind == AI_FAILED:
             # Already logged (with more detail) by the runner itself.
             model.progress_text = (
                 f"AI {payload['stage']} failed: {payload['error']}")
+            if model.interaction_mode == "ai_pick":
+                # Disarm the pick tool: a failed pick left it armed, so the
+                # next canvas click would just relaunch into the same
+                # failure instead of doing nothing.
+                model.interaction_mode = self._rest_mode()

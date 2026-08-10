@@ -69,6 +69,13 @@ class SamJobRunner(HasTraits):
         self.cancel()
         self.results = queue.SimpleQueue()
         self._cancel = threading.Event()
+        # Each launcher re-establishes its own state (track() re-sets this
+        # True right after calling _start_job); if a pick/detect supersedes
+        # a running track, the dying track's identity-guarded finally in
+        # _run_track will skip clearing this (its _cancel token no longer
+        # matches), so without this it would stay True forever and
+        # permanently short-circuit _on_track's toggle guard.
+        self.track_running = False
         return self._cancel, self.results
 
     # -- pick -----------------------------------------------------------

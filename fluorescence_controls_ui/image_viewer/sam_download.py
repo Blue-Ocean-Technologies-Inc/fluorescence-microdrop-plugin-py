@@ -11,11 +11,10 @@ from PySide6.QtWidgets import QWidget
 
 from logger.logger_service import get_logger
 
-try:
-    import osam
-    import osam.types
-except ImportError:          # optional dependency: Help menu installs it
-    osam = None
+# sam_detect owns the module-level osam binding (its sam_available() knows
+# how to retry the import after an in-process Help-menu install); this
+# module reads sam_detect.osam instead of importing/tracking its own copy.
+from .analysis import sam_detect
 
 logger = get_logger(__name__)
 
@@ -85,19 +84,20 @@ def _format_bytes(n):
 
 def model_is_cached(model_name):
     """Whether the model's weights are already in the osam cache."""
-    if osam is None:
+    if not sam_detect.sam_available():
         raise RuntimeError("osam is not installed")
-    return osam.apis.get_model_type_by_name(model_name).get_size() is not None
+    return (sam_detect.osam.apis.get_model_type_by_name(model_name)
+           .get_size() is not None)
 
 
 def download_ai_model(model_name, parent=None):
-    if osam is None:
+    if not sam_detect.sam_available():
         raise RuntimeError("osam is not installed")
 
     if model_is_cached(model_name):
         return True
 
-    model_type = osam.apis.get_model_type_by_name(model_name)
+    model_type = sam_detect.osam.apis.get_model_type_by_name(model_name)
 
     dialog = QProgressDialog(
         f"Downloading {model_name}...\n(requires internet connection)",
