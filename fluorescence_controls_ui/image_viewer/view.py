@@ -16,12 +16,13 @@ from traitsui.api import (
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.icons.icons import (
-    ICON_CAPSULE, ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CIRCLE,
-    ICON_CONTOUR, ICON_COPY, ICON_CROP, ICON_DELETE, ICON_DELETE_SWEEP,
-    ICON_EDIT, ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PASTE,
-    ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH,
-    ICON_ADJUST, ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE,
-    ICON_SHOW_CHART, ICON_TONALITY,
+    ICON_CANCEL, ICON_CAPSULE, ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT,
+    ICON_CIRCLE, ICON_CONTOUR, ICON_COPY, ICON_CROP, ICON_DELETE,
+    ICON_DELETE_SWEEP, ICON_EDIT, ICON_EMOJI_OBJECTS, ICON_FOLDER_OPEN,
+    ICON_HOME, ICON_NEXT, ICON_PASTE, ICON_PAUSE, ICON_PLAY,
+    ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_ADJUST,
+    ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE, ICON_SELECT_All,
+    ICON_SHOW_CHART, ICON_STAIRS, ICON_TONALITY,
 )
 from microdrop_utils.traitsui_qt_helpers import (
     HoverScrollEnumEditor, IconButtonEditor, IconModeButtonEditor,
@@ -697,6 +698,30 @@ analysis_toolbar = VGroup(
               glyph=ICON_RESET_WRENCH,
               tooltip="Reset calculated intensities (optionally "
                       "also the drift overrides)")),
+    UItem("object.roi_analysis.ai_pick_button",
+          editor=IconModeButtonEditor(
+              glyph=ICON_EMOJI_OBJECTS, mode="ai_pick",
+              tooltip="AI picker: click a droplet and the model "
+                      "segments it into an ROI. Stays armed — Esc "
+                      "puts it away. Install via Help > Install AI "
+                      "ROI Support if disabled."),
+          enabled_when="analysis.ai_available"),
+    UItem("object.roi_analysis.ai_detect_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SELECT_All,
+              tooltip="Detect all droplets on this frame (AI grid "
+                      "sweep). Results appear as dashed candidates: "
+                      "click to discard, then Accept. Install via "
+                      "Help > Install AI ROI Support if disabled."),
+          enabled_when="analysis.ai_available"),
+    UItem("object.roi_analysis.ai_track_button",
+          editor=IconButtonEditor(
+              glyph=ICON_STAIRS,
+              tooltip="Track the ROIs across later frames (drift). "
+                      "Press again to stop; finished frames are "
+                      "kept. Install via Help > Install AI ROI "
+                      "Support if disabled."),
+          enabled_when="analysis.ai_available"),
 )
 
 # Selector sidebar: the four collapsible sections stacked, hidden as one
@@ -761,6 +786,51 @@ correction_group = HGroup(
 )
 
 
+# AI (SAM) detection options: significance/size filters over the last
+# pick/detect/track pass's candidates, the shape accepted candidates
+# become, and the drift re-check interval, plus Accept/Clear over the
+# pending candidates. Hidden with the rest of the AI surface when the
+# optional SAM stack is not installed.
+ai_group = HGroup(
+    Label("AI"),
+    Item("object.roi_analysis.ai_significance", label="signif",
+         editor=RangeEditor(low=1, high=20, mode="spinner",
+                            auto_set=True),
+         tooltip="Significance: how many grid points independently "
+                 "produced a candidate during Detect all. Clear "
+                 "droplets score 2-4, one-off noise 1; click-added "
+                 "ROIs are exempt. Non-destructive: sliding back "
+                 "reveals hidden candidates."),
+    Item("object.roi_analysis.ai_min_size", label="min size",
+         editor=RangeEditor(low=0, high=500, mode="spinner",
+                            auto_set=True),
+         tooltip="Hide candidates whose mean ellipse diameter (px) "
+                 "is below this. Applies to all candidates."),
+    Item("object.roi_analysis.ai_output_kind", label="as",
+         tooltip="Shape an accepted candidate becomes: the traced "
+                 "polygon outline, or the fitted ellipse."),
+    Item("object.roi_analysis.ai_drift_interval", label="drift every",
+         editor=RangeEditor(low=1, high=50, mode="spinner",
+                            auto_set=True),
+         tooltip="Track drift: re-segment every Nth frame (the "
+                 "final frame always); skipped frames inherit. "
+                 "Larger N = faster tracking for slow drift."),
+    UItem("object.roi_analysis.ai_accept_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SAVE,
+              tooltip="Accept the filter-passing candidates as "
+                      "ROIs"),
+          visible_when="analysis.ai_accept_count > 0"),
+    UItem("object.roi_analysis.ai_clear_button",
+          editor=IconButtonEditor(
+              glyph=ICON_CANCEL,
+              tooltip="Discard all candidates"),
+          visible_when="len(analysis.ai_candidates) > 0"),
+    visible_when="analysis.ai_available",
+    springy=True,
+)
+
+
 ImageViewerView = View(
     HGroup(
         VGroup(UItem("show_sidebar", editor=IconToggleEditor(
@@ -773,6 +843,7 @@ ImageViewerView = View(
                 UItem("array", editor=ImageCanvasEditor(), springy=True,
                       resizable=True),
                 correction_group,
+                ai_group,
                 HGroup(
                     UItem("pixel_text", style="readonly"),
                     UItem("scale_text", style="readonly"),
