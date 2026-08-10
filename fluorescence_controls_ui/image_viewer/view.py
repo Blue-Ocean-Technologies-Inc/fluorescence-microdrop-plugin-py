@@ -532,24 +532,6 @@ buttons_group = HGroup(
     UItem("home_button", editor=IconButtonEditor(
         glyph=ICON_HOME,
         tooltip="Back to the current experiment's captures (newest image)")),
-    # The workhorse actions — run the plot, save the data, start the ROI
-    # set over — as their own cluster right of the folder buttons.
-    "12",
-    UItem("object.roi_analysis.calculate_button",
-          editor=IconButtonEditor(
-              glyph=ICON_SHOW_CHART,
-              tooltip="Calculate ROI intensities across the "
-                      "filtered images and plot them")),
-    UItem("object.roi_analysis.export_csv_button",
-          editor=IconButtonEditor(
-              glyph=ICON_SAVE,
-              tooltip="Export the intensities to the experiment's "
-                      "analysis folder (calculates first if "
-                      "needed)")),
-    UItem("object.roi_analysis.clear_rois_button",
-          editor=IconButtonEditor(
-              glyph=ICON_DELETE_SWEEP,
-              tooltip="Remove all ROIs")),
     "12",
     UItem("fit_button", editor=IconButtonEditor(
         glyph=ICON_REFRESH, tooltip="Fit image to the pane")),
@@ -560,6 +542,30 @@ buttons_group = HGroup(
         tooltip="Cycle through the folder's images")),
     UItem("next_button", editor=IconButtonEditor(
         glyph=ICON_NEXT, tooltip="Next image")),
+    # The workhorse actions — run the plot, save the data, start the ROI
+    # set over — as their own cluster right of the folder buttons.
+    "12",
+    UItem("object.roi_analysis.calculate_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SHOW_CHART,
+              tooltip="Calculate ROI intensities across the "
+                      "filtered images and plot them")),
+    UItem("object.roi_analysis.reset_cache_button",
+          editor=IconButtonEditor(
+              glyph=ICON_RESET_WRENCH,
+              tooltip="Reset calculated intensities (optionally "
+                      "also the drift overrides)")),
+    UItem("object.roi_analysis.export_csv_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SAVE,
+              tooltip="Export the intensities to the experiment's "
+                      "analysis folder (calculates first if "
+                      "needed)")),
+    UItem("object.roi_analysis.clear_rois_button",
+          editor=IconButtonEditor(
+              glyph=ICON_DELETE_SWEEP,
+              tooltip="Remove all ROIs")),
+
     UItem("position_text", style="readonly"),
     # Springy: the readout's size policy is Ignored (a long filename
     # must not dictate the pane width), so it only shows if the layout
@@ -671,12 +677,12 @@ analysis_toolbar = VGroup(
                       "Enter — Esc cancels, Backspace undoes). Stays "
                       "armed for the next one — a second Esc puts "
                       "it away")),
+    "12",  # measurement toggles
     UItem("object.roi_analysis.calibrate_scale_button",
           editor=IconModeButtonEditor(
               glyph=ICON_RULER, mode="draw_scale",
               tooltip="Set the image scale: drag a line of known "
                       "length, then type what it measures")),
-    "12",   # measurement toggles
     UItem("object.roi_analysis.rolling_ball_enabled",
           editor=IconToggleEditor(
               on_glyph=ICON_TONALITY, off_glyph=ICON_TONALITY,
@@ -716,12 +722,6 @@ analysis_toolbar = VGroup(
               glyph=ICON_PASTE,
               tooltip="Paste the copied shape as a new ROI, offset "
                       "from the original (Ctrl+V)")),
-    "12",   # computed-results reset
-    UItem("object.roi_analysis.reset_cache_button",
-          editor=IconButtonEditor(
-              glyph=ICON_RESET_WRENCH,
-              tooltip="Reset calculated intensities (optionally "
-                      "also the drift overrides)")),
     "12",   # AI tools
     UItem("object.roi_analysis.ai_pick_button",
           editor=IconModeButtonEditor(
