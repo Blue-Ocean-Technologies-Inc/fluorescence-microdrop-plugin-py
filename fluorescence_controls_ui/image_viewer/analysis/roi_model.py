@@ -14,8 +14,9 @@ from traits.api import (
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
 from .consts import (
-    BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS, BUTTER_ORDER,
-    BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_BOUNDS_MAD,
+    AI_DRIFT_CHECK_INTERVAL_DEFAULT, AI_MIN_SIZE_DEFAULT_PX,
+    AI_SIGNIFICANCE_DEFAULT, BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS,
+    BUTTER_ORDER, BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_BOUNDS_MAD,
     OUTLIER_THRESHOLD_MAD, OUTLIER_WINDOW_BOUNDS_PTS,
     OUTLIER_WINDOW_PTS, RING_GAP_BOUNDS_PX, RING_GAP_PX,
     RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, ROI_ALPHA_BOUNDS_PCT,
@@ -26,6 +27,7 @@ from .consts import (
 from .curve_fit import FIT_METHODS
 from .plot_series import SMOOTH_METHODS
 from .fit_presets import choices_for
+from .sam_detect import Candidate
 
 #: Matches the "ROI N" names next_roi_name() itself produces, to find
 #: the next free number.
@@ -370,10 +372,11 @@ class RoiAnalysisModel(HasTraits):
     ``session``."""
 
     #: Canvas interaction: pan (normal navigation), one-shot draw modes,
-    #: or edit (move/resize/select existing ROIs).
+    #: edit (move/resize/select existing ROIs), or ai_pick (click the
+    #: canvas to prompt SAM at that point).
     interaction_mode = Enum("pan", "draw_ellipse", "draw_box",
                             "draw_capsule", "draw_polygon", "draw_scale",
-                            "edit")
+                            "edit", "ai_pick")
 
     #: roi_id of the canvas-selected ROI (edit mode), '' when none.
     selected_roi_id = Str()
@@ -435,6 +438,52 @@ class RoiAnalysisModel(HasTraits):
     def _fit_method_choices_default(self):
         return choices_for(self.fit_presets,
                            self.session.figure.fit_method)
+
+    # ---------------------------------------------------------------- #
+    # AI (SAM) ROI detection: toolbar/options state and canvas<->
+    # controller event channels. Reacted to by RoiAnalysisController;
+    # this model only holds the state.
+    # ---------------------------------------------------------------- #
+    #: Whether the optional SAM stack is importable (osam installed) —
+    #: gates whether the AI tools are enabled in the UI.
+    ai_available = Bool(False)
+
+    #: AI toolbar buttons (view events; RoiAnalysisController reacts).
+    ai_pick_button = Button()
+    ai_detect_button = Button()
+    ai_track_button = Button()
+    ai_accept_button = Button()
+    ai_clear_button = Button()
+
+    #: Candidates from the last pick/detect/track pass, awaiting review
+    #: (accept/discard) before becoming real ROIs.
+    ai_candidates = List(Instance(Candidate))
+
+    #: Significance filter: minimum grid-sweep vote count a candidate
+    #: needs to survive (click-sourced candidates are exempt).
+    ai_significance = Int(AI_SIGNIFICANCE_DEFAULT)
+    #: Size filter: minimum mean ellipse diameter (px) a candidate needs.
+    ai_min_size = Int(AI_MIN_SIZE_DEFAULT_PX)
+    #: Geometry accepted candidates are converted to.
+    ai_output_kind = Enum("polygon", "ellipse")
+    #: How many images between drift re-checks while tracking.
+    ai_drift_interval = Range(1, 50, AI_DRIFT_CHECK_INTERVAL_DEFAULT)
+    #: Whether a track pass is currently running (drives a progress UI).
+    ai_track_running = Bool(False)
+    #: Count of ROIs accepted from AI candidates this session (readout).
+    ai_accept_count = Int(0)
+
+    #: Canvas click while in "ai_pick" interaction mode. # (x, y)
+    canvas_ai_pick = Event()
+    #: Canvas click on a candidate overlay. # candidate index
+    canvas_candidate_clicked = Event()
+    #: Accepted candidates converted to ROIs. # (pairs, anchor), where
+    #: pairs is [(kind, geometry), ...] and anchor is the capture time
+    #: they were accepted against.
+    ai_rois_accepted = Event()
+    #: One ROI's geometry updated by a drift re-check while tracking.
+    #: # (roi_id, capture_time, geometry)
+    ai_roi_tracked = Event()
 
     #: The ROI shape held for pasting: kind and the geometry it had on
     #: the image it was copied from ('' = nothing copied yet). Not the
