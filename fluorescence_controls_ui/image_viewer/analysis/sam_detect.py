@@ -318,7 +318,7 @@ class SamRefiner(HasTraits):
     #: current-frame state so prepare/segment can run on different threads.
     _work_cache = Instance(collections.OrderedDict)
 
-    def _session_default(self):
+    def __session_default(self):
         return OsamSession(_model_name=self.model_name)
 
     def __lock_default(self):
