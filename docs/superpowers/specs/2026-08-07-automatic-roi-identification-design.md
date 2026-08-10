@@ -30,7 +30,10 @@ The prototype's full model list is offered in the plugin's Preferences tab
 `preferences.py`): EfficientSam speed/accuracy, Sam speed/balanced/accuracy,
 Sam2 speed/balanced/large — a new
 `fluorescence_ai_model = Str("efficientsam:latest")` trait rendered as a
-display-name dropdown in a new "AI ROI detection" group.
+display-name dropdown in a new "AI ROI detection" group on the Fluorescence
+Settings tab, built with the same `create_item_label_group` /
+`preferences_group_style_sheet` pattern as the existing Backend and Controls
+groups.
 
 Weights download **only when needed** (`osam` cache under `~/.cache/osam`;
 cached = `model_type.get_size() is not None`), at two trigger points:
@@ -64,12 +67,18 @@ stays out of the Qt-free `analysis/` package).
   The refiner is built for the preference-selected model and rebuilt (caches
   dropped) when the preference changes; `MODEL_OPTIONS` (name ↔ display
   label) is ported alongside it for the Preferences dropdown.
-- `Candidate` dataclass replaces the prototype's `Roi`: carries **both** the
-  simplified polygon outline (`cv2.approxPolyDP`) and the fitted ellipse
-  (`cv2.fitEllipse`), plus `votes`, `size` (mean ellipse diameter px),
-  `score`, `prompt` point, and a `discarded` flag. The polygon/ellipse choice
-  is applied at accept time via `geometry_for(kind)` → a plugin
-  `(kind, geometry)` pair (flat float lists per `roi_geometry.py`).
+- `Candidate` HasTraits class replaces the prototype's `Roi` dataclass:
+  carries **both** the simplified polygon outline (`cv2.approxPolyDP`) and
+  the fitted ellipse (`cv2.fitEllipse`), plus `votes`, `size` (mean ellipse
+  diameter px), `score`, `prompt` point, and a `discarded` flag. The
+  polygon/ellipse choice is applied at accept time via `geometry_for(kind)`
+  → a plugin `(kind, geometry)` pair (flat float lists per
+  `roi_geometry.py`).
+
+Trait typing throughout the feature: HasTraits classes wherever a plain
+class or dataclass would otherwise appear, with precise trait definitions
+(`List(Float)`, `Enum`, `Range`, …); where several types are genuinely
+possible, use `Union`/`Either` rather than `Any`.
 - `sam_available() -> bool` — lazy import probe; the UI keys off it.
 
 **Threading** reuses the `roi_batch.py` idiom (shared `ThreadPoolExecutor` +
