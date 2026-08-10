@@ -27,6 +27,7 @@ from logger.logger_service import get_logger
 
 from ..consts import PKG
 from ..consts import DISCOVERY_POLL_INTERVAL_MS, SLIDESHOW_INTERVAL_MS
+from .analysis.ai_controller import AiRoiController
 from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
 from .analysis.roi_batch import _shared_executor
 from .analysis.roi_controller import RoiAnalysisController
@@ -66,6 +67,7 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
     model = Instance(FluorescenceImageViewerModel)
     controller = Instance(FluorescenceImageViewerController)
     analysis_controller = Instance(RoiAnalysisController)
+    ai_controller = Instance(AiRoiController)
     _poll_timer = Any()
     _play_timer = Any()
     _drain_timer = Any()
@@ -74,6 +76,9 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self.model = FluorescenceImageViewerModel()
         self.controller = FluorescenceImageViewerController(model=self.model)
         self.analysis_controller = RoiAnalysisController(
+            viewer_model=self.model,
+            analysis_model=self.model.roi_analysis)
+        self.ai_controller = AiRoiController(
             viewer_model=self.model,
             analysis_model=self.model.roi_analysis)
         # Warm the process pool off-thread so the first Calculate does
@@ -132,6 +137,7 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
     def _drain_tick(self):
         self.analysis_controller.drain_results()
         self.analysis_controller.flush_stats()
+        self.ai_controller.drain_results()
 
     @observe("model:browsed_directory")
     def _update_title(self, event):

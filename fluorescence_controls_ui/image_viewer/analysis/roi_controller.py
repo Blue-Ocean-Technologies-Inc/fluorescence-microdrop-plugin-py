@@ -64,6 +64,11 @@ class RoiAnalysisController(HasTraits):
     #: When the running batch started, for the finished-in log line.
     _batch_started = Float(0.0)
 
+    #: A drift re-check updated an ROI's geometry since the last save —
+    #: flushed by drain_results() once per drain tick rather than once
+    #: per tracked frame.
+    _ai_config_dirty = Bool(False)
+
     @property
     def session(self):
         return self.analysis_model.session
@@ -182,6 +187,40 @@ class RoiAnalysisController(HasTraits):
         self._restart_batch_if_running()
         self._instant_stats(roi)
         return roi
+
+    @observe("analysis_model:ai_rois_accepted")
+    def _on_ai_rois_accepted(self, event):
+        pairs, anchor = event.new
+        self._create_rois(pairs, anchor)
+
+    def _create_rois(self, pairs, anchor):
+        """Bulk sibling of _create_roi for accepted AI candidates: one
+        save and one batch restart for the whole set."""
+        created = []
+        for kind, geometry in pairs:
+            roi = Roi(name=self.session.next_roi_name(), kind=kind,
+                      geometry=[float(value) for value in geometry],
+                      base_anchor=anchor,
+                      style=RoiStyle(color=DEFAULT_ROI_COLORS[
+                          len(self.session.rois) % len(DEFAULT_ROI_COLORS)]))
+            self.session.rois.append(roi)
+            created.append(roi)
+        if not created:
+            return created
+        self._save_config()
+        self._restart_batch_if_running()
+        for roi in created:
+            self._instant_stats(roi)
+        return created
+
+    @observe("analysis_model:ai_roi_tracked")
+    def _on_ai_roi_tracked(self, event):
+        roi_id, capture_time, geometry = event.new
+        roi = self.session.roi_by_id(roi_id)
+        if roi is not None:
+            roi.apply_edit(capture_time,
+                           [float(value) for value in geometry])
+            self._ai_config_dirty = True
 
     @observe("analysis_model:canvas_roi_edited")
     def _on_canvas_roi_edited(self, event):
@@ -413,6 +452,9 @@ class RoiAnalysisController(HasTraits):
             self.flush_stats(force=True)
             if self._pending_export:
                 self._write_export()
+        if self._ai_config_dirty:
+            self._ai_config_dirty = False
+            self._save_config()
 
     def _absorb(self, payload):
         """True when anything landed — the caller bumps the revision
