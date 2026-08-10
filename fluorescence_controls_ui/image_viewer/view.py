@@ -711,7 +711,7 @@ analysis_toolbar = VGroup(
                       "also the drift overrides)")),
     UItem("object.roi_analysis.ai_pick_button",
           editor=IconModeButtonEditor(
-              glyph=ICON_EMOJI_OBJECTS, mode="ai_pick",
+              glyph="wand_shine", mode="ai_pick",
               tooltip="AI picker: click a droplet and the model "
                       "segments it into an ROI. Stays armed — Esc "
                       "puts it away. Install via Help > Install AI "
@@ -719,7 +719,7 @@ analysis_toolbar = VGroup(
           enabled_when="analysis.ai_available"),
     UItem("object.roi_analysis.ai_detect_button",
           editor=IconButtonEditor(
-              glyph=ICON_SELECT_All,
+              glyph="eye_tracking",
               tooltip="Detect all droplets on this frame (AI grid "
                       "sweep). Results appear as dashed candidates: "
                       "click to discard, then Accept. Install via "
@@ -727,7 +727,7 @@ analysis_toolbar = VGroup(
           enabled_when="analysis.ai_available"),
     UItem("object.roi_analysis.ai_track_button",
           editor=IconButtonEditor(
-              glyph=ICON_STAIRS,
+              glyph="ink_highlighter_move",
               tooltip="Track the ROIs across later frames (drift). "
                       "Press again to stop; finished frames are "
                       "kept. Install via Help > Install AI ROI "
