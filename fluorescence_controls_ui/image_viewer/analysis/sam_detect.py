@@ -5,9 +5,15 @@ without the optional ``osam`` package — ``sam_available()`` reports which.
 Ported from the standalone droplet_roi prototype (labelme-derived); see
 docs/superpowers/specs/2026-08-07-automatic-roi-identification-design.md.
 """
+import collections
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import cv2
 import numpy as np
-from traits.api import Array, Bool, Float, HasTraits, Int, List, Property, Str
+from traits.api import (
+    Array, Bool, Float, HasTraits, Instance, Int, List, Property, Str,
+)
 
 from logger.logger_service import get_logger
 
@@ -214,3 +220,233 @@ def _mask_intersection_area(a, b):
     sub_a = a.mask[y0 - ay0:y1 - ay0, x0 - ax0:x1 - ax0]
     sub_b = b.mask[y0 - by0:y1 - by0, x0 - bx0:x1 - bx0]
     return int(np.count_nonzero(sub_a & sub_b))
+
+
+def _patch_osam_providers():
+    """Route SAM encoders through DirectML when available (osam only
+    auto-detects CUDA). Measured on this machine's Radeon 780M: encode 3.2x
+    faster on DML; the small decoder is FASTER on CPU (GPU transfer overhead
+    dominates), so decoders keep the CPU provider."""
+    # optional dependency: this module only runs when osam is installed
+    import onnxruntime
+
+    if "DmlExecutionProvider" not in onnxruntime.get_available_providers():
+        return
+    from osam.types import _model as osam_model
+
+    original = osam_model._load_inference_session
+
+    def load_with_best_provider(blob, providers=None):
+        use_dml = "encoder" in getattr(blob, "filename", "").lower()
+        try:
+            return onnxruntime.InferenceSession(
+                blob.path,
+                providers=(
+                    ["DmlExecutionProvider", "CPUExecutionProvider"]
+                    if use_dml
+                    else ["CPUExecutionProvider"]
+                ),
+            )
+        except Exception:
+            return original(blob=blob, providers=providers)
+
+    osam_model._load_inference_session = load_with_best_provider
+
+
+class OsamSession(HasTraits):
+    """Thread-safe: the tracking pipeline encodes the next frame on a
+    prefetch thread while decode calls run on others (onnxruntime sessions
+    support concurrent run())."""
+
+    #: which osam model this session wraps.
+    _model_name = Str()
+    #: how many image embeddings to keep before evicting the oldest.
+    cache_size = Int(8)
+    _model = Instance(object)
+    _embedding_cache = Instance(collections.deque)
+    _lock = Instance(object)
+
+    def __embedding_cache_default(self):
+        return collections.deque(maxlen=self.cache_size)
+
+    def __lock_default(self):
+        return threading.Lock()
+
+    def ensure_model(self):
+        with self._lock:
+            if self._model is None:
+                self._model = osam.apis.get_model_type_by_name(
+                    self._model_name)()
+            return self._model
+
+    def ensure_embedding(self, image, image_id):
+        with self._lock:
+            for key, embedding in self._embedding_cache:
+                if key == image_id:
+                    return embedding
+        embedding = self.ensure_model().encode_image(image=image)
+        with self._lock:
+            self._embedding_cache.append((image_id, embedding))
+        return embedding
+
+    def run(self, image, image_id, points, point_labels):
+        embedding = self.ensure_embedding(image=image, image_id=image_id)
+        model = self.ensure_model()
+        return model.generate(
+            request=osam.types.GenerateRequest(
+                model=model.name,
+                image=image,
+                image_embedding=embedding,
+                prompt=osam.types.Prompt(points=points,
+                                         point_labels=point_labels),
+            )
+        )
+
+
+class SamRefiner(HasTraits):
+    """Point-prompt segmentation on a downscaled image, results at full
+    res."""
+
+    model_name = Str(DEFAULT_AI_MODEL)
+    work_width = Int(AI_ENCODE_WORK_WIDTH_PX)
+    #: how many prepared (downscaled-image, scale) entries to keep before
+    #: evicting the oldest.
+    work_cache_size = Int(8)
+    _session = Instance(OsamSession)
+    _lock = Instance(object)
+    #: image_id -> (work_rgb, scale); keyed cache instead of mutable
+    #: current-frame state so prepare/segment can run on different threads.
+    _work_cache = Instance(collections.OrderedDict)
+
+    def _session_default(self):
+        return OsamSession(_model_name=self.model_name)
+
+    def __lock_default(self):
+        return threading.Lock()
+
+    def __work_cache_default(self):
+        return collections.OrderedDict()
+
+    def traits_init(self):
+        if not sam_available():
+            raise RuntimeError("osam is not installed")
+
+    def prepare(self, image_id, gray_u8):
+        """Downscale + encode (slow, seconds); later prompts are
+        sub-second."""
+        with self._lock:
+            cached = self._work_cache.get(image_id)
+        if cached is None:
+            h, w = gray_u8.shape
+            if w > self.work_width:
+                scale = w / self.work_width
+                work = cv2.resize(
+                    gray_u8,
+                    (self.work_width, int(round(h / scale))),
+                    interpolation=cv2.INTER_AREA,
+                )
+            else:
+                scale = 1.0
+                work = gray_u8
+            cached = (to_rgb(work), scale)
+            with self._lock:
+                self._work_cache[image_id] = cached
+                while len(self._work_cache) > self.work_cache_size:
+                    self._work_cache.popitem(last=False)
+        self._session.ensure_embedding(cached[0], image_id)
+
+    def segment_point(self, image_id, x_full, y_full):
+        with self._lock:
+            cached = self._work_cache.get(image_id)
+        assert cached is not None, "call prepare() first"
+        work_rgb, scale = cached
+        response = self._session.run(
+            image=work_rgb,
+            image_id=image_id,
+            points=np.array([[x_full / scale, y_full / scale]]),
+            point_labels=np.array([1], dtype=np.intp),
+        )
+        best = None
+        for annotation in response.annotations:
+            if annotation.mask is None or annotation.bounding_box is None:
+                continue
+            if best is None or (annotation.score or 0) > (best.score or 0):
+                best = annotation
+        if best is None:
+            return None
+        return self._upscale(best, scale)
+
+    def segment_grid(self, image_id, image_shape,
+                     target_points=AI_DETECT_GRID_TARGET_POINTS,
+                     progress_cb=None):
+        """Detect-everything sweep: prompt the decoder on a point grid
+        spanning the whole frame against the one cached embedding. Every
+        point is decoded -- an earlier covered-point skip was measured to
+        silently drop droplets overlapped by a neighbor's mask -- but the
+        decodes are independent, so they run in a thread pool (~2x).
+        Returns (detection, prompt_point, votes) triples with votes=1 each;
+        duplicate-mask merging in suppress_with_votes sums them into the
+        significance count. Degenerate masks (background grabs, specks) are
+        dropped. Call prepare() first."""
+        h, w = image_shape
+        nx = max(2, int(round(np.sqrt(target_points * w / max(h, 1)))))
+        ny = max(2, int(round(target_points / nx)))
+        points = [
+            (float((ix + 0.5) / nx * w), float((iy + 0.5) / ny * h))
+            for iy in range(ny)
+            for ix in range(nx)
+        ]
+
+        done = 0
+        done_lock = threading.Lock()
+
+        def decode(point):
+            nonlocal done
+            detection = self.segment_point(image_id, point[0], point[1])
+            with done_lock:
+                done += 1
+                if progress_cb is not None:
+                    progress_cb(done, len(points))
+            return detection
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            detections = list(pool.map(decode, points))
+
+        frame_area = w * h
+        results = []
+        for point, detection in zip(points, detections):
+            if detection is None:
+                continue
+            area = int(np.count_nonzero(detection.mask))
+            # Reject background grabs and specks. Generous bounds: real
+            # droplets are far inside them, whole-image masks far outside.
+            if not (AI_DETECT_MIN_MASK_AREA_PX <= area
+                    <= AI_DETECT_MAX_MASK_AREA_FRACTION * frame_area):
+                continue
+            results.append((detection, [point[0], point[1]], 1))
+        return results
+
+    @staticmethod
+    def _upscale(annotation, s):
+        bb = annotation.bounding_box
+        xmin = int(round(bb.xmin * s))
+        ymin = int(round(bb.ymin * s))
+        xmax = int(round((bb.xmax + 1) * s)) - 1
+        ymax = int(round((bb.ymax + 1) * s)) - 1
+        w = xmax - xmin + 1
+        h = ymax - ymin + 1
+        if w <= 0 or h <= 0:
+            return None
+        mask = cv2.resize(
+            annotation.mask.astype(np.uint8), (w, h),
+            interpolation=cv2.INTER_NEAREST
+        ).astype(bool)
+        return Detection(
+            bbox=[float(xmin), float(ymin), float(xmax), float(ymax)],
+            mask=mask,
+            score=float(annotation.score or 0.0),
+        )
+
+
+if osam is not None:
+    _patch_osam_providers()
