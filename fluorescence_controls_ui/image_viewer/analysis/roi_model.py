@@ -395,14 +395,6 @@ class RoiAnalysisModel(HasTraits):
     draw_polygon_button = Button()
     calibrate_scale_button = Button()
 
-    #: Right-toolbar section visibility (a chevron toggle above each
-    #: cluster): collapsing sections compacts the toolbar vertically.
-    show_draw_tools = Bool(True)
-    show_measure_toggles = Bool(True)
-    show_edit_tools = Bool(True)
-    show_reset_tool = Bool(True)
-    show_ai_tools = Bool(True)
-
     #: Live mirrors of session settings the toolbar toggles: the
     #: toolbar is built once against this model while sessions swap
     #: underneath it.
