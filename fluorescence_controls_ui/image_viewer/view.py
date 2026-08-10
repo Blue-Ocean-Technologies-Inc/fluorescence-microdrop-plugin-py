@@ -645,111 +645,139 @@ contrast_group = VGroup(
 # the plot pane's table; batch progress shares the status row under the
 # image.
 analysis_toolbar = VGroup(
-    UItem("object.roi_analysis.draw_ellipse_button",
-          editor=IconModeButtonEditor(
-              glyph=ICON_CIRCLE, mode="draw_ellipse",
-              tooltip="Draw an elliptical ROI (click-drag from its "
-                      "centre; the grip makes it an ellipse). Stays "
-                      "armed for the next one — Esc puts it away")),
-    UItem("object.roi_analysis.draw_box_button",
-          editor=IconModeButtonEditor(
-              glyph=ICON_RECTANGLE, mode="draw_box",
-              tooltip="Draw a rectangular ROI (click-drag on the "
-                      "image). Stays armed for the next one — Esc "
-                      "puts it away")),
-    UItem("object.roi_analysis.draw_capsule_button",
-          editor=IconModeButtonEditor(
-              glyph=ICON_CAPSULE, mode="draw_capsule",
-              tooltip="Draw a capsule ROI (click-drag its axis, then "
-                      "use the grip for its radius). Stays armed "
-                      "for the next one — Esc puts it away")),
-    UItem("object.roi_analysis.draw_polygon_button",
-          editor=IconModeButtonEditor(
-              glyph=ICON_CONTOUR, mode="draw_polygon",
-              tooltip="Draw a contour ROI (click to place nodes; "
-                      "close on the first node, double-click, or "
-                      "Enter — Esc cancels, Backspace undoes). Stays "
-                      "armed for the next one — a second Esc puts "
-                      "it away")),
-    UItem("object.roi_analysis.calibrate_scale_button",
-          editor=IconModeButtonEditor(
-              glyph=ICON_RULER, mode="draw_scale",
-              tooltip="Set the image scale: drag a line of known "
-                      "length, then type what it measures")),
-    "12",   # measurement toggles
-    UItem("object.roi_analysis.rolling_ball_enabled",
+    # Each cluster sits under a chevron toggle (the sidebar sections'
+    # collapse idiom): collapsing sections compacts the toolbar so the
+    # pane can shrink vertically.
+    UItem("object.roi_analysis.show_draw_tools",
           editor=IconToggleEditor(
-              on_glyph=ICON_TONALITY, off_glyph=ICON_TONALITY,
-              tooltip="Rolling-ball background correction: flattens "
-                      "uneven illumination out of every frame before "
-                      "the ROIs are measured. While it is on, the "
-                      "image below shows the corrected frame, so what "
-                      "you see is what is measured.")),
-    UItem("object.roi_analysis.show_background_ring",
+              tooltip="Show or hide the ROI draw tools")),
+    VGroup(
+        UItem("object.roi_analysis.draw_ellipse_button",
+              editor=IconModeButtonEditor(
+                  glyph=ICON_CIRCLE, mode="draw_ellipse",
+                  tooltip="Draw an elliptical ROI (click-drag from its "
+                          "centre; the grip makes it an ellipse). Stays "
+                          "armed for the next one — Esc puts it away")),
+        UItem("object.roi_analysis.draw_box_button",
+              editor=IconModeButtonEditor(
+                  glyph=ICON_RECTANGLE, mode="draw_box",
+                  tooltip="Draw a rectangular ROI (click-drag on the "
+                          "image). Stays armed for the next one — Esc "
+                          "puts it away")),
+        UItem("object.roi_analysis.draw_capsule_button",
+              editor=IconModeButtonEditor(
+                  glyph=ICON_CAPSULE, mode="draw_capsule",
+                  tooltip="Draw a capsule ROI (click-drag its axis, then "
+                          "use the grip for its radius). Stays armed "
+                          "for the next one — Esc puts it away")),
+        UItem("object.roi_analysis.draw_polygon_button",
+              editor=IconModeButtonEditor(
+                  glyph=ICON_CONTOUR, mode="draw_polygon",
+                  tooltip="Draw a contour ROI (click to place nodes; "
+                          "close on the first node, double-click, or "
+                          "Enter — Esc cancels, Backspace undoes). Stays "
+                          "armed for the next one — a second Esc puts "
+                          "it away")),
+        UItem("object.roi_analysis.calibrate_scale_button",
+              editor=IconModeButtonEditor(
+                  glyph=ICON_RULER, mode="draw_scale",
+                  tooltip="Set the image scale: drag a line of known "
+                          "length, then type what it measures")),
+        visible_when="analysis.show_draw_tools",
+    ),
+    UItem("object.roi_analysis.show_measure_toggles",
           editor=IconToggleEditor(
-              on_glyph=ICON_CROP, off_glyph=ICON_CROP,
-              tooltip="Show the background ring each ROI's correction "
-                      "is measured from")),
-    "12",   # select/edit the existing ROIs
-    UItem("object.roi_analysis.edit_mode",
+              tooltip="Show or hide the measurement toggles")),
+    VGroup(
+        UItem("object.roi_analysis.rolling_ball_enabled",
+              editor=IconToggleEditor(
+                  on_glyph=ICON_TONALITY, off_glyph=ICON_TONALITY,
+                  tooltip="Rolling-ball background correction: flattens "
+                          "uneven illumination out of every frame before "
+                          "the ROIs are measured. While it is on, the "
+                          "image below shows the corrected frame, so what "
+                          "you see is what is measured.")),
+        UItem("object.roi_analysis.show_background_ring",
+              editor=IconToggleEditor(
+                  on_glyph=ICON_CROP, off_glyph=ICON_CROP,
+                  tooltip="Show the background ring each ROI's correction "
+                          "is measured from")),
+        visible_when="analysis.show_measure_toggles",
+    ),
+    UItem("object.roi_analysis.show_edit_tools",
           editor=IconToggleEditor(
-              on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
-              tooltip="Edit ROIs: drag to move, bottom-right grip to "
-                      "resize (Shift keeps an ellipse circular), "
-                      "top-left grip to rotate (Shift snaps to 15°), "
-                      "pink top-right grip to round a box's corners, "
-                      "drag a node to reshape a contour, click to "
-                      "select. Editing on a later image adds a drift "
-                      "override from there on")),
-    # Delete-selected sits directly under the edit toggle: selecting
-    # (edit mode) and deleting the selection are one motion.
-    UItem("object.roi_analysis.delete_roi_button",
-          editor=IconButtonEditor(
-              glyph=ICON_DELETE,
-              tooltip="Delete the selected ROI (Del)")),
-    UItem("object.roi_analysis.copy_roi_button",
-          editor=IconButtonEditor(
-              glyph=ICON_COPY,
-              tooltip="Copy the selected ROI's shape (Ctrl+C)")),
-    UItem("object.roi_analysis.paste_roi_button",
-          editor=IconButtonEditor(
-              glyph=ICON_PASTE,
-              tooltip="Paste the copied shape as a new ROI, offset "
-                      "from the original (Ctrl+V)")),
-    "12",   # computed-results reset
-    UItem("object.roi_analysis.reset_cache_button",
-          editor=IconButtonEditor(
-              glyph=ICON_RESET_WRENCH,
-              tooltip="Reset calculated intensities (optionally "
-                      "also the drift overrides)")),
-    "12",   # AI tools
-    UItem("object.roi_analysis.ai_pick_button",
-          editor=IconModeButtonEditor(
-              glyph="wand_shine", mode="ai_pick",
-              tooltip="AI picker: click a droplet and the model "
-                      "segments it into an ROI. Stays armed — Esc "
-                      "puts it away. Install via Help > Install AI "
-                      "ROI Support if disabled."),
-          enabled_when="analysis.ai_available"),
-    UItem("object.roi_analysis.ai_detect_button",
-          editor=IconButtonEditor(
-              glyph="eye_tracking",
-              tooltip="Detect all droplets on this frame (AI grid "
-                      "sweep). Results appear as dashed candidates: "
-                      "click to discard, then Accept. Install via "
-                      "Help > Install AI ROI Support if disabled."),
-          enabled_when="analysis.ai_available"),
-    UItem("object.roi_analysis.ai_track_button",
-          editor=IconButtonEditor(
-              glyph="ink_highlighter_move",
-              tooltip="Track the ROIs across later frames (drift). "
-                      "Press again to stop; finished frames are "
-                      "kept. Install via Help > Install AI ROI "
-                      "Support if disabled."),
-          enabled_when="analysis.ai_available"),
-    # Takes the column's stretch so the cluster gaps above stay at
-    # their fixed 12 px instead of spreading down the pane (the fixed
-    # spacers are growable Minimum spacer items).
+              tooltip="Show or hide the select/edit tools")),
+    VGroup(
+        UItem("object.roi_analysis.edit_mode",
+              editor=IconToggleEditor(
+                  on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
+                  tooltip="Edit ROIs: drag to move, bottom-right grip to "
+                          "resize (Shift keeps an ellipse circular), "
+                          "top-left grip to rotate (Shift snaps to 15°), "
+                          "pink top-right grip to round a box's corners, "
+                          "drag a node to reshape a contour, click to "
+                          "select. Editing on a later image adds a drift "
+                          "override from there on")),
+        # Delete-selected sits directly under the edit toggle: selecting
+        # (edit mode) and deleting the selection are one motion.
+        UItem("object.roi_analysis.delete_roi_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_DELETE,
+                  tooltip="Delete the selected ROI (Del)")),
+        UItem("object.roi_analysis.copy_roi_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_COPY,
+                  tooltip="Copy the selected ROI's shape (Ctrl+C)")),
+        UItem("object.roi_analysis.paste_roi_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_PASTE,
+                  tooltip="Paste the copied shape as a new ROI, offset "
+                          "from the original (Ctrl+V)")),
+        visible_when="analysis.show_edit_tools",
+    ),
+    UItem("object.roi_analysis.show_reset_tool",
+          editor=IconToggleEditor(
+              tooltip="Show or hide the computed-results reset")),
+    VGroup(
+        UItem("object.roi_analysis.reset_cache_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_RESET_WRENCH,
+                  tooltip="Reset calculated intensities (optionally "
+                          "also the drift overrides)")),
+        visible_when="analysis.show_reset_tool",
+    ),
+    UItem("object.roi_analysis.show_ai_tools",
+          editor=IconToggleEditor(
+              tooltip="Show or hide the AI tools")),
+    VGroup(
+        UItem("object.roi_analysis.ai_pick_button",
+              editor=IconModeButtonEditor(
+                  glyph="wand_shine", mode="ai_pick",
+                  tooltip="AI picker: click a droplet and the model "
+                          "segments it into an ROI. Stays armed — Esc "
+                          "puts it away. Install via Help > Install AI "
+                          "ROI Support if disabled."),
+              enabled_when="analysis.ai_available"),
+        UItem("object.roi_analysis.ai_detect_button",
+              editor=IconButtonEditor(
+                  glyph="eye_tracking",
+                  tooltip="Detect all droplets on this frame (AI grid "
+                          "sweep). Results appear as dashed candidates: "
+                          "click to discard, then Accept. Install via "
+                          "Help > Install AI ROI Support if disabled."),
+              enabled_when="analysis.ai_available"),
+        UItem("object.roi_analysis.ai_track_button",
+              editor=IconButtonEditor(
+                  glyph="ink_highlighter_move",
+                  tooltip="Track the ROIs across later frames (drift). "
+                          "Press again to stop; finished frames are "
+                          "kept. Install via Help > Install AI ROI "
+                          "Support if disabled."),
+              enabled_when="analysis.ai_available"),
+        visible_when="analysis.show_ai_tools",
+    ),
+    # Takes the column's stretch so the clusters stay packed at the top
+    # whatever is collapsed.
     spring,
 )
 
