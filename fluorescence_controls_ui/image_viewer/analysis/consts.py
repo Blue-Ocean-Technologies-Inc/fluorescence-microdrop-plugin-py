@@ -154,3 +154,11 @@ AI_DETECT_MAX_MASK_AREA_FRACTION = 0.35
 AI_SIGNIFICANCE_DEFAULT = 2
 AI_MIN_SIZE_DEFAULT_PX = 0
 AI_DRIFT_CHECK_INTERVAL_DEFAULT = 3
+
+#: Candidate preview outline on the canvas: a colour distinct from the
+#: ROI cyan / selected-amber / ball-violet family, the dashed pen's
+#: width, and how dim a discarded candidate reads (dimmed, not
+#: removed — a discard is a toggle the user might flip back).
+AI_CANDIDATE_COLOR = "#ff00e5"
+AI_CANDIDATE_PEN_WIDTH_PX = 1.5
+AI_CANDIDATE_DISCARDED_OPACITY = 0.3

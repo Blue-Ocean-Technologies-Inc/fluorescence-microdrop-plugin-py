@@ -288,6 +288,11 @@ class _ImageCanvasEditor(QtEditor):
             lambda: analysis.trait_set(canvas_draw_cancelled=True))
         self._roi_layer.on_ball_radius_changed = (
             self._on_ball_radius_dragged)
+        self._roi_layer.on_ai_pick = (
+            lambda x, y: analysis.trait_set(canvas_ai_pick=(x, y)))
+        self._roi_layer.on_candidate_clicked = (
+            lambda index: analysis.trait_set(
+                canvas_candidate_clicked=index))
         self._scale_layer = ScaleCanvasLayer(self._scene)
         self._scale_layer.on_line_drawn = self._on_scale_line_drawn
         self.control = _ImageView(self._scene, self._on_hover,
@@ -320,6 +325,12 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:selected_roi_id")
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode")
+        self.object.observe(
+            self._on_ai_candidates_changed,
+            "roi_analysis:ai_candidates, "
+            "roi_analysis:ai_candidates.items, "
+            "roi_analysis:ai_candidates:items:discarded, "
+            "roi_analysis:ai_output_kind")
 
     def dispose(self):
         self.object.observe(self._on_window_changed,
@@ -349,6 +360,13 @@ class _ImageCanvasEditor(QtEditor):
             remove=True)
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode", remove=True)
+        self.object.observe(
+            self._on_ai_candidates_changed,
+            "roi_analysis:ai_candidates, "
+            "roi_analysis:ai_candidates.items, "
+            "roi_analysis:ai_candidates:items:discarded, "
+            "roi_analysis:ai_output_kind",
+            remove=True)
         super().dispose()
 
     def update_editor(self):
@@ -384,6 +402,16 @@ class _ImageCanvasEditor(QtEditor):
             model.roi_analysis.session.effective_for(model.current_path),
             model.roi_analysis.selected_roi_id)
         self._push_scale()
+
+    def _on_ai_candidates_changed(self, event):
+        self._push_candidates()
+
+    def _push_candidates(self):
+        analysis = self.object.roi_analysis
+        self._roi_layer.set_candidates([
+            (index, *candidate.geometry_for(analysis.ai_output_kind),
+             candidate.discarded)
+            for index, candidate in enumerate(analysis.ai_candidates)])
 
     def _on_ball_radius_dragged(self, radius):
         """The guide was resized on the canvas: that IS the setting, so

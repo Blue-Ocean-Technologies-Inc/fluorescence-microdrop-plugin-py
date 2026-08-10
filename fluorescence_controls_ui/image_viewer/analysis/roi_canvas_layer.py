@@ -7,13 +7,15 @@ canvas_* event traits and the controller reacts."""
 import math
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QBrush, QColor, QPainterPath, QPen
+from PySide6.QtGui import QBrush, QColor, QPainterPath, QPen, QTransform
 from PySide6.QtWidgets import (
     QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsRectItem,
 )
 
 from .consts import (
-    MIN_POLYGON_POINTS, MIN_ROI_SIZE_PX, POLYGON_CLOSE_DISTANCE_PX,
+    AI_CANDIDATE_COLOR, AI_CANDIDATE_DISCARDED_OPACITY,
+    AI_CANDIDATE_PEN_WIDTH_PX, MIN_POLYGON_POINTS, MIN_ROI_SIZE_PX,
+    POLYGON_CLOSE_DISTANCE_PX,
 )
 from .roi_compute import ring_contours
 from .roi_handles import ROI_SELECTED_PEN
@@ -46,10 +48,52 @@ CAPSULE_DRAFT_RADIUS_FRACTION = 0.25
 #: invisible — it has to sit above the image and below the shapes.
 RING_Z = 0.5
 ROI_Z = 1.0
+#: Above the ROI shapes, so a candidate outline is never hidden under
+#: (and always wins the click on) one it happens to overlap.
+CANDIDATE_Z = 1.5
 
 #: Item id of the rolling-ball guide. Not an ROI id: it is never in
 #: the session, so it cannot collide with one.
 BALL_REFERENCE_ID = "__rolling_ball_reference__"
+
+
+def _candidate_pen():
+    pen = QPen(QColor(AI_CANDIDATE_COLOR), AI_CANDIDATE_PEN_WIDTH_PX,
+              Qt.PenStyle.DashLine)
+    pen.setCosmetic(True)   # zoom-independent width, like the ROI pens
+    return pen
+
+
+def _candidate_polygon_path(geometry):
+    """Closed outline for a flat [x1, y1, x2, y2, ...] contour, already
+    in absolute image coordinates (the item carries no transform)."""
+    path = QPainterPath()
+    if len(geometry) < 4:
+        return path
+    path.moveTo(geometry[0], geometry[1])
+    for index in range(2, len(geometry), 2):
+        path.lineTo(geometry[index], geometry[index + 1])
+    path.closeSubpath()
+    return path
+
+
+def _candidate_ellipse_path(geometry):
+    """Outline for [cx, cy, rx, ry, angle]: built unrotated at the
+    origin, then mapped by the same translate+rotate an item would
+    apply — so the returned path already sits in absolute image
+    coordinates without the item needing a transform of its own."""
+    centre_x, centre_y, radius_x, radius_y, angle = geometry
+    path = QPainterPath()
+    path.addEllipse(0.0, 0.0, 2 * radius_x, 2 * radius_y)
+    path.translate(-radius_x, -radius_y)
+    transform = QTransform().translate(centre_x, centre_y).rotate(angle)
+    return transform.map(path)
+
+
+def _candidate_path(kind, geometry):
+    if kind == "polygon":
+        return _candidate_polygon_path(geometry)
+    return _candidate_ellipse_path(geometry)
 
 
 class RoiCanvasLayer:
@@ -67,12 +111,15 @@ class RoiCanvasLayer:
         self._press_point = None
         self._ring_items = []
         self._ring = (0, 0, False)   # gap, thickness, visible
+        self._candidate_items = {}   # index -> item; never a session ROI
         self.mode = "pan"
         self.on_roi_created = lambda kind, geometry: None
         self.on_roi_edited = lambda roi_id, geometry: None
         self.on_roi_selected = lambda roi_id: None
         self.on_draw_cancelled = lambda: None
         self.on_ball_radius_changed = lambda radius: None
+        self.on_ai_pick = lambda x, y: None
+        self.on_candidate_clicked = lambda index: None
         self._ball_item = None
         self._ball_centre = None
         self._scene.selectionChanged.connect(self._selection_changed)
@@ -125,6 +172,37 @@ class RoiCanvasLayer:
         centre_x, centre_y, radius_x, _radius_y, _angle = geometry
         self._ball_centre = (centre_x, centre_y)
         self.on_ball_radius_changed(radius_x)
+
+    def set_candidates(self, candidates):
+        """Rebuild the AI-candidate preview outlines from
+        ``[(index, kind, geometry, discarded), ...]`` — the
+        ball-reference idiom of a full teardown/rebuild each call,
+        since this list changes a handful of times a session (detect,
+        drift check), not on every frame. Model-agnostic: ``kind`` is
+        "polygon" or "ellipse" and ``geometry`` its flat float list."""
+        for item in self._candidate_items.values():
+            self._scene.removeItem(item)
+        self._candidate_items = {}
+        for index, kind, geometry, discarded in candidates:
+            item = QGraphicsPathItem(_candidate_path(kind, geometry))
+            item.setPen(_candidate_pen())
+            item.setOpacity(AI_CANDIDATE_DISCARDED_OPACITY if discarded
+                            else 1.0)
+            item.setZValue(CANDIDATE_Z)
+            item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self._scene.addItem(item)
+            self._candidate_items[index] = item
+
+    def _candidate_at(self, scene_point):
+        """The index of the topmost candidate under ``scene_point``, or
+        None. Hit-tested against the filled outline (not just the
+        dashed stroke), and done here rather than left to Qt's own
+        item dispatch so a hit is caught ahead of every mode's own
+        mouse handling, draw tools included."""
+        for index, item in reversed(list(self._candidate_items.items())):
+            if item.path().contains(scene_point):
+                return index
+        return None
 
     def set_ring(self, gap_px, thickness_px, visible):
         """The background annulus to draw around each ROI, from the
@@ -208,6 +286,7 @@ class RoiCanvasLayer:
         self._discard_contour()
         self._clear_rings()
         self.set_ball_reference(False, 0)
+        self.set_candidates([])
         for item in self._items.values():
             self._scene.removeItem(item)
         self._items = {}
@@ -217,6 +296,17 @@ class RoiCanvasLayer:
     # Return True when handled (the view then skips its own handling).    #
     # ------------------------------------------------------------------ #
     def mouse_press(self, scene_point):
+        # A candidate under the cursor wins the click in every mode —
+        # ahead of starting a draw, panning, or prompting ai_pick — but
+        # a miss falls straight through to the mode's own handling.
+        candidate_index = self._candidate_at(scene_point)
+        if candidate_index is not None:
+            self.on_candidate_clicked(candidate_index)
+            return True
+        if self.mode == "ai_pick":
+            # No drag, no rubber-band: one click is the whole gesture.
+            self.on_ai_pick(scene_point.x(), scene_point.y())
+            return True
         if self.mode == "draw_polygon":
             return self._press_contour(scene_point)
         if self.mode not in DRAW_KINDS:
@@ -368,7 +458,8 @@ class RoiCanvasLayer:
             else:
                 return False
             return True
-        if key == Qt.Key.Key_Escape and self.mode in DRAW_KINDS:
+        if key == Qt.Key.Key_Escape and (self.mode in DRAW_KINDS
+                                         or self.mode == "ai_pick"):
             self.on_draw_cancelled()
             return True
         return False
