@@ -7,6 +7,8 @@ Mirrors ``image_viewer/sam_download.py``'s QThread + QProgressDialog
 pattern for consistency.
 """
 import importlib
+import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -51,7 +53,15 @@ def _pixi_project_root():
 class _InstallThread(QThread):
     """Runs ``pixi add --pypi osam`` (plus ``onnxruntime-directml`` on
     Windows, tolerated failure) in the pixi project root, streaming output
-    lines and reporting success/failure."""
+    lines and reporting success/failure.
+
+    ``succeeded``/``failed`` only drive the dialog's live label and
+    auto-close -- they race a user cancel (Qt hides the dialog and
+    ``exec()`` returns as soon as Cancel is clicked, independent of these
+    signals). The authoritative result is ``osam_installed``, set the
+    instant the required first step exits 0 and never revisited by the
+    second, tolerated-failure step -- callers must read it only after
+    ``wait()``ing for the thread to actually finish."""
 
     output = Signal(str)
     succeeded = Signal()
@@ -61,17 +71,43 @@ class _InstallThread(QThread):
         super().__init__(parent)
         self._root = root
         self._process = None
+        #: Set the moment `pixi add --pypi osam` exits 0. The definitive
+        #: outcome: read only after the thread has finished.
+        self.osam_installed = False
 
     def cancel(self):
-        if self._process is not None:
-            self._process.kill()
+        """Tree-kill the in-flight pixi process: pixi's resolver/download
+        children run in their own group/session (see _run_step), so
+        killing only the parent (as plain ``Popen.kill()`` would) can
+        orphan them."""
+        process = self._process
+        if process is None:
+            return
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+            except Exception as e:
+                logger.debug(f"taskkill failed for pid {process.pid}: {e}")
+        else:
+            try:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            except Exception as e:
+                logger.debug(f"killpg failed for pid {process.pid}: {e}")
 
     def _run_step(self, args):
-        """Run one pixi command, streaming its output line by line.
+        """Run one pixi command in its own process group/session (so
+        cancel() can tree-kill it), streaming its output line by line.
         Returns the exit code."""
+        if sys.platform == "win32":
+            group_kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        else:
+            group_kwargs = {"start_new_session": True}
         self._process = subprocess.Popen(
             args, cwd=self._root, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True,
+            stderr=subprocess.STDOUT, text=True, **group_kwargs,
         )
         for line in self._process.stdout:
             line = line.rstrip()
@@ -92,6 +128,8 @@ class _InstallThread(QThread):
         if code != 0:
             self.failed.emit("Install failed")
             return
+
+        self.osam_installed = True
 
         if sys.platform == "win32":
             try:
@@ -126,14 +164,11 @@ def install_ai_support(parent=None):
     dialog.setAutoReset(False)
 
     thread = _InstallThread(root=root, parent=parent)
-    succeeded = False
 
     def _on_output(line):
         dialog.setLabelText(f"{_INSTALL_LABEL}\n{line}")
 
     def _on_succeeded():
-        nonlocal succeeded
-        succeeded = True
         dialog.close()
 
     def _on_failed(reason):
@@ -151,12 +186,20 @@ def install_ai_support(parent=None):
     thread.start()
     dialog.exec()
 
-    thread.output.disconnect(_on_output)
-    thread.succeeded.disconnect(_on_succeeded)
-    thread.failed.disconnect(_on_failed)
+    # dialog.exec() can return the instant Cancel is clicked (Qt hides the
+    # dialog natively), before the worker's succeeded/failed signal lands
+    # -- e.g. a cancel during the optional, tolerated-failure DirectML step
+    # would otherwise race a real osam success. Wait for the thread to
+    # actually finish and read its recorded outcome instead of relying on
+    # which signal happened to fire.
     if not thread.wait(5000):
         thread.terminate()
         thread.wait()
+    succeeded = thread.osam_installed
+
+    thread.output.disconnect(_on_output)
+    thread.succeeded.disconnect(_on_succeeded)
+    thread.failed.disconnect(_on_failed)
 
     if not succeeded:
         return False
