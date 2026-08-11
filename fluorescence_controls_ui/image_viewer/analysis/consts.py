@@ -164,4 +164,4 @@ AI_CANDIDATE_PEN_WIDTH_PX = 1.5
 AI_CANDIDATE_DISCARDED_OPACITY = 0.3
 #: Hard ceiling of the candidate size filters (mean ellipse diameter,
 #: px) — also the max-size filter's default, i.e. no cap until lowered.
-AI_SIZE_FILTER_CEILING_PX = 500
+AI_SIZE_FILTER_CEILING_PX = 50000
