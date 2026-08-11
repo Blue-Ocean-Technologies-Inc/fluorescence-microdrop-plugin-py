@@ -50,11 +50,6 @@ AI_MODEL_OPTIONS = (
 )
 DEFAULT_AI_MODEL = "efficientsam:latest"
 
-#: The small EfficientSam used when the fast-tracking preference is on:
-#: drift re-segmentation prompts at an already-known droplet, an easier
-#: task than discovery, so the speed model usually suffices.
-FAST_TRACKING_AI_MODEL = "efficientsam:10m"
-
 #: Preference-driven: whether encoders built from now on may use the
 #: DirectML GPU provider (checked at session-load time by the provider
 #: patch, so a toggle + refiner rebuild applies without a restart).

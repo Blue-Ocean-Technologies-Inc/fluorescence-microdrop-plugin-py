@@ -67,12 +67,6 @@ class FluorescencePreferences(PreferencesHelper):
 
     # SAM model for AI ROI detection in the image viewer. Weights are
     # downloaded on demand (cancellable dialog); cancel reverts this.
-    # Drift tracking re-segments known droplets from good prompts — an
-    # easier task than discovery — so the small EfficientSam usually
-    # suffices and runs several times faster.
-    fluorescence_ai_fast_tracking = Bool(
-        False, desc="Use the fast EfficientSam model for drift tracking")
-
     # The DirectML (GPU) onnxruntime build encodes ~3x faster; when the
     # provider is missing the encoder silently stays on CPU.
     fluorescence_ai_use_gpu = Bool(
@@ -211,9 +205,6 @@ class FluorescencePreferencesPane(PreferencesPane):
             editor=EnumEditor(values={
                 name: f"{index}:{label}"
                 for index, (name, label) in enumerate(AI_MODEL_OPTIONS)})),
-        create_item_label_group(
-            "fluorescence_ai_fast_tracking",
-            label_text="Use the fast model for drift tracking"),
         create_item_label_group(
             "fluorescence_ai_use_gpu",
             label_text="Run the SAM encoder on the GPU (DirectML)"),
