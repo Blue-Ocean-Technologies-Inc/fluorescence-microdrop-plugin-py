@@ -1,3 +1,15 @@
+## v2.5.0 (2026-08-11)
+
+### Feat
+
+- **examples**: plant clock jitter and dead spans in the demo log
+- **controls-ui**: window spinner and grouped heater controls
+- **controls-ui**: averaging window for the heater time join
+- **examples**: synthesize a heater log over a captures folder
+- **controls-ui**: temperature x-axis from the heater logs
+- **controls-ui**: read heater logs, joined to captures on time
+- **image-viewer**: accept the standalone app's capture stamps
+
 ## v2.4.0 (2026-08-11)
 
 ### Feat
