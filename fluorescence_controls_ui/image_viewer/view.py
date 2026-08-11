@@ -132,6 +132,7 @@ class _ImageView(QGraphicsView):
         #: buttons, so the shortcuts and the buttons are one code path.
         self.on_roi_shortcut = lambda action: None
         self._metres_per_pixel = 0.0
+        self._pixel_text = ""
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
@@ -226,11 +227,28 @@ class _ImageView(QGraphicsView):
         self._metres_per_pixel = metres_per_pixel_value
         self.viewport().update()
 
+    def set_pixel_text(self, text):
+        """The hovered pixel's "(x, y) = value" readout, drawn as a HUD
+        in the bottom-right corner ('' hides it)."""
+        if text != self._pixel_text:
+            self._pixel_text = text
+            self.viewport().update()
+
     def drawForeground(self, painter, rect):
-        """Paint the scale bar as a HUD: reset to viewport pixels, then
-        ask nice_scale what a bar of about SCALE_BAR_TARGET_PX should
-        read at the current zoom."""
+        """Paint the HUD overlays in viewport pixels: the scale bar in
+        the bottom-left corner, the hovered-pixel readout bottom-right."""
         super().drawForeground(painter, rect)
+        painter.save()
+        painter.resetTransform()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        viewport = self.viewport().rect()
+        self._draw_scale_bar(painter, viewport)
+        self._draw_pixel_readout(painter, viewport)
+        painter.restore()
+
+    def _draw_scale_bar(self, painter, viewport):
+        """Ask nice_scale what a bar of about SCALE_BAR_TARGET_PX
+        should read at the current zoom, and draw it."""
         if self._metres_per_pixel <= 0:
             return
         zoom = self.transform().m11()
@@ -240,10 +258,6 @@ class _ImageView(QGraphicsView):
         if scale is None:
             return
         bar_px, label = scale
-        painter.save()
-        painter.resetTransform()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        viewport = self.viewport().rect()
         left = viewport.left() + SCALE_BAR_MARGIN_PX
         bottom = viewport.bottom() - SCALE_BAR_MARGIN_PX
         painter.fillRect(
@@ -264,7 +278,23 @@ class _ImageView(QGraphicsView):
                                 bottom - SCALE_BAR_TEXT_RISE_PX,
                                 bar_px, SCALE_BAR_TEXT_HEIGHT_PX),
                          Qt.AlignmentFlag.AlignCenter, label)
-        painter.restore()
+
+    def _draw_pixel_readout(self, painter, viewport):
+        """The hovered pixel's readout, bottom-right in the scale bar's
+        backdrop-and-lettering style (the corner the bar doesn't use)."""
+        if not self._pixel_text:
+            return
+        text_px = painter.fontMetrics().horizontalAdvance(self._pixel_text)
+        right = viewport.right() - SCALE_BAR_MARGIN_PX
+        bottom = viewport.bottom() - SCALE_BAR_MARGIN_PX
+        box = QRectF(right - text_px - 2 * SCALE_BAR_PAD_PX,
+                     bottom - SCALE_BAR_TEXT_HEIGHT_PX - SCALE_BAR_PAD_PX,
+                     text_px + 2 * SCALE_BAR_PAD_PX,
+                     SCALE_BAR_TEXT_HEIGHT_PX + SCALE_BAR_PAD_PX)
+        painter.fillRect(box, QColor(0, 0, 0, 110))
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.drawText(box, Qt.AlignmentFlag.AlignCenter,
+                         self._pixel_text)
 
     def fit(self):
         if self.scene() is not None and not self.scene().sceneRect().isEmpty():
@@ -523,6 +553,9 @@ class _ImageCanvasEditor(QtEditor):
             self.object.pixel_text = f"({x}, {y}) = {array[y, x]}"
         else:
             self.object.pixel_text = ""
+        # Also drawn on the canvas itself, bottom-right (the scale
+        # bar's HUD style).
+        self.control.set_pixel_text(self.object.pixel_text)
 
 
 class ImageCanvasEditor(BasicEditorFactory):
@@ -897,7 +930,7 @@ ai_group = Group(
 # content minimums off the dock pane, so it can be made smaller than
 # the grids (they scroll instead of blocking the resize).
 advanced_settings_group = VGroup(
-UItem("scale_text", style="readonly"),
+    UItem("scale_text", style="readonly"),
     correction_group,
     ai_group,
     visible_when="show_advanced_settings",
