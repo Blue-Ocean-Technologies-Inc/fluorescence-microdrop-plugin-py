@@ -682,6 +682,47 @@ class RoiAnalysisController(HasTraits):
         self._save_config()
         self._restart_batch_if_running()
 
+    @observe("analysis_model:exclude_before_button")
+    def _exclude_all_before(self, event):
+        self._set_excluded_relative(before=True, excluded=True)
+
+    @observe("analysis_model:exclude_after_button")
+    def _exclude_all_after(self, event):
+        self._set_excluded_relative(before=False, excluded=True)
+
+    @observe("analysis_model:include_before_button")
+    def _include_all_before(self, event):
+        self._set_excluded_relative(before=True, excluded=False)
+
+    @observe("analysis_model:include_after_button")
+    def _include_all_after(self, event):
+        self._set_excluded_relative(before=False, excluded=False)
+
+    def _set_excluded_relative(self, before, excluded):
+        """Mark or unmark every image before/after the displayed one
+        (exclusive) as excluded — the checkbox applied in bulk."""
+        current = self.analysis_model.current_image_path
+        paths = [str(path) for path in self.viewer_model.paths]
+        if current not in paths:
+            return
+        index = paths.index(current)
+        marked = paths[:index] if before else paths[index + 1:]
+        names = [Path(path).name for path in marked]
+        current_marks = list(self.session.excluded_images)
+        if excluded:
+            added = [name for name in names if name not in current_marks]
+            if not added:
+                return
+            self.session.excluded_images = current_marks + added
+        else:
+            kept = [name for name in current_marks if name not in names]
+            if len(kept) == len(current_marks):
+                return
+            self.session.excluded_images = kept
+        self.session.stats_revision += 1
+        self._save_config()
+        self._restart_batch_if_running()
+
     def _write_export(self):
         self._pending_export = False
         directory = self._experiment_directory()

@@ -540,6 +540,14 @@ class RoiAnalysisModel(HasTraits):
     #: against session.excluded_images in both directions.
     current_image_excluded = Bool(False)
 
+    #: Bulk exclusion: mark (exclude) or unmark (include) every image
+    #: before / after the displayed one (exclusive) with the checkbox
+    #: above's exclusion.
+    exclude_before_button = Button("Before")
+    exclude_after_button = Button("After")
+    include_before_button = Button("Before")
+    include_after_button = Button("After")
+
 
 #: The single analysis state shared by the viewer pane and the plot pane
 #: (both owned by this plugin) — the media_capture_event_model pattern.

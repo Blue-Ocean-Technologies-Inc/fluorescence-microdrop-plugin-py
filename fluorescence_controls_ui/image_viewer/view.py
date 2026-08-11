@@ -709,6 +709,24 @@ images_group = VGroup(
                  "(stats batch, plot, export, drift tracking). Viewing "
                  "and ROI drawing on it still work; the mark is saved "
                  "with the experiment."),
+    HGroup(
+        Label("Exclude all images:"),
+        UItem("object.roi_analysis.exclude_before_button",
+              tooltip="Exclude every image before the shown one "
+                      "from the analysis"),
+        UItem("object.roi_analysis.exclude_after_button",
+              tooltip="Exclude every image after the shown one "
+                      "from the analysis"),
+    ),
+    HGroup(
+        Label("Include all images:"),
+        UItem("object.roi_analysis.include_before_button",
+              tooltip="Clear the exclusion mark from every image "
+                      "before the shown one"),
+        UItem("object.roi_analysis.include_after_button",
+              tooltip="Clear the exclusion mark from every image "
+                      "after the shown one"),
+    ),
     visible_when="show_images",
     show_border=True,
 )
