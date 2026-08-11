@@ -766,6 +766,10 @@ analysis_toolbar = VGroup(
     # their fixed 12 px instead of spreading down the pane (the fixed
     # spacers are growable Minimum spacer items).
     spring,
+    # Scrollable lifts the button stack's minimum height off the dock
+    # pane: shrink the pane and the toolbar scrolls instead of
+    # blocking the resize.
+    scrollable=True,
 )
 
 # Selector sidebar: the four collapsible sections stacked, hidden as one
@@ -826,7 +830,6 @@ correction_group = HGroup(
                       "the circle to move it, or its grip to set the "
                       "radius by eye."),
           enabled_when="object.roi_analysis.rolling_ball_enabled"),
-    visible_when="show_advanced_settings",
     springy=True,
 )
 
@@ -882,8 +885,18 @@ ai_group = HGroup(
               glyph=ICON_CANCEL,
               tooltip="Discard all candidates"),
           visible_when="len(analysis.ai_candidates) > 0"),
-    visible_when="show_advanced_settings and analysis.ai_available",
+    visible_when="analysis.ai_available",
     springy=True,
+)
+
+# The two advanced rows share one scroll area: scrollable lifts their
+# spinners' minimum width off the dock pane, so it can be made narrower
+# than the rows (they scroll instead of blocking the resize).
+advanced_settings_group = VGroup(
+    correction_group,
+    ai_group,
+    visible_when="show_advanced_settings",
+    scrollable=True,
 )
 
 
@@ -901,8 +914,7 @@ ImageViewerView = View(
                 # The measurement + AI option rows are advanced
                 # settings: one chevron collapses them together.
                 _collapse_header("show_advanced_settings", "Advanced"),
-                correction_group,
-                ai_group,
+                advanced_settings_group,
                 HGroup(
                     UItem("pixel_text", style="readonly"),
                     UItem("scale_text", style="readonly"),
