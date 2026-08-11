@@ -706,6 +706,14 @@ analysis_toolbar = VGroup(
                       "the ROIs are measured. While it is on, the "
                       "image below shows the corrected frame, so what "
                       "you see is what is measured.")),
+    UItem("object.roi_analysis.session.ball.show_reference",
+          editor=IconToggleEditor(
+              on_glyph=ICON_ADJUST, off_glyph=ICON_ADJUST,
+              tooltip="Draw the ball on the image at its true size, to "
+                      "hold against the droplets it has to clear. Drag "
+                      "the circle to move it, or its grip to set the "
+                      "radius by eye."),
+          enabled_when="object.roi_analysis.rolling_ball_enabled"),
     UItem("object.roi_analysis.show_background_ring",
           editor=IconToggleEditor(
               on_glyph=ICON_CROP, off_glyph=ICON_CROP,
@@ -787,7 +795,6 @@ sidebar_group = VGroup(
     scrollable=True,
 )
 
-
 # The measurement settings, under the image they act on: the background
 # ring around each ROI, the rolling ball over the whole frame, and the
 # scale/pixel readouts. They live here rather than with the plot because
@@ -823,16 +830,6 @@ correction_group = Group(
                  "removed. Keep it comfortably larger than the "
                  "droplets, or the ball rolls over them and takes the "
                  "signal too. The image shows the result as you drag."),
-    UItem("object.roi_analysis.session.ball.show_reference",
-          editor=IconToggleEditor(
-              on_glyph=ICON_ADJUST, off_glyph=ICON_ADJUST,
-              tooltip="Draw the ball on the image at its true size, to "
-                      "hold against the droplets it has to clear. Drag "
-                      "the circle to move it, or its grip to set the "
-                      "radius by eye."),
-          enabled_when="object.roi_analysis.rolling_ball_enabled"),
-    UItem("scale_text", style="readonly"),
-    UItem("pixel_text", style="readonly"),
     label="Measurement",
     show_border=True,
     columns=3,
@@ -900,6 +897,7 @@ ai_group = Group(
 # content minimums off the dock pane, so it can be made smaller than
 # the grids (they scroll instead of blocking the resize).
 advanced_settings_group = VGroup(
+UItem("scale_text", style="readonly"),
     correction_group,
     ai_group,
     visible_when="show_advanced_settings",
