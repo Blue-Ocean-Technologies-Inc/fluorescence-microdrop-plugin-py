@@ -844,14 +844,16 @@ ai_group = HGroup(
     # preferences parity): min cannot pass max, max cannot dip under
     # min — the editors' live limits track the opposite trait.
     Item("object.roi_analysis.ai_min_size", label="min size",
-         editor=RangeEditor(low=0, high_name="ai_max_size",
-                            mode="spinner", auto_set=True),
+         editor=RangeEditor(
+             low=0, high_name="object.roi_analysis.ai_max_size",
+             mode="spinner", auto_set=True),
          tooltip="Hide candidates whose mean ellipse diameter (px) "
                  "is below this. Applies to all candidates."),
     Item("object.roi_analysis.ai_max_size", label="max size",
-         editor=RangeEditor(low_name="ai_min_size",
-                            high=AI_SIZE_FILTER_CEILING_PX,
-                            mode="spinner", auto_set=True),
+         editor=RangeEditor(
+             low_name="object.roi_analysis.ai_min_size",
+             high=AI_SIZE_FILTER_CEILING_PX,
+             mode="spinner", auto_set=True),
          tooltip="Hide candidates whose mean ellipse diameter (px) "
                  "is above this. Applies to all candidates."),
     Item("object.roi_analysis.ai_output_kind", label="as",
