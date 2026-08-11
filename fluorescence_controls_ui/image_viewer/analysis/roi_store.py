@@ -4,6 +4,7 @@ the computed-stats store (roi_stats.json), and the intensity CSV
 export. Qt-free, pure file IO."""
 import csv
 import json
+import math
 from pathlib import Path
 
 from logger.logger_service import get_logger
@@ -38,6 +39,7 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
                   "outlier_window", "interpolate_gaps",
                   "smooth_method", "savgol_window",
                   "savgol_order", "butter_order", "butter_cutoff",
+                  "x_axis", "heater_sensor", "heater_window_ms",
                   "show_method_group", "show_metrics_group")
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
                  "visible", "alpha")
@@ -65,6 +67,7 @@ def save_session(experiment_directory, session):
     payload = {
         "version": 2,
         "plot_stat": session.plot_stat,
+        "heater_log_dir": session.heater_log_dir,
         "figure": {name: getattr(session.figure, name)
                    for name in _FIGURE_FIELDS},
         "scale": {name: getattr(session.scale, name)
@@ -152,6 +155,12 @@ def load_session(experiment_directory) -> AnalysisSession:
         except Exception as error:
             logger.warning(f"Ignoring invalid plot_stat in {path}: "
                            f"{error}")
+        try:
+            session.heater_log_dir = str(
+                payload.get("heater_log_dir", ""))
+        except Exception as error:
+            logger.warning(f"Ignoring invalid heater_log_dir in "
+                           f"{path}: {error}")
         try:
             figure = FigureSettings()
             stored = dict(payload.get("figure", {}))
@@ -354,10 +363,15 @@ def _normalised_columns(rows, rois, normalize_stat, pixel_area):
 
 def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
                         area_unit_label="px²", normalize_stat=None,
-                        correction=None, outliers=None):
+                        correction=None, outliers=None,
+                        heater_sensor=""):
     """One row per (image, ROI), blank cells where that pair has no
     computed stats. ``rows``: [{"filename", "time_utc", "elapsed_sec",
-    "group", "wavelength", "stats": {roi_id: stats_dict}}, ...].
+    "temperature_c", "group", "wavelength",
+    "stats": {roi_id: stats_dict}}, ...] — ``temperature_c`` is the
+    heater log's reading at the capture (NaN when uncovered, written
+    blank), measured by ``heater_sensor`` (recorded with the other
+    settings so the column stays self-describing).
     ``pixel_area`` scales the derived size-aware columns; it is 1.0
     (px²) for an uncalibrated experiment. ``correction`` is the
     session's (gap, width, ball radius), recorded on every row.
@@ -369,7 +383,8 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
     together as a block, and a reader groups by ``roi`` or filters to
     one without counting columns. It is also what pandas, R and every
     plotting library want handed to them."""
-    header = (["index", "time_utc", "elapsed_sec", "filename", "group",
+    header = (["index", "time_utc", "elapsed_sec", "temperature_c",
+               "filename", "group",
                "wavelength", "roi", "is_background_ref"]
               + list(CSV_STAT_COLUMNS)
               + [f"area_{area_unit_label}"]
@@ -381,8 +396,9 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
     # identical, and it keeps a row self-describing once files are
     # concatenated.
     header += ["outlier", "ring_gap_px", "ring_width_px",
-               "ball_radius_px"]
-    settings = list(correction if correction is not None else (0, 0, 0))
+               "ball_radius_px", "heater_sensor"]
+    settings = list(correction if correction is not None
+                    else (0, 0, 0)) + [heater_sensor]
     normalised = ({} if normalize_stat is None
                   else _normalised_columns(rows, rois, normalize_stat,
                                            pixel_area))
@@ -391,7 +407,9 @@ def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
         writer = csv.writer(handle)
         writer.writerow(header)
         for index, row in enumerate(rows):
+            temperature = row.get("temperature_c", math.nan)
             shared = [index, row["time_utc"], row["elapsed_sec"],
+                      "" if temperature != temperature else temperature,
                       row["filename"], row["group"], row["wavelength"]]
             for roi in rois:
                 stats = row["stats"].get(roi.roi_id, {})

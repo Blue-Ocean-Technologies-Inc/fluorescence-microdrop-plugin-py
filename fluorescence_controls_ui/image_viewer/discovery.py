@@ -115,18 +115,34 @@ def detect_wavelength(path) -> str:
 CAPTURE_TIMESTAMP_PATTERN = re.compile(
     r"\d{4}_\d{2}_\d{2}-\d{2}_\d{2}_\d{2}")
 
+#: The standalone fluorescence app's stamp (dashes and underscores
+#: swapped relative to utc_stamp's) — LOCAL time, which is the clock
+#: that app wrote, where utc_stamp writes UTC.
+LEGACY_TIMESTAMP_PATTERN = re.compile(
+    r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}")
+LEGACY_TIMESTAMP_FORMAT = "%Y-%m-%d_%H-%M-%S"
+
 
 def capture_timestamp(path) -> float:
     """Capture time (epoch seconds) embedded in the filename by
-    capture_service.utc_stamp(), falling back to the file's mtime for
-    names without a stamp (legacy captures) or an impossible one (e.g.
-    a mangled "13_45" month/day); 0.0 when neither exists."""
-    match = CAPTURE_TIMESTAMP_PATTERN.search(Path(path).name)
+    capture_service.utc_stamp() — or by the standalone app's local
+    stamp, for folders imported from it — falling back to the file's
+    mtime for names without a stamp or an impossible one (e.g. a
+    mangled "13_45" month/day); 0.0 when neither exists."""
+    name = Path(path).name
+    match = CAPTURE_TIMESTAMP_PATTERN.search(name)
     if match:
         try:
             return float(calendar.timegm(
                 time.strptime(match.group(0), CAPTURE_TIMESTAMP_FORMAT)))
         except ValueError:
+            pass
+    match = LEGACY_TIMESTAMP_PATTERN.search(name)
+    if match:
+        try:
+            return time.mktime(
+                time.strptime(match.group(0), LEGACY_TIMESTAMP_FORMAT))
+        except (ValueError, OverflowError):
             pass
     try:
         return Path(path).stat().st_mtime

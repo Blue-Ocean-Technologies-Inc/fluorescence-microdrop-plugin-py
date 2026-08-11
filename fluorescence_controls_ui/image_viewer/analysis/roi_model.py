@@ -8,7 +8,7 @@ from pathlib import Path
 
 from traits.api import (
     Bool, Button, Dict, Enum, Event, Float, HasTraits, Instance, Int, List,
-    Range, Str, observe,
+    Range, Str, Tuple, observe,
 )
 
 from ..discovery import capture_timestamp
@@ -19,11 +19,12 @@ from .consts import (
     BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER, BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_BOUNDS_MAD,
     OUTLIER_THRESHOLD_MAD, OUTLIER_WINDOW_BOUNDS_PTS,
-    OUTLIER_WINDOW_PTS, RING_GAP_BOUNDS_PX, RING_GAP_PX,
+    OUTLIER_WINDOW_PTS, HEATER_SENSOR_MEAN, HEATER_WINDOW_BOUNDS_MS,
+    HEATER_WINDOW_MS, RING_GAP_BOUNDS_PX, RING_GAP_PX,
     RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, ROI_ALPHA_BOUNDS_PCT,
     ROLLING_BALL_RADIUS_BOUNDS_PX, ROLLING_BALL_RADIUS_PX,
     SAVGOL_ORDER, SAVGOL_ORDER_BOUNDS, SAVGOL_WINDOW_BOUNDS_PTS,
-    SAVGOL_WINDOW_PTS, VIEW_MODES, AI_MAX_SIZE_DEFAULT_PX,
+    SAVGOL_WINDOW_PTS, VIEW_MODES, X_AXIS_MODES, AI_MAX_SIZE_DEFAULT_PX,
 )
 from .curve_fit import FIT_METHODS
 from .plot_series import SMOOTH_METHODS
@@ -149,6 +150,20 @@ class FigureSettings(HasTraits):
     second_derivative_coords = Bool(True)
     #: Which chart the plot pane renders.
     view_mode = Enum(*VIEW_MODES)
+
+    #: What the curves are plotted against: elapsed capture time, or
+    #: the heater log's temperature at each capture. The swap happens
+    #: in derive_series, so the fits follow it — a melt curve's
+    #: midpoint comes out as a °C rather than a second.
+    x_axis = Enum(*X_AXIS_MODES)
+    #: Which thermistor the temperature axis reads; "mean" averages
+    #: every sensor on each log line.
+    heater_sensor = Str(HEATER_SENSOR_MEAN)
+    #: How generous the time join is (ms): a capture's temperature is
+    #: the mean of every heater sample within ±window/2 of it. 0 means
+    #: exact — linear interpolation at the capture instant.
+    heater_window_ms = Range(*HEATER_WINDOW_BOUNDS_MS,
+                             HEATER_WINDOW_MS, mode="spinner")
 
     #: Which of the Fit tab's groups are open — display state, but
     #: persisted so the panel reopens the way it was left.
@@ -307,6 +322,16 @@ class AnalysisSession(HasTraits):
     #: Which stat the plot shows.
     plot_stat = Enum(*PLOT_STATS)
 
+    #: Folder of the heater's JSONL logs, persisted per experiment.
+    #: Empty means "not resolved yet"; the controller fills in the
+    #: experiment's own heater_logs folder as the default.
+    heater_log_dir = Str()
+
+    #: The loaded heater samples for the current capture range,
+    #: [(epoch, {sensor: °C}), ...] — set by the controller, never
+    #: persisted (the logs themselves are the record).
+    heater_samples = List(Tuple(Float, Dict(Str, Float)))
+
     figure = Instance(FigureSettings, ())
 
     #: Image scale for the canvas bar (display-only).
@@ -426,6 +451,12 @@ class RoiAnalysisModel(HasTraits):
     save_plot_button = Button()
     #: Open the non-modal table of fitted equations per ROI.
     fit_equations_button = Button()
+    #: Pick the heater-log folder (handled by the plot dock pane,
+    #: which owns a window to parent the directory dialog on).
+    heater_dir_button = Button()
+    #: What the sensor dropdown offers: "mean" plus every sensor the
+    #: loaded heater logs actually carry.
+    heater_sensor_choices = List(Str, [HEATER_SENSOR_MEAN])
 
     #: View -> controller channels fired by the canvas ROI layer.
     canvas_roi_created = Event()   # (kind, geometry)

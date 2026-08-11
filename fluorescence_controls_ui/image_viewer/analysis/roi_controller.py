@@ -2,11 +2,12 @@
 and canvas events, keeps the per-experiment ROI config in sync, and
 orchestrates the cache-aware batch computation. All observers run on
 the GUI thread; the only off-thread work is inside RoiBatchRunner."""
+import math
 import queue
 import time
 from pathlib import Path
 
-from traits.api import Bool, Dict, Float, HasTraits, Instance, observe
+from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, observe
 from pyface.api import NO, YES
 
 from logger.logger_service import get_logger
@@ -21,10 +22,14 @@ from ..discovery import UNGROUPED_BURST, capture_timestamp, \
 from ..model import FluorescenceImageViewerModel
 from ..scale_bar import area_unit, format_length, pixel_area
 from .consts import (
-    DEFAULT_ROI_COLORS, PASTE_OFFSET_PX, STATS_SAVE_DEBOUNCE_S,
+    DEFAULT_ROI_COLORS, HEATER_LOGS_DIR_NAME, HEATER_SENSOR_MEAN,
+    PASTE_OFFSET_PX, STATS_SAVE_DEBOUNCE_S,
 )
 from .curve_fit import FIT_LABELS, fit_series
 from .fit_presets import fit_arguments, load_presets, save_presets
+from .heater_log import (
+    heater_log_files, read_heater_samples, sensors_in, temperature_at,
+)
 from .plot_series import analysed_series
 from .roi_geometry import translated
 from .roi_batch import (
@@ -63,6 +68,11 @@ class RoiAnalysisController(HasTraits):
 
     #: When the running batch started, for the finished-in log line.
     _batch_started = Float(0.0)
+
+    #: What the loaded heater samples were read from — (folder, range,
+    #: (file, mtime) pairs) — so an unchanged folder is not re-parsed
+    #: on every trigger. None forces the next load.
+    _heater_fingerprint = Any()
 
     #: A drift re-check updated an ROI's geometry since the last save —
     #: flushed by drain_results() once per drain tick rather than once
@@ -571,10 +581,17 @@ class RoiAnalysisController(HasTraits):
                     save_session(directory, session)
                 except Exception as error:
                     logger.warning(f"Could not seed the scale: {error}")
+        if directory is not None and not session.heater_log_dir:
+            # Before the model swap, so its observers see the resolved
+            # default rather than a change from it.
+            session.heater_log_dir = str(Path(directory)
+                                         / HEATER_LOGS_DIR_NAME)
         self.analysis_model.session = session
         self.analysis_model.show_background_ring =             session.ring.show_on_canvas
         self.analysis_model.rolling_ball_enabled = session.ball.enabled
         self._dispatched_keys = {}
+        self._heater_fingerprint = None
+        self._ensure_heater_samples()
 
     @observe("analysis_model:session:plot_stat, "
              "analysis_model:session:figure:export_format, "
@@ -609,6 +626,11 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:figure:savgol_order, "
              "analysis_model:session:figure:butter_order, "
              "analysis_model:session:figure:butter_cutoff, "
+             "analysis_model:session:figure:interpolate_gaps, "
+             "analysis_model:session:figure:x_axis, "
+             "analysis_model:session:figure:heater_sensor, "
+             "analysis_model:session:figure:heater_window_ms, "
+             "analysis_model:session:heater_log_dir, "
              "analysis_model:session:figure:show_method_group, "
              "analysis_model:session:figure:show_metrics_group, "
              "analysis_model:session:rois:items:name, "
@@ -630,10 +652,54 @@ class RoiAnalysisController(HasTraits):
     def _on_plot_settings_changed(self, event):
         self._save_config()
 
+    # ------------------------------------------------------------------ #
+    # Heater log (temperature x-axis)                                     #
+    # ------------------------------------------------------------------ #
+    @observe("analysis_model:session:heater_log_dir, "
+             "analysis_model:session:figure:x_axis")
+    def _on_heater_settings_changed(self, event):
+        self._ensure_heater_samples()
+
+    def _ensure_heater_samples(self):
+        """Load the heater folder's samples for the current capture
+        range — skipped when the folder, its files and the range are
+        the ones already loaded, so redraw triggers cost a stat each,
+        not a parse."""
+        session = self.session
+        folder = session.heater_log_dir
+        paths = self.viewer_model.paths
+        if not folder or not paths:
+            if session.heater_samples:
+                session.heater_samples = []
+            return
+        stat_cache = {}
+        times = [session.stat_info(path, stat_cache)[1]
+                 for path in paths]
+        start, end = min(times), max(times)
+        files = heater_log_files(folder, start, end)
+        try:
+            fingerprint = (folder, round(start), round(end),
+                           tuple((str(path), path.stat().st_mtime)
+                                 for path in files))
+        except OSError:
+            fingerprint = None      # a vanished file: read what remains
+        if fingerprint is not None \
+                and fingerprint == self._heater_fingerprint:
+            return
+        samples = read_heater_samples(folder, start, end)
+        self._heater_fingerprint = fingerprint
+        session.heater_samples = samples
+        self.analysis_model.heater_sensor_choices = (
+            [HEATER_SENSOR_MEAN] + sensors_in(samples))
+        logger.info(f"Heater log: {len(samples)} samples from "
+                    f"{len(files)} file(s) in {folder}")
+
     @observe("viewer_model:paths.items")
     def _mirror_filtered_paths(self, event):
         self.analysis_model.filtered_paths = [
             str(path) for path in self.viewer_model.paths]
+        # The capture range the heater join covers just changed.
+        self._ensure_heater_samples()
 
     @observe("viewer_model:current_path")
     def _mirror_current_image(self, event):
@@ -735,8 +801,19 @@ class RoiAnalysisController(HasTraits):
         stat_cache = {}
         times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0
+        # Whatever x-axis is displayed, the CSV carries the heater's
+        # reading per frame whenever a log covers it.
+        self._ensure_heater_samples()
+        temperatures = (temperature_at(session.heater_samples,
+                                       session.figure.heater_sensor,
+                                       times,
+                                       session.figure.heater_window_ms
+                                       / 1000.0)
+                        if session.heater_samples
+                        else [math.nan] * len(times))
         rows = []
-        for path, capture_time in zip(paths, times):
+        for path, capture_time, temperature in zip(paths, times,
+                                                   temperatures):
             stats_by_roi = {}
             for roi in session.rois:
                 stats = session.stats.get(
@@ -748,6 +825,7 @@ class RoiAnalysisController(HasTraits):
                 "time_utc": time.strftime(CAPTURE_TIMESTAMP_FORMAT,
                                           time.gmtime(capture_time)),
                 "elapsed_sec": capture_time - start_time,
+                "temperature_c": temperature,
                 "group": self._group_of(path),
                 "wavelength": detect_wavelength(path),
                 "stats": stats_by_roi,
@@ -770,7 +848,9 @@ class RoiAnalysisController(HasTraits):
                 pixel_area(scale.metres_per_pixel, scale.unit),
                 area_unit(scale.metres_per_pixel, scale.unit),
                 session.plot_stat if session.figure.normalize else None,
-                session.correction_key(), outlier_flags)
+                session.correction_key(), outlier_flags,
+                session.figure.heater_sensor
+                if session.heater_samples else "")
         except Exception as error:
             logger.warning(f"CSV export failed: {error}")
             self.analysis_model.progress_text = f"Export failed: {error}"
