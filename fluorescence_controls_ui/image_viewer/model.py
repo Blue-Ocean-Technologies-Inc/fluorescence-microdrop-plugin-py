@@ -5,13 +5,16 @@ the controller's loader), so no Qt bridging is needed.
 """
 from traits.api import (
     Any, Bool, Button, Directory, Event, HasTraits, Instance, Int, List,
-    Property, Str, observe,
+    Property, Range, Str, observe,
 )
 from traits.observation.api import parse
 
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
-from ..consts import PERSISTED_VIEWER_TRAITS
+from ..consts import (
+    IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT,
+    PERSISTED_VIEWER_TRAITS,
+)
 from ..preferences import FluorescencePreferences
 from .analysis.roi_model import RoiAnalysisModel, roi_analysis_model
 
@@ -55,6 +58,10 @@ class FluorescenceImageViewerModel(HasTraits):
     #: rolling ball, and the AI detection options) collapse under one
     #: "Advanced" chevron to reclaim vertical space.
     show_advanced_settings = Bool(True)
+
+    #: One wheel notch's zoom factor on the image canvas (zooming out
+    #: uses the reciprocal) — the Advanced group's sensitivity setting.
+    zoom_step = Range(*IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT)
 
     #: Master toggle: the whole selector sidebar collapses to the left
     #: edge (device-viewer chevron parity).

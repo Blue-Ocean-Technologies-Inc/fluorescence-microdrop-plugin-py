@@ -25,9 +25,11 @@ from microdrop_style.icons.icons import (
     ICON_SHOW_CHART, ICON_STAIRS, ICON_TONALITY,
 )
 from microdrop_utils.traitsui_qt_helpers import (
-    HoverScrollEnumEditor, IconButtonEditor, IconModeButtonEditor,
-    IconToggleEditor,
+    DoubleSpinBoxEditor, HoverScrollEnumEditor, IconButtonEditor,
+    IconModeButtonEditor, IconToggleEditor,
 )
+
+from ..consts import IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT
 
 from ..cameras.asi_thread import frame_to_qimage
 from .analysis.consts import (
@@ -45,11 +47,6 @@ from .scale_layer import ScaleCanvasLayer
 #: Inset of the scale bar from the viewport's bottom-left corner.
 SCALE_BAR_MARGIN_PX = 12
 
-#: One wheel notch's zoom on the image canvas, in and out. The
-#: plot canvas mirrors these (PLOT_ZOOM_STEP) so the two feel the
-#: same.
-IMAGE_ZOOM_IN_FACTOR = 1.25
-IMAGE_ZOOM_OUT_FACTOR = 0.8
 
 #: The scale bar's backdrop and lettering, in viewport pixels:
 #: padding around the bar, the backdrop height, the end ticks, and
@@ -133,6 +130,7 @@ class _ImageView(QGraphicsView):
         self.on_roi_shortcut = lambda action: None
         self._metres_per_pixel = 0.0
         self._pixel_text = ""
+        self._zoom_step = IMAGE_ZOOM_STEP_DEFAULT
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
@@ -144,11 +142,16 @@ class _ImageView(QGraphicsView):
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
 
+    def set_zoom_step(self, step):
+        """One wheel notch's zoom factor (going out is its
+        reciprocal) — the Advanced group's zoom-sensitivity setting."""
+        self._zoom_step = step
+
     def wheelEvent(self, event):
         self._auto_fit = False
-        factor = (IMAGE_ZOOM_IN_FACTOR
+        factor = (self._zoom_step
                   if event.angleDelta().y() > 0
-                  else IMAGE_ZOOM_OUT_FACTOR)
+                  else 1.0 / self._zoom_step)
         self.scale(factor, factor)
         event.accept()
 
@@ -344,6 +347,8 @@ class _ImageCanvasEditor(QtEditor):
         self.control.on_roi_shortcut = (
             lambda action: analysis.trait_set(
                 **{f"{action}_roi_button": True}))
+        self.control.set_zoom_step(self.object.zoom_step)
+        self.object.observe(self._on_zoom_step_changed, "zoom_step")
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max")
         self.object.observe(
@@ -380,6 +385,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:ai_max_size")
 
     def dispose(self):
+        self.object.observe(self._on_zoom_step_changed, "zoom_step",
+                            remove=True)
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max",
                             remove=True)
@@ -424,6 +431,9 @@ class _ImageCanvasEditor(QtEditor):
         self._redraw()
         self.control.fit()
         self._sync_roi_layer()
+
+    def _on_zoom_step_changed(self, event):
+        self.control.set_zoom_step(event.new)
 
     def _on_window_changed(self, event):
         self._redraw()   # window edit: keep the user's zoom
@@ -863,6 +873,13 @@ correction_group = Group(
                  "removed. Keep it comfortably larger than the "
                  "droplets, or the ball rolls over them and takes the "
                  "signal too. The image shows the result as you drag."),
+    Item("zoom_step", label="Zoom Step",
+         editor=DoubleSpinBoxEditor(low=IMAGE_ZOOM_STEP_BOUNDS[0],
+                                    high=IMAGE_ZOOM_STEP_BOUNDS[1],
+                                    decimals=2, step=0.05),
+         tooltip="How much one mouse-wheel notch zooms the image "
+                 "canvas (zooming out uses the reciprocal). 1.05 is "
+                 "barely perceptible; 2.0 doubles per notch."),
     label="Measurement",
     show_border=True,
     columns=3,
