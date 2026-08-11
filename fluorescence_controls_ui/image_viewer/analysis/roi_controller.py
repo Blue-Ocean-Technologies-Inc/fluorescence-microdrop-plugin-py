@@ -362,6 +362,8 @@ class RoiAnalysisController(HasTraits):
         stat_cache = {}
         work = []
         for path in self.viewer_model.paths:
+            if session.is_excluded(path):
+                continue
             missing = {}
             for roi in session.rois:
                 key = session.cache_key(path, roi, stat_cache)
@@ -481,7 +483,7 @@ class RoiAnalysisController(HasTraits):
         shown image; already-cached stats need no compute — the table
         reads the session cache directly."""
         current = self.viewer_model.current_path
-        if not current:
+        if not current or self.session.is_excluded(current):
             return
         key = self.session.cache_key(current, roi)
         self._dispatched_keys[(current, roi.roi_id)] = key
@@ -645,7 +647,8 @@ class RoiAnalysisController(HasTraits):
             self.analysis_model.progress_text = "No experiment folder"
             return
         session = self.session
-        paths = list(self.viewer_model.paths)
+        paths = [path for path in self.viewer_model.paths
+                 if not session.is_excluded(path)]
         stat_cache = {}
         times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0

@@ -170,7 +170,8 @@ class AiRoiController(HasTraits):
         if current not in strings:
             self.analysis_model.progress_text = "No later frames to track"
             return
-        later = paths[strings.index(current) + 1:]
+        later = [path for path in paths[strings.index(current) + 1:]
+                 if not self.session.is_excluded(path)]
         if not later:
             self.analysis_model.progress_text = "No later frames to track"
             return
