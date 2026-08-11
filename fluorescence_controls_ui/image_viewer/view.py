@@ -855,7 +855,6 @@ sidebar_group = VGroup(
     _collapse_header("show_contrast", "Contrast"),
     contrast_group,
     visible_when="show_sidebar",
-    scrollable=True,
 )
 
 # The measurement settings, under the image they act on: the background
@@ -963,15 +962,12 @@ ai_group = Group(
     visible_when="analysis.ai_available",
 )
 
-# The two advanced grids share one scroll area: scrollable lifts their
-# content minimums off the dock pane, so it can be made smaller than
-# the grids (they scroll instead of blocking the resize).
+# The measurement and AI grids as one collapsible block under the image.
 advanced_settings_group = VGroup(
-    UItem("scale_text", style="readonly"),
+    HGroup(UItem("scale_text", style="readonly")),
     correction_group,
     ai_group,
     visible_when="show_advanced_settings",
-    scrollable=True,
 )
 
 
