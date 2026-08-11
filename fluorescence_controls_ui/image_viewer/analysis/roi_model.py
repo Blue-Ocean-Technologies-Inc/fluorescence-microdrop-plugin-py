@@ -281,6 +281,16 @@ class AnalysisSession(HasTraits):
 
     rois = List(Instance(Roi))
 
+    #: Filenames the user excluded from analysis: skipped by the stats
+    #: batch, plot series, CSV export, and the drift tracker, while
+    #: viewing and ROI drawing on them stay untouched. Filenames, not
+    #: paths, so an experiment folder can move without unmarking them.
+    excluded_images = List(Str)
+
+    def is_excluded(self, path):
+        """Whether analysis skips the image at ``path``."""
+        return Path(path).name in self.excluded_images
+
     #: (path str, mtime, roi_id, kind, geometry tuple) -> stats dict.
     #: The geometry in the key makes invalidation implicit: an edit only
     #: misses on the images its override actually covers.
