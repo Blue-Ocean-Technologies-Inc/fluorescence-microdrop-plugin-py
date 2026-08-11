@@ -64,6 +64,11 @@ class RoiAnalysisController(HasTraits):
     #: When the running batch started, for the finished-in log line.
     _batch_started = Float(0.0)
 
+    #: A drift re-check updated an ROI's geometry since the last save —
+    #: flushed by drain_results() once per drain tick rather than once
+    #: per tracked frame.
+    _ai_config_dirty = Bool(False)
+
     @property
     def session(self):
         return self.analysis_model.session
@@ -182,6 +187,40 @@ class RoiAnalysisController(HasTraits):
         self._restart_batch_if_running()
         self._instant_stats(roi)
         return roi
+
+    @observe("analysis_model:ai_rois_accepted")
+    def _on_ai_rois_accepted(self, event):
+        pairs, anchor = event.new
+        self._create_rois(pairs, anchor)
+
+    def _create_rois(self, pairs, anchor):
+        """Bulk sibling of _create_roi for accepted AI candidates: one
+        save and one batch restart for the whole set."""
+        created = []
+        for kind, geometry in pairs:
+            roi = Roi(name=self.session.next_roi_name(), kind=kind,
+                      geometry=[float(value) for value in geometry],
+                      base_anchor=anchor,
+                      style=RoiStyle(color=DEFAULT_ROI_COLORS[
+                          len(self.session.rois) % len(DEFAULT_ROI_COLORS)]))
+            self.session.rois.append(roi)
+            created.append(roi)
+        if not created:
+            return created
+        self._save_config()
+        self._restart_batch_if_running()
+        for roi in created:
+            self._instant_stats(roi)
+        return created
+
+    @observe("analysis_model:ai_roi_tracked")
+    def _on_ai_roi_tracked(self, event):
+        roi_id, capture_time, geometry = event.new
+        roi = self.session.roi_by_id(roi_id)
+        if roi is not None:
+            roi.apply_edit(capture_time,
+                           [float(value) for value in geometry])
+            self._ai_config_dirty = True
 
     @observe("analysis_model:canvas_roi_edited")
     def _on_canvas_roi_edited(self, event):
@@ -323,6 +362,8 @@ class RoiAnalysisController(HasTraits):
         stat_cache = {}
         work = []
         for path in self.viewer_model.paths:
+            if session.is_excluded(path):
+                continue
             missing = {}
             for roi in session.rois:
                 key = session.cache_key(path, roi, stat_cache)
@@ -413,6 +454,9 @@ class RoiAnalysisController(HasTraits):
             self.flush_stats(force=True)
             if self._pending_export:
                 self._write_export()
+        if self._ai_config_dirty:
+            self._ai_config_dirty = False
+            self._save_config()
 
     def _absorb(self, payload):
         """True when anything landed — the caller bumps the revision
@@ -439,7 +483,7 @@ class RoiAnalysisController(HasTraits):
         shown image; already-cached stats need no compute — the table
         reads the session cache directly."""
         current = self.viewer_model.current_path
-        if not current:
+        if not current or self.session.is_excluded(current):
             return
         key = self.session.cache_key(current, roi)
         self._dispatched_keys[(current, roi.roi_id)] = key
@@ -596,6 +640,89 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.current_image_path = \
             self.viewer_model.current_path
 
+    # ------------------------------------------------------------------ #
+    # Exclude-from-analysis (sidebar checkbox <-> session)                 #
+    # ------------------------------------------------------------------ #
+    #: Guards the checkbox observer while the mirror below writes it.
+    _syncing_excluded = Bool(False)
+
+    @observe("analysis_model:current_image_path, analysis_model:session")
+    def _mirror_current_image_excluded(self, event):
+        """Point the checkbox at the displayed image's exclusion state
+        (image navigation and session swaps both land here)."""
+        current = self.analysis_model.current_image_path
+        self._syncing_excluded = True
+        try:
+            self.analysis_model.current_image_excluded = (
+                bool(current) and self.session.is_excluded(current))
+        finally:
+            self._syncing_excluded = False
+
+    @observe("analysis_model:current_image_excluded")
+    def _on_current_image_excluded(self, event):
+        """The checkbox was toggled by the user: mark/unmark the
+        displayed image and re-run whatever is consuming the series."""
+        if self._syncing_excluded:
+            return
+        current = self.analysis_model.current_image_path
+        if not current:
+            return
+        name = Path(current).name
+        excluded = list(self.session.excluded_images)
+        if event.new and name not in excluded:
+            self.session.excluded_images = excluded + [name]
+        elif not event.new and name in excluded:
+            self.session.excluded_images = [entry for entry in excluded
+                                            if entry != name]
+        else:
+            return
+        # The plot derives its series from the (now different) included
+        # set; stats_revision is what it redraws on.
+        self.session.stats_revision += 1
+        self._save_config()
+        self._restart_batch_if_running()
+
+    @observe("analysis_model:exclude_before_button")
+    def _exclude_all_before(self, event):
+        self._set_excluded_relative(before=True, excluded=True)
+
+    @observe("analysis_model:exclude_after_button")
+    def _exclude_all_after(self, event):
+        self._set_excluded_relative(before=False, excluded=True)
+
+    @observe("analysis_model:include_before_button")
+    def _include_all_before(self, event):
+        self._set_excluded_relative(before=True, excluded=False)
+
+    @observe("analysis_model:include_after_button")
+    def _include_all_after(self, event):
+        self._set_excluded_relative(before=False, excluded=False)
+
+    def _set_excluded_relative(self, before, excluded):
+        """Mark or unmark every image before/after the displayed one
+        (exclusive) as excluded — the checkbox applied in bulk."""
+        current = self.analysis_model.current_image_path
+        paths = [str(path) for path in self.viewer_model.paths]
+        if current not in paths:
+            return
+        index = paths.index(current)
+        marked = paths[:index] if before else paths[index + 1:]
+        names = [Path(path).name for path in marked]
+        current_marks = list(self.session.excluded_images)
+        if excluded:
+            added = [name for name in names if name not in current_marks]
+            if not added:
+                return
+            self.session.excluded_images = current_marks + added
+        else:
+            kept = [name for name in current_marks if name not in names]
+            if len(kept) == len(current_marks):
+                return
+            self.session.excluded_images = kept
+        self.session.stats_revision += 1
+        self._save_config()
+        self._restart_batch_if_running()
+
     def _write_export(self):
         self._pending_export = False
         directory = self._experiment_directory()
@@ -603,7 +730,8 @@ class RoiAnalysisController(HasTraits):
             self.analysis_model.progress_text = "No experiment folder"
             return
         session = self.session
-        paths = list(self.viewer_model.paths)
+        paths = [path for path in self.viewer_model.paths
+                 if not session.is_excluded(path)]
         stat_cache = {}
         times = [session.stat_info(path, stat_cache)[1] for path in paths]
         start_time = times[0] if times else 0.0

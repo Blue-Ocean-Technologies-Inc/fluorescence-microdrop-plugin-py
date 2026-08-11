@@ -2,17 +2,27 @@
 mutations, loads whatever ``current_path`` points at, keeps the dropdown /
 seek slider / path selection in sync, and rescans the browsed folder
 (called from the pane's poll timer).
+
+Loading is asynchronous, latest-wins: ``current_path`` changes replace
+the loader thread's single pending request, so dragging the seek slider
+never decodes the frames dragged past and never blocks the GUI thread.
+Finished decodes land through ``drain_loaded()`` (the dock pane's drain
+timer) and a small LRU cache makes recently viewed frames instant.
 """
+import queue
+import threading
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
-from traits.api import Any, Instance, observe
+from traits.api import Any, Instance, Str, observe
 from traitsui.api import Controller
 from pyface.api import DirectoryDialog, OK
 
 from logger.logger_service import get_logger
 from microdrop_application.preferences import MicrodropPreferences
 
+from ..consts import IMAGE_CACHE_FRAMES
 from .discovery import (
     current_captures_directory, detect_wavelength, discover_bursts,
     discover_experiments,
@@ -38,20 +48,26 @@ class FluorescenceImageViewerController(Controller):
     #: handlers before they change ``selected_burst``.
     _pending_show = Any(None)
 
-    # ------------------------------------------------------------------ #
-    # UI build hook                                                        #
-    # ------------------------------------------------------------------ #
-    def init(self, info):
-        """A long filename must not dictate the pane's minimum width: let
-        the text readouts clip instead of propagating their text width
-        (a QLabel's minimum size hint is its full text otherwise)."""
-        from pyface.qt.QtWidgets import QSizePolicy
-        for readout_name in ("info_text", "pixel_text"):
-            control = getattr(info, readout_name).control
-            policy = control.sizePolicy()
-            policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)
-            control.setSizePolicy(policy)
-        return super().init(info)
+    #: Decoded frames, path -> array, newest last; bounded by
+    #: IMAGE_CACHE_FRAMES so recently viewed frames re-display instantly.
+    _decoded_cache = Instance(OrderedDict, ())
+
+    #: (path, array | None) results from the loader thread, applied on
+    #: the GUI thread by drain_loaded().
+    _load_results = Instance(queue.SimpleQueue, ())
+
+    #: The newest not-yet-started decode request. The loader always takes
+    #: this and only this, so frames the slider dragged past are skipped.
+    _pending_load = Str()
+    _pending_load_lock = Instance(object)
+    _load_wakeup = Instance(object)
+    _load_worker = Instance(object)
+
+    def __pending_load_lock_default(self):
+        return threading.Lock()
+
+    def __load_wakeup_default(self):
+        return threading.Event()
 
     # ------------------------------------------------------------------ #
     # Toolbar events                                                       #
@@ -125,6 +141,14 @@ class FluorescenceImageViewerController(Controller):
     @observe("model:fit_button")
     def _fit(self, event):
         self.model.fit_request = True
+
+    @observe("model:zoom_in_button")
+    def _zoom_in(self, event):
+        self.model.zoom_request = 1
+
+    @observe("model:zoom_out_button")
+    def _zoom_out(self, event):
+        self.model.zoom_request = -1
 
     @observe("model:previous_button")
     def _previous(self, event):
@@ -256,15 +280,70 @@ class FluorescenceImageViewerController(Controller):
         path = event.new
         if not path:
             return
-        array = load_image_array(path)
-        if array is None:
-            logger.error(f"Could not load image: {path}")
-            self.model.info_text = "Could not load image"
+        cached = self._decoded_cache.get(path)
+        if cached is not None:
+            self._decoded_cache.move_to_end(path)
+            self._apply_loaded(path, cached)
             return
+        # Latest wins: replace any not-yet-started request so frames the
+        # slider dragged past are never decoded at all.
+        with self._pending_load_lock:
+            self._pending_load = path
+            self._load_wakeup.set()
+        self._ensure_load_worker()
+        self.model.info_text = f"Loading {Path(path).name}…"
+
+    def _ensure_load_worker(self):
+        if self._load_worker is not None and self._load_worker.is_alive():
+            return
+        self._load_worker = threading.Thread(target=self._run_loader,
+                                             daemon=True)
+        self._load_worker.start()
+
+    def _run_loader(self):
+        """Daemon loader: decode the newest pending path, report on the
+        results queue, wait for the next request."""
+        while True:
+            self._load_wakeup.wait()
+            with self._pending_load_lock:
+                path = self._pending_load
+                self._pending_load = ""
+                self._load_wakeup.clear()
+            if not path:
+                continue
+            try:
+                array = load_image_array(path)
+            except Exception as error:
+                logger.warning(f"Image decode failed for {path}: {error}")
+                array = None
+            self._load_results.put((path, array))
+
+    def drain_loaded(self):
+        """Called by the dock pane's drain timer (GUI thread): apply
+        finished decodes. Only the currently displayed path is shown, but
+        every successful decode enters the cache."""
+        while True:
+            try:
+                path, array = self._load_results.get_nowait()
+            except queue.Empty:
+                return
+            if array is None:
+                if path == self.model.current_path:
+                    logger.error(f"Could not load image: {path}")
+                    self.model.info_text = "Could not load image"
+                continue
+            self._decoded_cache[path] = array
+            self._decoded_cache.move_to_end(path)
+            while len(self._decoded_cache) > IMAGE_CACHE_FRAMES:
+                self._decoded_cache.popitem(last=False)
+            if path == self.model.current_path:
+                self._apply_loaded(path, array)
+
+    def _apply_loaded(self, path, array):
         self.model.array = array
         bits = 16 if array.dtype == np.uint16 else 8
         kind = "gray" if array.ndim == 2 else "RGB"
-        self.model.info_text = (f"{Path(path).name} — {array.shape[1]}x"
+        self.model.info_text = (f"{Path(path).name} - {array.shape[1]}x"
                                 f"{array.shape[0]} {bits}-bit {kind}")
         self._sync_selection()
         logger.info(f"Loaded image: {path} ({bits}-bit {kind})")

@@ -62,8 +62,11 @@ def stat_value(stats, stat, pixel_area=1.0):
 def derive_series(session, filtered_paths):
     """{roi_id: (name, [elapsed_sec], [value])} for ``session.plot_stat``
     over the filtered images, elapsed from the first filtered capture.
-    NaN where an (image, ROI) pair has no computed stats (line gaps)."""
-    paths = list(filtered_paths)
+    NaN where an (image, ROI) pair has no computed stats (line gaps).
+    User-excluded images are left out entirely (no gap: they are not
+    part of the analysis)."""
+    paths = [path for path in filtered_paths
+             if not session.is_excluded(path)]
     if not paths or not session.rois:
         return {}
     stat_cache = {}

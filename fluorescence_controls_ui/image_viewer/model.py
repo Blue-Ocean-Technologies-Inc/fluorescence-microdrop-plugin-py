@@ -5,13 +5,16 @@ the controller's loader), so no Qt bridging is needed.
 """
 from traits.api import (
     Any, Bool, Button, Directory, Event, HasTraits, Instance, Int, List,
-    Property, Str, observe,
+    Property, Range, Str, observe,
 )
 from traits.observation.api import parse
 
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
-from ..consts import PERSISTED_VIEWER_TRAITS
+from ..consts import (
+    IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT,
+    PERSISTED_VIEWER_TRAITS,
+)
 from ..preferences import FluorescencePreferences
 from .analysis.roi_model import RoiAnalysisModel, roi_analysis_model
 
@@ -50,6 +53,15 @@ class FluorescenceImageViewerModel(HasTraits):
     show_bursts = Bool(True)
     show_images = Bool(True)
     show_contrast = Bool(True)
+
+    #: The advanced-settings rows under the image (background ring,
+    #: rolling ball, and the AI detection options) collapse under one
+    #: "Advanced" chevron to reclaim vertical space.
+    show_advanced_settings = Bool(True)
+
+    #: One wheel notch's zoom factor on the image canvas (zooming out
+    #: uses the reciprocal) — the Advanced group's sensitivity setting.
+    zoom_step = Range(*IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT)
 
     #: Master toggle: the whole selector sidebar collapses to the left
     #: edge (device-viewer chevron parity).
@@ -95,7 +107,8 @@ class FluorescenceImageViewerModel(HasTraits):
     #: Loaded pixel data (numpy uint16/uint8, gray or RGB), or None.
     array = Any()
 
-    #: "name — WxH 16-bit gray" summary of the loaded image.
+    #: "name — WxH 16-bit gray" summary of the loaded image (shown in
+    #: the dock pane's title).
     info_text = Str()
 
     #: "(x, y) = value" readout under the cursor (true stored values).
@@ -149,11 +162,17 @@ class FluorescenceImageViewerModel(HasTraits):
     #: One-shot request to refit the image to the pane.
     fit_request = Event()
 
+    #: One-shot zoom request from the toolbar buttons: +1 zooms one step
+    #: in, -1 one step out (the step is ``zoom_step``).
+    zoom_request = Event()
+
     # Toolbar buttons (view events; the controller reacts).
     directory_button = Button()
     #: Back to the current experiment's raw-captures folder (newest image).
     home_button = Button()
     fit_button = Button()
+    zoom_in_button = Button()
+    zoom_out_button = Button()
     previous_button = Button()
     next_button = Button()
 

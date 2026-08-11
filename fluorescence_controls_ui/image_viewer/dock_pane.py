@@ -27,6 +27,7 @@ from logger.logger_service import get_logger
 
 from ..consts import PKG
 from ..consts import DISCOVERY_POLL_INTERVAL_MS, SLIDESHOW_INTERVAL_MS
+from .analysis.ai_controller import AiRoiController
 from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
 from .analysis.roi_batch import _shared_executor
 from .analysis.roi_controller import RoiAnalysisController
@@ -41,18 +42,22 @@ logger = get_logger(__name__)
 _dock_pane_name = "Image Viewer"
 
 
-def _title_for(browsed_directory: str) -> str:
+def _title_for(browsed_directory: str, info_text: str) -> str:
     """The pane title for the browsed folder — "Name - folder", the
-    device-viewer dock pane's convention. The default captures dir would
+    device-viewer dock pane's convention — plus the loaded image's
+    summary (the model's ``info_text``). The default captures dir would
     just read "captures", so its parent (the experiment folder) names it
     instead; '' (nothing resolved yet) keeps the bare name."""
-    if not browsed_directory:
-        return _dock_pane_name
-    folder = Path(browsed_directory)
-    display = (folder.parent.name
-               if folder.name == CAPTURES_DIR_NAME and folder.parent.name
-               else folder.name)
-    return _dock_pane_name + "\t\t-\t\t" + display
+    title = _dock_pane_name
+    if browsed_directory:
+        folder = Path(browsed_directory)
+        display = (folder.parent.name
+                   if folder.name == CAPTURES_DIR_NAME and folder.parent.name
+                   else folder.name)
+        title += "\t-\t" + display
+    if info_text:
+        title += "\t-\t" + info_text
+    return title
 
 
 class FluorescenceImageViewerDockPane(TraitsDockPane):
@@ -66,6 +71,7 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
     model = Instance(FluorescenceImageViewerModel)
     controller = Instance(FluorescenceImageViewerController)
     analysis_controller = Instance(RoiAnalysisController)
+    ai_controller = Instance(AiRoiController)
     _poll_timer = Any()
     _play_timer = Any()
     _drain_timer = Any()
@@ -74,6 +80,9 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self.model = FluorescenceImageViewerModel()
         self.controller = FluorescenceImageViewerController(model=self.model)
         self.analysis_controller = RoiAnalysisController(
+            viewer_model=self.model,
+            analysis_model=self.model.roi_analysis)
+        self.ai_controller = AiRoiController(
             viewer_model=self.model,
             analysis_model=self.model.roi_analysis)
         # Warm the process pool off-thread so the first Calculate does
@@ -130,12 +139,19 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         return control
 
     def _drain_tick(self):
+        self.controller.drain_loaded()
+        # ai_controller first: its TRACK_FRAME handling marks
+        # tracked-override config dirty, and analysis_controller's
+        # drain_results/flush_stats should flush that in the same tick
+        # it was marked, not a tick behind.
+        self.ai_controller.drain_results()
         self.analysis_controller.drain_results()
         self.analysis_controller.flush_stats()
 
-    @observe("model:browsed_directory")
+    @observe("model:browsed_directory, model:info_text")
     def _update_title(self, event):
-        self.name = _title_for(event.new)
+        self.name = _title_for(self.model.browsed_directory,
+                               self.model.info_text)
 
     @observe("model:playing")
     def _sync_slideshow_timer(self, event):

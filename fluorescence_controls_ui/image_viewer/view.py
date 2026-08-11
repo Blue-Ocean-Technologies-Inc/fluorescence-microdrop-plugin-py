@@ -10,28 +10,31 @@ from PySide6.QtWidgets import (
 )
 from traits.api import Enum, Float, HasTraits
 from traitsui.api import (
-    BasicEditorFactory, HGroup, HSplit, Item, Label, RangeEditor, UItem,
-    VGroup, View,
+    BasicEditorFactory, Group, HGroup, HSplit, Item, Label, RangeEditor,
+    UItem, VGroup, View, spring,
 )
 from traitsui.qt.editor import Editor as QtEditor
 
 from microdrop_style.icons.icons import (
-    ICON_CAPSULE, ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT, ICON_CIRCLE,
-    ICON_CONTOUR, ICON_COPY, ICON_CROP, ICON_DELETE, ICON_DELETE_SWEEP,
-    ICON_EDIT, ICON_FOLDER_OPEN, ICON_HOME, ICON_NEXT, ICON_PASTE,
-    ICON_PAUSE, ICON_PLAY, ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH,
-    ICON_ADJUST, ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE,
-    ICON_SHOW_CHART, ICON_TONALITY,
+    ICON_CANCEL, ICON_CAPSULE, ICON_CHEVRON_LEFT, ICON_CHEVRON_RIGHT,
+    ICON_CIRCLE, ICON_CONTOUR, ICON_COPY, ICON_CROP, ICON_DELETE,
+    ICON_DELETE_SWEEP, ICON_EDIT, ICON_EMOJI_OBJECTS, ICON_FOLDER_OPEN,
+    ICON_HOME, ICON_NEXT, ICON_PASTE, ICON_PAUSE, ICON_PLAY,
+    ICON_PREVIOUS, ICON_RECTANGLE, ICON_REFRESH, ICON_ADJUST,
+    ICON_RESET_WRENCH, ICON_RULER, ICON_SAVE, ICON_SELECT_All,
+    ICON_SHOW_CHART, ICON_STAIRS, ICON_TONALITY,
 )
 from microdrop_utils.traitsui_qt_helpers import (
-    HoverScrollEnumEditor, IconButtonEditor, IconModeButtonEditor,
-    IconToggleEditor,
+    DoubleSpinBoxEditor, HoverScrollEnumEditor, IconButtonEditor,
+    IconModeButtonEditor, IconToggleEditor,
 )
+
+from ..consts import IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT
 
 from ..cameras.asi_thread import frame_to_qimage
 from .analysis.consts import (
-    RING_GAP_BOUNDS_PX, RING_THICKNESS_BOUNDS_PX,
-    ROLLING_BALL_RADIUS_BOUNDS_PX,
+    AI_SIZE_FILTER_CEILING_PX, RING_GAP_BOUNDS_PX,
+    RING_THICKNESS_BOUNDS_PX, ROLLING_BALL_RADIUS_BOUNDS_PX,
 )
 from .analysis.roi_canvas_layer import RoiCanvasLayer
 from .analysis.roi_compute import subtract_rolling_ball
@@ -43,12 +46,6 @@ from .scale_layer import ScaleCanvasLayer
 
 #: Inset of the scale bar from the viewport's bottom-left corner.
 SCALE_BAR_MARGIN_PX = 12
-
-#: One wheel notch's zoom on the image canvas, in and out. The
-#: plot canvas mirrors these (PLOT_ZOOM_STEP) so the two feel the
-#: same.
-IMAGE_ZOOM_IN_FACTOR = 1.25
-IMAGE_ZOOM_OUT_FACTOR = 0.8
 
 #: The scale bar's backdrop and lettering, in viewport pixels:
 #: padding around the bar, the backdrop height, the end ticks, and
@@ -79,12 +76,18 @@ class _ProgressReadoutEditor(QtEditor):
         # TraitsUI resolves a dotted item name down to the object that
         # owns the trait, so this is the RoiAnalysisModel itself.
         analysis = self.object
-        total = analysis.batch_total
+        if analysis.ai_track_running:
+            # A drift check owns the readout while it runs; the batch
+            # counts are stale then (often full from the last batch),
+            # which read as a stuck bar.
+            total, done = analysis.ai_track_total, analysis.ai_track_done
+        else:
+            total, done = analysis.batch_total, analysis.batch_done
         self.control.setVisible(bool(self.value))
         # An unknown total (a message rather than a count) shows an
         # empty trough behind the text instead of a bogus fraction.
         self.control.setRange(0, total if total else 1)
-        self.control.setValue(analysis.batch_done if total else 0)
+        self.control.setValue(done if total else 0)
         self.control.setFormat(self.value)
         self.control.repaint()
 
@@ -125,6 +128,8 @@ class _ImageView(QGraphicsView):
         #: buttons, so the shortcuts and the buttons are one code path.
         self.on_roi_shortcut = lambda action: None
         self._metres_per_pixel = 0.0
+        self._pixel_text = ""
+        self._zoom_step = IMAGE_ZOOM_STEP_DEFAULT
         self._auto_fit = True
         self.setTransformationAnchor(self.ViewportAnchor.AnchorUnderMouse)
         self.setDragMode(self.DragMode.ScrollHandDrag)
@@ -136,16 +141,28 @@ class _ImageView(QGraphicsView):
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
 
+    def set_zoom_step(self, step):
+        """One wheel notch's zoom factor (going out is its
+        reciprocal) — the Advanced group's zoom-sensitivity setting."""
+        self._zoom_step = step
+
     def wheelEvent(self, event):
         self._auto_fit = False
-        factor = (IMAGE_ZOOM_IN_FACTOR
+        factor = (self._zoom_step
                   if event.angleDelta().y() > 0
-                  else IMAGE_ZOOM_OUT_FACTOR)
+                  else 1.0 / self._zoom_step)
         self.scale(factor, factor)
         event.accept()
 
     def mousePressEvent(self, event):
         point = self.mapToScene(event.position().toPoint())
+        # A candidate under the cursor wins in every mode, ahead of the
+        # scale layer's own draw_scale handling as well as the ROI
+        # layer's — the scale ruler has no candidate awareness of its
+        # own, so this has to be checked before it gets a turn.
+        if self._roi_layer.candidate_click(point):
+            event.accept()
+            return
         if self._scale_layer.mouse_press(point):
             event.accept()
             return
@@ -212,11 +229,28 @@ class _ImageView(QGraphicsView):
         self._metres_per_pixel = metres_per_pixel_value
         self.viewport().update()
 
+    def set_pixel_text(self, text):
+        """The hovered pixel's "(x, y) = value" readout, drawn as a HUD
+        in the bottom-right corner ('' hides it)."""
+        if text != self._pixel_text:
+            self._pixel_text = text
+            self.viewport().update()
+
     def drawForeground(self, painter, rect):
-        """Paint the scale bar as a HUD: reset to viewport pixels, then
-        ask nice_scale what a bar of about SCALE_BAR_TARGET_PX should
-        read at the current zoom."""
+        """Paint the HUD overlays in viewport pixels: the scale bar in
+        the bottom-left corner, the hovered-pixel readout bottom-right."""
         super().drawForeground(painter, rect)
+        painter.save()
+        painter.resetTransform()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        viewport = self.viewport().rect()
+        self._draw_scale_bar(painter, viewport)
+        self._draw_pixel_readout(painter, viewport)
+        painter.restore()
+
+    def _draw_scale_bar(self, painter, viewport):
+        """Ask nice_scale what a bar of about SCALE_BAR_TARGET_PX
+        should read at the current zoom, and draw it."""
         if self._metres_per_pixel <= 0:
             return
         zoom = self.transform().m11()
@@ -226,10 +260,6 @@ class _ImageView(QGraphicsView):
         if scale is None:
             return
         bar_px, label = scale
-        painter.save()
-        painter.resetTransform()
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        viewport = self.viewport().rect()
         left = viewport.left() + SCALE_BAR_MARGIN_PX
         bottom = viewport.bottom() - SCALE_BAR_MARGIN_PX
         painter.fillRect(
@@ -250,7 +280,23 @@ class _ImageView(QGraphicsView):
                                 bottom - SCALE_BAR_TEXT_RISE_PX,
                                 bar_px, SCALE_BAR_TEXT_HEIGHT_PX),
                          Qt.AlignmentFlag.AlignCenter, label)
-        painter.restore()
+
+    def _draw_pixel_readout(self, painter, viewport):
+        """The hovered pixel's readout, bottom-right in the scale bar's
+        backdrop-and-lettering style (the corner the bar doesn't use)."""
+        if not self._pixel_text:
+            return
+        text_px = painter.fontMetrics().horizontalAdvance(self._pixel_text)
+        right = viewport.right() - SCALE_BAR_MARGIN_PX
+        bottom = viewport.bottom() - SCALE_BAR_MARGIN_PX
+        box = QRectF(right - text_px - 2 * SCALE_BAR_PAD_PX,
+                     bottom - SCALE_BAR_TEXT_HEIGHT_PX - SCALE_BAR_PAD_PX,
+                     text_px + 2 * SCALE_BAR_PAD_PX,
+                     SCALE_BAR_TEXT_HEIGHT_PX + SCALE_BAR_PAD_PX)
+        painter.fillRect(box, QColor(0, 0, 0, 110))
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.drawText(box, Qt.AlignmentFlag.AlignCenter,
+                         self._pixel_text)
 
     def fit(self):
         if self.scene() is not None and not self.scene().sceneRect().isEmpty():
@@ -258,6 +304,18 @@ class _ImageView(QGraphicsView):
             self.resetTransform()
             self.fitInView(self.scene().sceneRect(),
                            Qt.AspectRatioMode.KeepAspectRatio)
+
+    def zoom(self, direction):
+        """One zoom step in (+1) or out (-1) — the toolbar buttons'
+        path. Anchored on the viewport centre: unlike the wheel there
+        is no cursor position to anchor under."""
+        self._auto_fit = False
+        wheel_anchor = self.transformationAnchor()
+        self.setTransformationAnchor(self.ViewportAnchor.AnchorViewCenter)
+        factor = (self._zoom_step if direction > 0
+                  else 1.0 / self._zoom_step)
+        self.scale(factor, factor)
+        self.setTransformationAnchor(wheel_anchor)
 
 
 class _ImageCanvasEditor(QtEditor):
@@ -288,6 +346,11 @@ class _ImageCanvasEditor(QtEditor):
             lambda: analysis.trait_set(canvas_draw_cancelled=True))
         self._roi_layer.on_ball_radius_changed = (
             self._on_ball_radius_dragged)
+        self._roi_layer.on_ai_pick = (
+            lambda x, y: analysis.trait_set(canvas_ai_pick=(x, y)))
+        self._roi_layer.on_candidate_clicked = (
+            lambda index: analysis.trait_set(
+                canvas_candidate_clicked=index))
         self._scale_layer = ScaleCanvasLayer(self._scene)
         self._scale_layer.on_line_drawn = self._on_scale_line_drawn
         self.control = _ImageView(self._scene, self._on_hover,
@@ -295,6 +358,8 @@ class _ImageCanvasEditor(QtEditor):
         self.control.on_roi_shortcut = (
             lambda action: analysis.trait_set(
                 **{f"{action}_roi_button": True}))
+        self.control.set_zoom_step(self.object.zoom_step)
+        self.object.observe(self._on_zoom_step_changed, "zoom_step")
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max")
         self.object.observe(
@@ -303,6 +368,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:ball:radius_px, "
             "roi_analysis:session")
         self.object.observe(self._on_fit_request, "fit_request")
+        self.object.observe(self._on_zoom_request, "zoom_request")
         self.object.observe(
             self._on_roi_state_changed,
             "current_path, roi_analysis:session, "
@@ -320,8 +386,19 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:selected_roi_id")
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode")
+        self.object.observe(
+            self._on_ai_candidates_changed,
+            "roi_analysis:ai_candidates, "
+            "roi_analysis:ai_candidates.items, "
+            "roi_analysis:ai_candidates:items:discarded, "
+            "roi_analysis:ai_output_kind, "
+            "roi_analysis:ai_significance, "
+            "roi_analysis:ai_min_size, "
+            "roi_analysis:ai_max_size")
 
     def dispose(self):
+        self.object.observe(self._on_zoom_step_changed, "zoom_step",
+                            remove=True)
         self.object.observe(self._on_window_changed,
                             "auto_contrast, window_min, window_max",
                             remove=True)
@@ -331,6 +408,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:ball:radius_px, "
             "roi_analysis:session", remove=True)
         self.object.observe(self._on_fit_request, "fit_request", remove=True)
+        self.object.observe(self._on_zoom_request, "zoom_request",
+                            remove=True)
         self.object.observe(
             self._on_roi_state_changed,
             "current_path, roi_analysis:session, "
@@ -349,6 +428,16 @@ class _ImageCanvasEditor(QtEditor):
             remove=True)
         self.object.observe(self._on_interaction_mode_changed,
                             "roi_analysis:interaction_mode", remove=True)
+        self.object.observe(
+            self._on_ai_candidates_changed,
+            "roi_analysis:ai_candidates, "
+            "roi_analysis:ai_candidates.items, "
+            "roi_analysis:ai_candidates:items:discarded, "
+            "roi_analysis:ai_output_kind, "
+            "roi_analysis:ai_significance, "
+            "roi_analysis:ai_min_size, "
+            "roi_analysis:ai_max_size",
+            remove=True)
         super().dispose()
 
     def update_editor(self):
@@ -357,14 +446,20 @@ class _ImageCanvasEditor(QtEditor):
         self.control.fit()
         self._sync_roi_layer()
 
+    def _on_zoom_step_changed(self, event):
+        self.control.set_zoom_step(event.new)
+
     def _on_window_changed(self, event):
-        self._redraw()   # window edit: keep the user's zoom
+        self._redraw()  # window edit: keep the user's zoom
 
     def _on_correction_changed(self, event):
-        self._redraw()   # a different frame to show, same zoom
+        self._redraw()  # a different frame to show, same zoom
 
     def _on_fit_request(self, event):
         self.control.fit()
+
+    def _on_zoom_request(self, event):
+        self.control.zoom(event.new)
 
     def _on_roi_state_changed(self, event):
         self._sync_roi_layer()
@@ -384,6 +479,24 @@ class _ImageCanvasEditor(QtEditor):
             model.roi_analysis.session.effective_for(model.current_path),
             model.roi_analysis.selected_roi_id)
         self._push_scale()
+
+    def _on_ai_candidates_changed(self, event):
+        self._push_candidates()
+
+    def _push_candidates(self):
+        """Live, non-destructive preview: only filter-passing candidates
+        are drawn (sliding the significance/size spinners back reveals
+        the hidden ones); a user-discarded candidate stays visible but
+        dimmed. Original indices are kept so discard clicks land on the
+        right candidate."""
+        analysis = self.object.roi_analysis
+        self._roi_layer.set_candidates([
+            (index, *candidate.geometry_for(analysis.ai_output_kind),
+             candidate.discarded)
+            for index, candidate in enumerate(analysis.ai_candidates)
+            if candidate.passes(analysis.ai_significance,
+                                analysis.ai_min_size,
+                                analysis.ai_max_size)])
 
     def _on_ball_radius_dragged(self, radius):
         """The guide was resized on the canvas: that IS the setting, so
@@ -467,6 +580,9 @@ class _ImageCanvasEditor(QtEditor):
             self.object.pixel_text = f"({x}, {y}) = {array[y, x]}"
         else:
             self.object.pixel_text = ""
+        # Also drawn on the canvas itself, bottom-right (the scale
+        # bar's HUD style).
+        self.control.set_pixel_text(self.object.pixel_text)
 
 
 class ImageCanvasEditor(BasicEditorFactory):
@@ -485,8 +601,16 @@ buttons_group = HGroup(
     UItem("home_button", editor=IconButtonEditor(
         glyph=ICON_HOME,
         tooltip="Back to the current experiment's captures (newest image)")),
+    # zoom settings
+    "12",
     UItem("fit_button", editor=IconButtonEditor(
         glyph=ICON_REFRESH, tooltip="Fit image to the pane")),
+    UItem("zoom_in_button", editor=IconButtonEditor(
+        glyph="zoom_in", tooltip="Zoom in one step")),
+    UItem("zoom_out_button", editor=IconButtonEditor(
+        glyph="zoom_out", tooltip="Zoom out one step")),
+    # image navigation
+    "12",
     UItem("previous_button", editor=IconButtonEditor(
         glyph=ICON_PREVIOUS, tooltip="Previous image")),
     UItem("playing", editor=IconToggleEditor(
@@ -494,8 +618,35 @@ buttons_group = HGroup(
         tooltip="Cycle through the folder's images")),
     UItem("next_button", editor=IconButtonEditor(
         glyph=ICON_NEXT, tooltip="Next image")),
+    # The workhorse actions — run the plot, save the data, start the ROI
+    # set over — as their own cluster right of the folder buttons.
+    "12",
+    UItem("object.roi_analysis.calculate_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SHOW_CHART,
+              tooltip="Calculate ROI intensities across the "
+                      "filtered images and plot them")),
+    UItem("object.roi_analysis.reset_cache_button",
+          editor=IconButtonEditor(
+              glyph=ICON_RESET_WRENCH,
+              tooltip="Reset calculated intensities (optionally "
+                      "also the drift overrides)")),
+    UItem("object.roi_analysis.export_csv_button",
+          editor=IconButtonEditor(
+              glyph=ICON_SAVE,
+              tooltip="Export the intensities to the experiment's "
+                      "analysis folder (calculates first if "
+                      "needed)")),
+    UItem("object.roi_analysis.clear_rois_button",
+          editor=IconButtonEditor(
+              glyph=ICON_DELETE_SWEEP,
+              tooltip="Remove all ROIs")),
+
     UItem("position_text", style="readonly"),
-    UItem("info_text", style="readonly"),
+    # Takes the row's leftover width so the cluster gaps above stay at
+    # their fixed 12 px (the numeric spacers are growable Minimum
+    # spacer items). The image summary itself lives in the pane title.
+    spring,
 )
 
 
@@ -551,6 +702,33 @@ images_group = VGroup(
          editor=RangeEditor(low=1, high_name="object.max_image_number",
                             mode="slider"),
          tooltip="Drag through the image group's images"),
+    Item("object.roi_analysis.current_image_excluded",
+         label="Exclude from analysis",
+         tooltip="Ignore the shown image in the ROI calculations "
+                 "(stats batch, plot, export, drift tracking). Viewing "
+                 "and ROI drawing on it still work; the mark is saved "
+                 "with the experiment."),
+
+    VGroup(
+        Label("Exclude all images:"),
+        UItem("object.roi_analysis.exclude_before_button",
+              tooltip="Exclude every image before the shown one "
+                      "from the analysis"),
+        UItem("object.roi_analysis.exclude_after_button",
+              tooltip="Exclude every image after the shown one "
+                      "from the analysis"),
+
+        Label("Include all images:"),
+        UItem("object.roi_analysis.include_before_button",
+              tooltip="Clear the exclusion mark from every image "
+                      "before the shown one"),
+        UItem("object.roi_analysis.include_after_button",
+              tooltip="Clear the exclusion mark from every image "
+                      "after the shown one"),
+
+        columns=3,
+
+    ),
     visible_when="show_images",
     show_border=True,
 )
@@ -601,6 +779,7 @@ analysis_toolbar = VGroup(
                       "Enter — Esc cancels, Backspace undoes). Stays "
                       "armed for the next one — a second Esc puts "
                       "it away")),
+    "12",  # measurement toggles
     UItem("object.roi_analysis.calibrate_scale_button",
           editor=IconModeButtonEditor(
               glyph=ICON_RULER, mode="draw_scale",
@@ -614,11 +793,20 @@ analysis_toolbar = VGroup(
                       "the ROIs are measured. While it is on, the "
                       "image below shows the corrected frame, so what "
                       "you see is what is measured.")),
+    UItem("object.roi_analysis.session.ball.show_reference",
+          editor=IconToggleEditor(
+              on_glyph=ICON_ADJUST, off_glyph=ICON_ADJUST,
+              tooltip="Draw the ball on the image at its true size, to "
+                      "hold against the droplets it has to clear. Drag "
+                      "the circle to move it, or its grip to set the "
+                      "radius by eye."),
+          enabled_when="object.roi_analysis.rolling_ball_enabled"),
     UItem("object.roi_analysis.show_background_ring",
           editor=IconToggleEditor(
               on_glyph=ICON_CROP, off_glyph=ICON_CROP,
               tooltip="Show the background ring each ROI's correction "
                       "is measured from")),
+    "12",  # select/edit the existing ROIs
     UItem("object.roi_analysis.edit_mode",
           editor=IconToggleEditor(
               on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
@@ -629,6 +817,12 @@ analysis_toolbar = VGroup(
                       "drag a node to reshape a contour, click to "
                       "select. Editing on a later image adds a drift "
                       "override from there on")),
+    # Delete-selected sits directly under the edit toggle: selecting
+    # (edit mode) and deleting the selection are one motion.
+    UItem("object.roi_analysis.delete_roi_button",
+          editor=IconButtonEditor(
+              glyph=ICON_DELETE,
+              tooltip="Delete the selected ROI (Del)")),
     UItem("object.roi_analysis.copy_roi_button",
           editor=IconButtonEditor(
               glyph=ICON_COPY,
@@ -638,30 +832,35 @@ analysis_toolbar = VGroup(
               glyph=ICON_PASTE,
               tooltip="Paste the copied shape as a new ROI, offset "
                       "from the original (Ctrl+V)")),
-    UItem("object.roi_analysis.delete_roi_button",
+    "12",  # AI tools
+    UItem("object.roi_analysis.ai_pick_button",
+          editor=IconModeButtonEditor(
+              glyph="wand_shine", mode="ai_pick",
+              tooltip="AI picker: click a droplet and the model "
+                      "segments it into an ROI. Stays armed — Esc "
+                      "puts it away. Install via Help > Install AI "
+                      "ROI Support if disabled."),
+          enabled_when="analysis.ai_available"),
+    UItem("object.roi_analysis.ai_detect_button",
           editor=IconButtonEditor(
-              glyph=ICON_DELETE,
-              tooltip="Delete the selected ROI (Del)")),
-    UItem("object.roi_analysis.clear_rois_button",
+              glyph="eye_tracking",
+              tooltip="Detect all droplets on this frame (AI grid "
+                      "sweep). Results appear as dashed candidates: "
+                      "click to discard, then Accept. Install via "
+                      "Help > Install AI ROI Support if disabled."),
+          enabled_when="analysis.ai_available"),
+    UItem("object.roi_analysis.ai_track_button",
           editor=IconButtonEditor(
-              glyph=ICON_DELETE_SWEEP,
-              tooltip="Remove all ROIs")),
-    UItem("object.roi_analysis.calculate_button",
-          editor=IconButtonEditor(
-              glyph=ICON_SHOW_CHART,
-              tooltip="Calculate ROI intensities across the "
-                      "filtered images and plot them")),
-    UItem("object.roi_analysis.export_csv_button",
-          editor=IconButtonEditor(
-              glyph=ICON_SAVE,
-              tooltip="Export the intensities to the experiment's "
-                      "analysis folder (calculates first if "
-                      "needed)")),
-    UItem("object.roi_analysis.reset_cache_button",
-          editor=IconButtonEditor(
-              glyph=ICON_RESET_WRENCH,
-              tooltip="Reset calculated intensities (optionally "
-                      "also the drift overrides)")),
+              glyph="ink_highlighter_move",
+              tooltip="Track the ROIs across later frames (drift). "
+                      "Press again to stop; finished frames are "
+                      "kept. Install via Help > Install AI ROI "
+                      "Support if disabled."),
+          enabled_when="analysis.ai_available"),
+    # Takes the column's stretch so the cluster gaps above stay at
+    # their fixed 12 px instead of spreading down the pane (the fixed
+    # spacers are growable Minimum spacer items).
+    spring,
 )
 
 # Selector sidebar: the four collapsible sections stacked, hidden as one
@@ -676,21 +875,18 @@ sidebar_group = VGroup(
     _collapse_header("show_contrast", "Contrast"),
     contrast_group,
     visible_when="show_sidebar",
-    scrollable=True,
 )
 
-
-#: The measurement settings, under the image they act on: two for the
-#: background ring around each ROI, one for the rolling ball over the
-#: whole frame. They live here rather than with the plot because they
-#: decide what is measured, and because the canvas above shows their
-#: effect as they are dragged.
-correction_group = HGroup(
-    Label("Background"),
+# The measurement settings, under the image they act on: the background
+# ring around each ROI, the rolling ball over the whole frame, and the
+# scale/pixel readouts. They live here rather than with the plot because
+# they decide what is measured, and because the canvas above shows their
+# effect as they are dragged.
+correction_group = Group(
     # auto_set: a typed value must reach the session before Calculate
     # reads it, or the batch finds nothing missing and reports "up to
     # date" against the old ring.
-    Item("object.roi_analysis.session.ring.gap_px", label="gap",
+    Item("object.roi_analysis.session.ring.gap_px", label="Ring Gap",
          editor=RangeEditor(low=RING_GAP_BOUNDS_PX[0],
                             high=RING_GAP_BOUNDS_PX[1],
                             mode="spinner", auto_set=True),
@@ -698,13 +894,15 @@ correction_group = HGroup(
                  "background is read from. Fluorescence bleeds a pixel "
                  "or two past the boundary and that halo is not "
                  "background."),
-    Item("object.roi_analysis.session.ring.thickness_px", label="width",
+    Item("object.roi_analysis.session.ring.thickness_px",
+         label="Ring Width",
          editor=RangeEditor(low=RING_THICKNESS_BOUNDS_PX[0],
                             high=RING_THICKNESS_BOUNDS_PX[1],
                             mode="spinner", auto_set=True),
          tooltip="Thickness of the background ring, in pixels. "
                  "Changing either value recomputes the statistics."),
-    Item("object.roi_analysis.session.ball.radius_px", label="Ball r",
+    Item("object.roi_analysis.session.ball.radius_px",
+         label="Ball Radius",
          editor=RangeEditor(
              low=ROLLING_BALL_RADIUS_BOUNDS_PX[0],
              high=ROLLING_BALL_RADIUS_BOUNDS_PX[1],
@@ -714,17 +912,84 @@ correction_group = HGroup(
                  "removed. Keep it comfortably larger than the "
                  "droplets, or the ball rolls over them and takes the "
                  "signal too. The image shows the result as you drag."),
-    UItem("object.roi_analysis.session.ball.show_reference",
-          editor=IconToggleEditor(
-              on_glyph=ICON_ADJUST, off_glyph=ICON_ADJUST,
-              tooltip="Draw the ball on the image at its true size, to "
-                      "hold against the droplets it has to clear. Drag "
-                      "the circle to move it, or its grip to set the "
-                      "radius by eye."),
-          enabled_when="object.roi_analysis.rolling_ball_enabled"),
-    springy=True,
+    Item("zoom_step", label="Zoom Step",
+         editor=DoubleSpinBoxEditor(low=IMAGE_ZOOM_STEP_BOUNDS[0],
+                                    high=IMAGE_ZOOM_STEP_BOUNDS[1],
+                                    decimals=2, step=0.05),
+         tooltip="How much one mouse-wheel notch zooms the image "
+                 "canvas (zooming out uses the reciprocal). 1.05 is "
+                 "barely perceptible; 2.0 doubles per notch."),
+    label="Measurement",
+    show_border=True,
+    columns=3,
 )
 
+# AI (SAM) detection options: significance/size filters over the last
+# pick/detect/track pass's candidates, the shape accepted candidates
+# become, and the drift re-check interval, plus Accept/Clear over the
+# pending candidates. Hidden with the rest of the AI surface when the
+# optional SAM stack is not installed.
+ai_group = Group(
+    Item("object.roi_analysis.ai_significance", label="Significance",
+         editor=RangeEditor(low=1, high=20, mode="spinner",
+                            auto_set=True),
+         tooltip="Significance: how many grid points independently "
+                 "produced a candidate during Detect all. Clear "
+                 "droplets score 2-4, one-off noise 1; click-added "
+                 "ROIs are exempt. Non-destructive: sliding back "
+                 "reveals hidden candidates."),
+    # The size window's spinners bound each other (magnet z-stage
+    # preferences parity): min cannot pass max, max cannot dip under
+    # min — the editors' live limits track the opposite trait.
+    Item("object.roi_analysis.ai_min_size", label="Min Size",
+         editor=RangeEditor(
+             low=0, high_name="object.roi_analysis.ai_max_size",
+             mode="spinner", auto_set=True),
+         tooltip="Hide candidates whose mean ellipse diameter (px) "
+                 "is below this. Applies to all candidates."),
+    Item("object.roi_analysis.ai_max_size", label="Max Size",
+         editor=RangeEditor(
+             low_name="object.roi_analysis.ai_min_size",
+             high=AI_SIZE_FILTER_CEILING_PX,
+             mode="spinner", auto_set=True),
+         tooltip="Hide candidates whose mean ellipse diameter (px) "
+                 "is above this. Applies to all candidates."),
+    Item("object.roi_analysis.ai_output_kind", label="Output Shape",
+         tooltip="Shape an accepted candidate becomes: the traced "
+                 "polygon outline, or the fitted ellipse."),
+    Item("object.roi_analysis.ai_drift_interval",
+         label="Drift Interval",
+         editor=RangeEditor(low=1, high=50, mode="spinner",
+                            auto_set=True),
+         tooltip="Track drift: re-segment every Nth frame (the "
+                 "final frame always); skipped frames inherit. "
+                 "Larger N = faster tracking for slow drift."),
+    HGroup(
+        UItem("object.roi_analysis.ai_accept_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_SAVE,
+                  tooltip="Accept the filter-passing candidates as "
+                          "ROIs"),
+              visible_when="analysis.ai_accept_count > 0"),
+        UItem("object.roi_analysis.ai_clear_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_CANCEL,
+                  tooltip="Discard all candidates"),
+              visible_when="len(analysis.ai_candidates) > 0"),
+    ),
+    label="AI Detection",
+    show_border=True,
+    columns=3,
+    visible_when="analysis.ai_available",
+)
+
+# The measurement and AI grids as one collapsible block under the image.
+advanced_settings_group = VGroup(
+    HGroup(UItem("scale_text", style="readonly")),
+    correction_group,
+    ai_group,
+    visible_when="show_advanced_settings",
+)
 
 ImageViewerView = View(
     HGroup(
@@ -737,10 +1002,11 @@ ImageViewerView = View(
                 buttons_group,
                 UItem("array", editor=ImageCanvasEditor(), springy=True,
                       resizable=True),
-                correction_group,
+                # The measurement + AI option rows are advanced
+                # settings: one chevron collapses them together.
+                _collapse_header("show_advanced_settings", "Advanced"),
+                advanced_settings_group,
                 HGroup(
-                    UItem("pixel_text", style="readonly"),
-                    UItem("scale_text", style="readonly"),
                     UItem("object.roi_analysis.progress_text",
                           editor=ProgressReadoutEditor()),
                 ),

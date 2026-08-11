@@ -7,7 +7,7 @@ fluorescence plugin's own traits.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesPane, PreferencesCategory
 from traits.api import Bool, Directory, Int, Str, Float
-from traitsui.api import Item, View, VGroup
+from traitsui.api import EnumEditor, Item, View, VGroup
 
 from microdrop_style.text_styles import preferences_group_style_sheet
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
@@ -21,6 +21,7 @@ from .cameras.consts import (
     DISPLAY_BRIGHTNESS_DEFAULT, DISPLAY_CONTRAST_DEFAULT,
     DISPLAY_GAMMA_DEFAULT,
 )
+from .image_viewer.analysis.sam_detect import AI_MODEL_OPTIONS, DEFAULT_AI_MODEL
 from .image_viewer.scale_bar import DEFAULT_UNIT
 from .consts import (
     LED_WAVELENGTHS,
@@ -63,6 +64,16 @@ class FluorescencePreferences(PreferencesHelper):
     fluorescence_fit_presets = Str(
         "", desc="Saved custom fit equations (JSON)"
     )
+
+    # SAM model for AI ROI detection in the image viewer. Weights are
+    # downloaded on demand (cancellable dialog); cancel reverts this.
+    # The DirectML (GPU) onnxruntime build encodes ~3x faster; when the
+    # provider is missing the encoder silently stays on CPU.
+    fluorescence_ai_use_gpu = Bool(
+        True, desc="Run the SAM encoder on the GPU (DirectML) when available")
+
+    fluorescence_ai_model = Str(
+        DEFAULT_AI_MODEL, desc="SAM model for AI ROI detection")
 
     # Root of the ZWO ASI SDK (the directory holding Win/ and Unix/).
     # Defaults to the copy bundled with the plugin; empty disables ASI.
@@ -183,9 +194,29 @@ class FluorescencePreferencesPane(PreferencesPane):
         group_style_sheet=preferences_group_style_sheet,
     )
 
+    # EnumEditor's dict `values` sorts by the displayed string, so the
+    # display label is prefixed with its AI_MODEL_OPTIONS index (shown
+    # after the colon by the editor) to keep speed/accuracy pairs in
+    # their declared order rather than alphabetical.
+    ai_group = VGroup(
+        create_item_label_group(
+            "fluorescence_ai_model",
+            label_text="AI ROI detection model",
+            editor=EnumEditor(values={
+                name: f"{index}:{label}"
+                for index, (name, label) in enumerate(AI_MODEL_OPTIONS)})),
+        create_item_label_group(
+            "fluorescence_ai_use_gpu",
+            label_text="Run the SAM encoder on the GPU (DirectML)"),
+        label="AI ROI Detection",
+        show_border=True,
+        style_sheet=preferences_group_style_sheet,
+    )
+
     view = View(
         settings,
         controls_group,
+        ai_group,
         Item("_"),  # Separator to space this out from further contributions.
         resizable=True,
     )

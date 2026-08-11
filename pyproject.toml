@@ -5,6 +5,9 @@ description = "MicroDrop fluorescence plugin: board driver and status/controls U
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+ai = ["osam"]
+
 [project.urls]
 Homepage = "https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py"
 

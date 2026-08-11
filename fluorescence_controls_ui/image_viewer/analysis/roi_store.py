@@ -72,6 +72,7 @@ def save_session(experiment_directory, session):
                  for name in _RING_FIELDS},
         "ball": {name: getattr(session.ball, name)
                  for name in _BALL_FIELDS},
+        "excluded_images": list(session.excluded_images),
         "rois": [{
             "roi_id": roi.roi_id,
             "name": roi.name,
@@ -139,6 +140,12 @@ def load_session(experiment_directory) -> AnalysisSession:
     session.rois = rois
 
     if isinstance(payload, dict):
+        try:
+            session.excluded_images = [
+                str(name) for name in payload.get("excluded_images", [])]
+        except Exception as error:
+            logger.warning(f"Ignoring invalid excluded_images in {path}: "
+                           f"{error}")
         try:
             session.plot_stat = payload.get("plot_stat", "mean")
         except Exception as error:
