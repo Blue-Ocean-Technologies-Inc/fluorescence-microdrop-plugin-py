@@ -160,6 +160,14 @@ class FluorescenceImageViewerController(Controller):
     def _fit(self, event):
         self.model.fit_request = True
 
+    @observe("model:zoom_in_button")
+    def _zoom_in(self, event):
+        self.model.zoom_request = 1
+
+    @observe("model:zoom_out_button")
+    def _zoom_out(self, event):
+        self.model.zoom_request = -1
+
     @observe("model:previous_button")
     def _previous(self, event):
         self.step(-1)

@@ -306,6 +306,18 @@ class _ImageView(QGraphicsView):
             self.fitInView(self.scene().sceneRect(),
                            Qt.AspectRatioMode.KeepAspectRatio)
 
+    def zoom(self, direction):
+        """One zoom step in (+1) or out (-1) — the toolbar buttons'
+        path. Anchored on the viewport centre: unlike the wheel there
+        is no cursor position to anchor under."""
+        self._auto_fit = False
+        wheel_anchor = self.transformationAnchor()
+        self.setTransformationAnchor(self.ViewportAnchor.AnchorViewCenter)
+        factor = (self._zoom_step if direction > 0
+                  else 1.0 / self._zoom_step)
+        self.scale(factor, factor)
+        self.setTransformationAnchor(wheel_anchor)
+
 
 class _ImageCanvasEditor(QtEditor):
     """Canvas bound to the model's ``array``: renders it through the display
@@ -357,6 +369,7 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:ball:radius_px, "
             "roi_analysis:session")
         self.object.observe(self._on_fit_request, "fit_request")
+        self.object.observe(self._on_zoom_request, "zoom_request")
         self.object.observe(
             self._on_roi_state_changed,
             "current_path, roi_analysis:session, "
@@ -396,6 +409,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:session:ball:radius_px, "
             "roi_analysis:session", remove=True)
         self.object.observe(self._on_fit_request, "fit_request", remove=True)
+        self.object.observe(self._on_zoom_request, "zoom_request",
+                            remove=True)
         self.object.observe(
             self._on_roi_state_changed,
             "current_path, roi_analysis:session, "
@@ -443,6 +458,9 @@ class _ImageCanvasEditor(QtEditor):
 
     def _on_fit_request(self, event):
         self.control.fit()
+
+    def _on_zoom_request(self, event):
+        self.control.zoom(event.new)
 
     def _on_roi_state_changed(self, event):
         self._sync_roi_layer()
@@ -584,9 +602,16 @@ buttons_group = HGroup(
     UItem("home_button", editor=IconButtonEditor(
         glyph=ICON_HOME,
         tooltip="Back to the current experiment's captures (newest image)")),
+    # zoom settings
     "12",
     UItem("fit_button", editor=IconButtonEditor(
         glyph=ICON_REFRESH, tooltip="Fit image to the pane")),
+    UItem("zoom_in_button", editor=IconButtonEditor(
+        glyph="zoom_in", tooltip="Zoom in one step")),
+    UItem("zoom_out_button", editor=IconButtonEditor(
+        glyph="zoom_out", tooltip="Zoom out one step")),
+    # image navigation
+    "12",
     UItem("previous_button", editor=IconButtonEditor(
         glyph=ICON_PREVIOUS, tooltip="Previous image")),
     UItem("playing", editor=IconToggleEditor(

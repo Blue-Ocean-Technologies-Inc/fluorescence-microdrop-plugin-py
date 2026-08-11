@@ -161,11 +161,17 @@ class FluorescenceImageViewerModel(HasTraits):
     #: One-shot request to refit the image to the pane.
     fit_request = Event()
 
+    #: One-shot zoom request from the toolbar buttons: +1 zooms one step
+    #: in, -1 one step out (the step is ``zoom_step``).
+    zoom_request = Event()
+
     # Toolbar buttons (view events; the controller reacts).
     directory_button = Button()
     #: Back to the current experiment's raw-captures folder (newest image).
     home_button = Button()
     fit_button = Button()
+    zoom_in_button = Button()
+    zoom_out_button = Button()
     previous_button = Button()
     next_button = Button()
 
