@@ -15,6 +15,13 @@ thermistors track each other within a few hundredths of a degree, with
 light noise on both. The file is named by its first line's local time
 (``YYYYMMDD_HHMMSS.jsonl``), the heater plugin's own convention.
 
+Timing mischief is planted on purpose, for the join's averaging
+window: every line's clock jitters a few hundred ms off the whole
+second (so capture times never land exactly on a sample), and two
+dead spans (30 s and 75 s, mid-run) have no lines at all — where a
+generous window still averages something and a narrow one honestly
+gaps.
+
 Run:
     pixi run python examples/generate_heater_demo_log.py \\
         <captures_dir> [heater_logs_dir]
@@ -43,6 +50,11 @@ HOLD_SECONDS = 120.0
 NOISE_C = 0.05
 #: How far thermistor2 sits below thermistor1.
 SENSOR_OFFSET_C = 0.02
+#: Clock jitter (s, s.d.) on each line's timestamp, so no capture
+#: time lands exactly on a sample and the join has to be generous.
+JITTER_S = 0.35
+#: Dead spans with no lines at all: (fraction into the run, seconds).
+GAPS = ((0.35, 30.0), (0.65, 75.0))
 
 IMAGE_PATTERNS = ("*.png", "*.tif", "*.tiff")
 
@@ -72,10 +84,15 @@ def main():
     start, end = times[0] - 30.0, times[-1] + 30.0
     span = end - start
     random.seed(0)      # the same log every run, diffable
+    dead = [(span * fraction, span * fraction + seconds)
+            for fraction, seconds in GAPS]
     lines = []
     second = 0
     while start + second <= end:
-        epoch = start + second
+        if any(low <= second < high for low, high in dead):
+            second += 1
+            continue        # the logger "stopped" here
+        epoch = start + second + random.gauss(0.0, JITTER_S)
         truth = temperature_profile(second, span)
         thermistor1 = round(truth + random.gauss(0.0, NOISE_C), 2)
         thermistor2 = round(thermistor1 - SENSOR_OFFSET_C
