@@ -53,7 +53,8 @@ from .curve_fit import (
 from .fit_equations import FitEquationsTable
 from .fit_presets import fit_arguments, method_label
 from .plot_series import (
-    SMOOTH_LABELS, SMOOTH_METHODS, analysed_series, smoothed_series,
+    SMOOTH_LABELS, SMOOTH_METHODS, analysed_series,
+    interpolated_series, smoothed_series,
 )
 from .roi_model import PLOT_STATS, roi_analysis_model
 from .roi_store import analysis_directory
@@ -302,6 +303,12 @@ def _cleanup_tab():
                                 "local median and MAD. Wide enough to "
                                 "describe the trend, narrow enough "
                                 "not to span a real change."),
+            _toggle("figure.interpolate_gaps", "Bridge gaps",
+                    tooltip="Draw each line straight across its "
+                            "missing points (dropped outliers, "
+                            "uncomputed images) instead of breaking "
+                            "it. Display only — the fits and the CSV "
+                            "keep the gaps."),
         ),
         HGroup(
             Item("figure.smooth_method", label="Smooth",
@@ -419,6 +426,7 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:remove_outliers, "
                "session:figure:outlier_threshold, "
                "session:figure:outlier_window, "
+               "session:figure:interpolate_gaps, "
                "session:figure:smooth_method, "
                "session:figure:savgol_window, "
                "session:figure:savgol_order, "
@@ -650,6 +658,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                                 figure_settings.savgol_window,
                                 figure_settings.savgol_order,
                                 figure_settings.butter_cutoff)             if figure_settings.smooth_method != "none" else series
+        # After the smoothing, so a bridge spans between the smoothed
+        # neighbours rather than cutting under them.
+        if figure_settings.interpolate_gaps:
+            drawn = interpolated_series(drawn)
         self._axes.set_ylabel(
             y_axis_label(session.plot_stat, session.scale,
                          figure_settings.normalize,

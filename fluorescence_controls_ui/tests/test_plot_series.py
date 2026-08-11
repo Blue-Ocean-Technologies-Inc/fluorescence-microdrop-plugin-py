@@ -2,7 +2,8 @@
 import math
 
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
-    derive_series, normalized_series, outlier_mask, smoothed_values,
+    derive_series, interpolated_series, normalized_series, outlier_mask,
+    smoothed_values,
     background_ref_baseline, background_ref_corrected_series, stat_value,
     subtracted_series, visible_series, without_outliers,
 )
@@ -379,3 +380,28 @@ def test_a_series_too_short_to_filter_is_returned_as_it_is():
     assert smoothed_values(short, "butterworth") == short
     assert smoothed_values(short, "none") == short
     assert smoothed_values([], "savgol") == []
+
+
+def test_interpolation_bridges_an_internal_gap_linearly():
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0, 3.0],
+                    [10.0, math.nan, math.nan, 40.0])}
+    (_, _, values), = interpolated_series(series).values()
+    assert values == [10.0, 20.0, 30.0, 40.0]
+
+
+def test_interpolation_leaves_the_open_ends_open():
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0, 3.0],
+                    [math.nan, 1.0, 2.0, math.nan])}
+    (_, _, values), = interpolated_series(series).values()
+    assert math.isnan(values[0]) and math.isnan(values[3]),         "an end gap has no far side to bridge to"
+    assert values[1:3] == [1.0, 2.0]
+
+
+def test_interpolation_passes_curves_it_cannot_bridge_through():
+    series = {"a": ("ROI 1", [0.0, 1.0], [math.nan, math.nan]),
+              "b": ("ROI 2", [0.0, 1.0], [math.nan, 5.0]),
+              "c": ("ROI 3", [0.0, 1.0], [1.0, 2.0])}
+    bridged = interpolated_series(series)
+    assert all(value != value for value in bridged["a"][2])
+    assert math.isnan(bridged["b"][2][0]) and bridged["b"][2][1] == 5.0
+    assert bridged["c"][2] == [1.0, 2.0]

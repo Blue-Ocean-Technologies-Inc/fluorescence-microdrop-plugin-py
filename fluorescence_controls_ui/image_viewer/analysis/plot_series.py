@@ -297,6 +297,32 @@ SMOOTH_LABELS = {"none": "No smoothing",
                  "butterworth": "Butterworth"}
 
 
+def _bridge_gaps(values):
+    """``values`` with each internal NaN run replaced by the straight
+    line between its two finite neighbours. Leading and trailing NaNs
+    stay NaN — with nothing on the far side there is no line to draw."""
+    known = [(index, value) for index, value in enumerate(values)
+             if value == value]
+    bridged = list(values)
+    for (left_index, left), (right_index, right) in zip(known,
+                                                        known[1:]):
+        span = right_index - left_index
+        for index in range(left_index + 1, right_index):
+            bridged[index] = (left + (right - left)
+                              * (index - left_index) / span)
+    return bridged
+
+
+def interpolated_series(series):
+    """``series`` with each curve's internal gaps bridged — display
+    dressing for lines matplotlib would otherwise break at every NaN.
+    Only the DRAWN lines go through this: an interpolated value is
+    invented data, and the fits, the CSV and the stats table keep the
+    gaps."""
+    return {roi_id: (name, elapsed, _bridge_gaps(values))
+            for roi_id, (name, elapsed, values) in series.items()}
+
+
 def _fill_gaps(values):
     """(filled, gaps): the series with internal NaNs interpolated and
     the ends held flat, plus where they were.
@@ -310,21 +336,12 @@ def _fill_gaps(values):
              if value == value]
     if not known:
         return None, gaps
-    filled = []
-    for index, value in enumerate(values):
-        if value == value:
-            filled.append(value)
-            continue
-        before = [item for item in known if item[0] < index]
-        after = [item for item in known if item[0] > index]
-        if before and after:
-            (left_index, left), (right_index, right) = (before[-1],
-                                                        after[0])
-            span = right_index - left_index
-            filled.append(left + (right - left)
-                          * (index - left_index) / span)
-        else:                       # before the first or past the last
-            filled.append((before or after)[-1 if before else 0][1])
+    filled = _bridge_gaps(values)
+    (first_index, first), (last_index, last) = known[0], known[-1]
+    for index in range(first_index):
+        filled[index] = first
+    for index in range(last_index + 1, len(filled)):
+        filled[index] = last
     return filled, gaps
 
 
