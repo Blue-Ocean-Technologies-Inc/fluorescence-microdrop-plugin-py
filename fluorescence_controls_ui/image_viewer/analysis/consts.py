@@ -124,6 +124,21 @@ VIEW_MODE_LABELS = {"intensity": "Intensity",
                     "second_derivative": "2nd derivative",
                     "fastest_change": "Fastest change"}
 
+#: What the curves are plotted against: elapsed capture time, or the
+#: heater log's temperature at each capture, joined on wall-clock time.
+X_AXIS_MODES = ("time", "temperature")
+X_AXIS_LABELS = {"time": "Time (s)", "temperature": "Temperature (°C)"}
+
+#: Experiment subfolder the heater plugin writes its JSONL logs into.
+HEATER_LOGS_DIR_NAME = "heater_logs"
+
+#: Seconds of heater samples kept beyond each end of the capture
+#: range, so interpolation has bracketing points at the edges.
+HEATER_SAMPLE_MARGIN_S = 60.0
+
+#: The sensor choice averaging every thermistor on a log line.
+HEATER_SENSOR_MEAN = "mean"
+
 #: Persisted computed-stats store inside ANALYSIS_DIR_NAME.
 ROI_STATS_FILENAME = "roi_stats.json"
 
