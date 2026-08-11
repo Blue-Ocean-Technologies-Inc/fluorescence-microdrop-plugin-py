@@ -10,8 +10,8 @@ from PySide6.QtWidgets import (
 )
 from traits.api import Enum, Float, HasTraits
 from traitsui.api import (
-    BasicEditorFactory, HGroup, HSplit, Item, Label, RangeEditor, UItem,
-    VGroup, View, spring,
+    BasicEditorFactory, Group, HGroup, HSplit, Item, Label, RangeEditor,
+    UItem, VGroup, View, spring,
 )
 from traitsui.qt.editor import Editor as QtEditor
 
@@ -788,17 +788,16 @@ sidebar_group = VGroup(
 )
 
 
-#: The measurement settings, under the image they act on: two for the
-#: background ring around each ROI, one for the rolling ball over the
-#: whole frame. They live here rather than with the plot because they
-#: decide what is measured, and because the canvas above shows their
-#: effect as they are dragged.
-correction_group = HGroup(
-    Label("Background"),
+# The measurement settings, under the image they act on: the background
+# ring around each ROI, the rolling ball over the whole frame, and the
+# scale/pixel readouts. They live here rather than with the plot because
+# they decide what is measured, and because the canvas above shows their
+# effect as they are dragged.
+correction_group = Group(
     # auto_set: a typed value must reach the session before Calculate
     # reads it, or the batch finds nothing missing and reports "up to
     # date" against the old ring.
-    Item("object.roi_analysis.session.ring.gap_px", label="gap",
+    Item("object.roi_analysis.session.ring.gap_px", label="Ring Gap",
          editor=RangeEditor(low=RING_GAP_BOUNDS_PX[0],
                             high=RING_GAP_BOUNDS_PX[1],
                             mode="spinner", auto_set=True),
@@ -806,13 +805,15 @@ correction_group = HGroup(
                  "background is read from. Fluorescence bleeds a pixel "
                  "or two past the boundary and that halo is not "
                  "background."),
-    Item("object.roi_analysis.session.ring.thickness_px", label="width",
+    Item("object.roi_analysis.session.ring.thickness_px",
+         label="Ring Width",
          editor=RangeEditor(low=RING_THICKNESS_BOUNDS_PX[0],
                             high=RING_THICKNESS_BOUNDS_PX[1],
                             mode="spinner", auto_set=True),
          tooltip="Thickness of the background ring, in pixels. "
                  "Changing either value recomputes the statistics."),
-    Item("object.roi_analysis.session.ball.radius_px", label="Ball r",
+    Item("object.roi_analysis.session.ball.radius_px",
+         label="Ball Radius",
          editor=RangeEditor(
              low=ROLLING_BALL_RADIUS_BOUNDS_PX[0],
              high=ROLLING_BALL_RADIUS_BOUNDS_PX[1],
@@ -830,10 +831,11 @@ correction_group = HGroup(
                       "the circle to move it, or its grip to set the "
                       "radius by eye."),
           enabled_when="object.roi_analysis.rolling_ball_enabled"),
-    "12",
     UItem("scale_text", style="readonly"),
     UItem("pixel_text", style="readonly"),
-    springy=True,
+    label="Measurement",
+    show_border=True,
+    columns=3,
 )
 
 
@@ -842,9 +844,8 @@ correction_group = HGroup(
 # become, and the drift re-check interval, plus Accept/Clear over the
 # pending candidates. Hidden with the rest of the AI surface when the
 # optional SAM stack is not installed.
-ai_group = HGroup(
-    Label("AI"),
-    Item("object.roi_analysis.ai_significance", label="signif",
+ai_group = Group(
+    Item("object.roi_analysis.ai_significance", label="Significance",
          editor=RangeEditor(low=1, high=20, mode="spinner",
                             auto_set=True),
          tooltip="Significance: how many grid points independently "
@@ -855,23 +856,24 @@ ai_group = HGroup(
     # The size window's spinners bound each other (magnet z-stage
     # preferences parity): min cannot pass max, max cannot dip under
     # min — the editors' live limits track the opposite trait.
-    Item("object.roi_analysis.ai_min_size", label="min size",
+    Item("object.roi_analysis.ai_min_size", label="Min Size",
          editor=RangeEditor(
              low=0, high_name="object.roi_analysis.ai_max_size",
              mode="spinner", auto_set=True),
          tooltip="Hide candidates whose mean ellipse diameter (px) "
                  "is below this. Applies to all candidates."),
-    Item("object.roi_analysis.ai_max_size", label="max size",
+    Item("object.roi_analysis.ai_max_size", label="Max Size",
          editor=RangeEditor(
              low_name="object.roi_analysis.ai_min_size",
              high=AI_SIZE_FILTER_CEILING_PX,
              mode="spinner", auto_set=True),
          tooltip="Hide candidates whose mean ellipse diameter (px) "
                  "is above this. Applies to all candidates."),
-    Item("object.roi_analysis.ai_output_kind", label="as",
+    Item("object.roi_analysis.ai_output_kind", label="Output Shape",
          tooltip="Shape an accepted candidate becomes: the traced "
                  "polygon outline, or the fitted ellipse."),
-    Item("object.roi_analysis.ai_drift_interval", label="drift every",
+    Item("object.roi_analysis.ai_drift_interval",
+         label="Drift Interval",
          editor=RangeEditor(low=1, high=50, mode="spinner",
                             auto_set=True),
          tooltip="Track drift: re-segment every Nth frame (the "
@@ -888,13 +890,15 @@ ai_group = HGroup(
               glyph=ICON_CANCEL,
               tooltip="Discard all candidates"),
           visible_when="len(analysis.ai_candidates) > 0"),
+    label="AI Detection",
+    show_border=True,
+    columns=3,
     visible_when="analysis.ai_available",
-    springy=True,
 )
 
-# The two advanced rows share one scroll area: scrollable lifts their
-# spinners' minimum width off the dock pane, so it can be made narrower
-# than the rows (they scroll instead of blocking the resize).
+# The two advanced grids share one scroll area: scrollable lifts their
+# content minimums off the dock pane, so it can be made smaller than
+# the grids (they scroll instead of blocking the resize).
 advanced_settings_group = VGroup(
     correction_group,
     ai_group,
