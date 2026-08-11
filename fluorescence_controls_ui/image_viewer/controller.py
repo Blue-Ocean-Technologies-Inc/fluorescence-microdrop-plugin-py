@@ -77,7 +77,10 @@ class FluorescenceImageViewerController(Controller):
         the text readouts clip instead of propagating their text width
         (a QLabel's minimum size hint is its full text otherwise)."""
         from pyface.qt.QtWidgets import QSizePolicy
-        for readout_name in ("info_text", "pixel_text"):
+        # pixel_text is not in this list anymore: it lives in the
+        # scrollable advanced row now, where the scroll area (not an
+        # Ignored size policy) absorbs its width.
+        for readout_name in ("info_text",):
             control = getattr(info, readout_name).control
             policy = control.sizePolicy()
             policy.setHorizontalPolicy(QSizePolicy.Policy.Ignored)

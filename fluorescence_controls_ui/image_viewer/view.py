@@ -830,6 +830,9 @@ correction_group = HGroup(
                       "the circle to move it, or its grip to set the "
                       "radius by eye."),
           enabled_when="object.roi_analysis.rolling_ball_enabled"),
+    "12",
+    UItem("scale_text", style="readonly"),
+    UItem("pixel_text", style="readonly"),
     springy=True,
 )
 
@@ -916,8 +919,6 @@ ImageViewerView = View(
                 _collapse_header("show_advanced_settings", "Advanced"),
                 advanced_settings_group,
                 HGroup(
-                    UItem("pixel_text", style="readonly"),
-                    UItem("scale_text", style="readonly"),
                     UItem("object.roi_analysis.progress_text",
                           editor=ProgressReadoutEditor()),
                 ),
