@@ -134,7 +134,11 @@ class _InstallThread(QThread):
         if sys.platform == "win32":
             try:
                 gpu_code = self._run_step(
-                    ["pixi", "add", "--pypi", "onnxruntime-directml"])
+                    # --platform: the DirectML wheel exists only for
+                    # win_amd64, and a multi-platform pixi manifest
+                    # fails to resolve it without the restriction.
+                    ["pixi", "add", "--pypi", "--platform", "win-64",
+                     "onnxruntime-directml"])
             except Exception as e:
                 gpu_code = None
                 logger.warning(
