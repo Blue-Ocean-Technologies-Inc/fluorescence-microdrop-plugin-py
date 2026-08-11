@@ -240,7 +240,8 @@ def test_write_intensity_csv_layout(tmp_path):
         records = list(csv.reader(handle))
     # Long form: the ROI is a value in a column, so the width does
     # not grow with the ROI count and every stat is named once.
-    assert records[0][:8] == ["index", "time_utc", "elapsed_sec",
+    assert records[0][:9] == ["index", "time_utc", "elapsed_sec",
+                              "temperature_c",
                               "filename", "group", "wavelength",
                               "roi", "is_background_ref"]
     assert "mean" in records[0] and "outline_count" in records[0]
@@ -361,9 +362,10 @@ def test_write_intensity_csv_writes_a_row_per_image_and_roi(tmp_path):
     # file.
     background_ref_column = header.index("is_background_ref")
     assert [row[background_ref_column] for row in body[:3]] == ["0", "0", "1"]
-    # And every row says what it was measured with.
+    # And every row says what it was measured with — including that
+    # no heater sensor read the (absent) temperature column.
     for row in body:
-        assert row[-3:] == ["2", "4", "60"]
+        assert row[-4:] == ["2", "4", "60", ""]
 
 
 def test_write_intensity_csv_omits_the_column_when_not_normalising(

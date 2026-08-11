@@ -12,6 +12,7 @@ from .consts import (
 )
 
 from ..scale_bar import pixel_area
+from .heater_log import temperature_at
 
 logger = get_logger(__name__)
 
@@ -60,8 +61,11 @@ def stat_value(stats, stat, pixel_area=1.0):
 
 
 def derive_series(session, filtered_paths):
-    """{roi_id: (name, [elapsed_sec], [value])} for ``session.plot_stat``
-    over the filtered images, elapsed from the first filtered capture.
+    """{roi_id: (name, [x], [value])} for ``session.plot_stat`` over
+    the filtered images. The x is elapsed seconds from the first
+    filtered capture — or, when the figure's x_axis says so, the
+    heater log's temperature at each capture (NaN where the log does
+    not cover it), so the fits downstream read against °C too.
     NaN where an (image, ROI) pair has no computed stats (line gaps).
     User-excluded images are left out entirely (no gap: they are not
     part of the analysis)."""
@@ -75,13 +79,19 @@ def derive_series(session, filtered_paths):
                                 session.scale.unit)
     times = [session.stat_info(path, stat_cache)[1] for path in paths]
     start_time = times[0]
+    figure = session.figure
+    x_values = (temperature_at(session.heater_samples,
+                               figure.heater_sensor, times)
+                if figure.x_axis == "temperature"
+                else [capture_time - start_time
+                      for capture_time in times])
     series = {}
     for roi in session.rois:
         elapsed, values = [], []
-        for path, capture_time in zip(paths, times):
+        for index, path in enumerate(paths):
             stats = session.stats.get(
                 session.cache_key(path, roi, stat_cache))
-            elapsed.append(capture_time - start_time)
+            elapsed.append(x_values[index])
             values.append(stat_value(stats, session.plot_stat,
                                      area_per_pixel))
         series[roi.roi_id] = (roi.name, elapsed, values)

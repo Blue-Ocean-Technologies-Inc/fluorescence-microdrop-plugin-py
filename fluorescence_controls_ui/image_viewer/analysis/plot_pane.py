@@ -6,6 +6,7 @@ series from the session (stats store + filters + plot stat) and
 coalesces notification bursts into single redraws. Lines gap where an
 image failed or isn't computed."""
 import os
+from pathlib import Path
 
 os.environ.setdefault("QT_API", "pyside6")
 import matplotlib
@@ -17,7 +18,7 @@ from matplotlib.backends.backend_qtagg import (
 )
 from matplotlib.figure import Figure
 from matplotlib.ticker import AutoLocator, ScalarFormatter
-from pyface.api import FileDialog, OK
+from pyface.api import DirectoryDialog, FileDialog, OK
 from pyface.tasks.api import DockPane
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -29,7 +30,9 @@ from traitsui.api import (
     VGrid, VGroup, View,
 )
 
-from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
+from microdrop_style.icons.icons import (
+    ICON_FOLDER_OPEN, ICON_FUNCTION, ICON_SAVE,
+)
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor, IconButtonEditor, IconToggleEditor,
     InPlaceToggleEditor, toggle_editor_default_style_sheet_factory
@@ -39,12 +42,14 @@ from ...consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
     BUTTER_CUTOFF_BOUNDS, BUTTER_ORDER_BOUNDS,
-    OUTLIER_THRESHOLD_BOUNDS_MAD, OUTLIER_WINDOW_BOUNDS_PTS,
+    HEATER_LOGS_DIR_NAME, OUTLIER_THRESHOLD_BOUNDS_MAD,
+    OUTLIER_WINDOW_BOUNDS_PTS,
     PLOT_ZOOM_STEP, ROI_PLOT_BATCH_COALESCE_MS,
     SAVGOL_ORDER_BOUNDS, SAVGOL_WINDOW_BOUNDS_PTS,
     ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
     ROI_PLOT_COALESCE_MS, ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX, VIEW_MODE_LABELS, VIEW_MODES,
+    X_AXIS_LABELS, X_AXIS_MODES,
 )
 from .curve_fit import (
     fastest_change_time, fit_series,
@@ -118,9 +123,11 @@ EQUATION_LINE_STEP_Y = 0.06
 
 #: Footnotes along the bottom edge, in axes fractions: the
 #: log-axis hidden-point count at the bottom, the dropped-outlier
-#: count one line above it so the two never overprint.
+#: count one line above it, the no-temperature count above that, so
+#: none of the three ever overprint.
 NOTE_HIDDEN_Y = 0.02
 NOTE_OUTLIERS_Y = 0.055
+NOTE_NO_TEMP_Y = 0.09
 
 #: The grey wash over a trimmed-away tail: visible over white,
 #: faint enough to read the curves through.
@@ -222,8 +229,33 @@ def _axes_tab():
             columns=5, show_labels=False,
         ),
         HGroup(
+            Item("figure.x_axis", label="X axis", width=DROPDOWN_W,
+                 editor=EnumEditor(values=list(X_AXIS_MODES),
+                                   format_func=X_AXIS_LABELS.get),
+                 tooltip="What the curves are plotted against: "
+                         "elapsed capture time, or the heater log's "
+                         "temperature at each capture (joined on "
+                         "wall-clock time). The fits follow it — a "
+                         "melt midpoint reads in °C."),
             _toggle("figure.show_legend", "Legend",
                     tooltip="Show the ROI legend on the figure"),
+        ),
+        HGroup(
+            Item("session.heater_log_dir", label="Heater logs",
+                 springy=True,
+                 tooltip="Folder of the heater's .jsonl logs, joined "
+                         "to the captures by wall-clock time; defaults "
+                         "to the experiment's heater_logs folder"),
+            UItem("model.heater_dir_button", editor=IconButtonEditor(
+                glyph=ICON_FOLDER_OPEN,
+                tooltip="Choose the heater-log folder")),
+            Item("figure.heater_sensor", label="Sensor",
+                 width=DROPDOWN_W,
+                 editor=EnumEditor(name="model.heater_sensor_choices"),
+                 tooltip="Which thermistor the temperature axis "
+                         "reads; mean averages every sensor on each "
+                         "log line"),
+            visible_when="figure.x_axis == 'temperature'",
         ),
         label="Axes",
     )
@@ -427,6 +459,9 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:outlier_threshold, "
                "session:figure:outlier_window, "
                "session:figure:interpolate_gaps, "
+               "session:figure:x_axis, "
+               "session:figure:heater_sensor, "
+               "session:heater_samples, "
                "session:figure:smooth_method, "
                "session:figure:savgol_window, "
                "session:figure:savgol_order, "
@@ -598,7 +633,10 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         # A previous fastest-change render left categorical ticks behind.
         self._axes.xaxis.set_major_locator(AutoLocator())
         self._axes.xaxis.set_major_formatter(ScalarFormatter())
-        self._axes.set_xlabel("Elapsed time (s)")
+        self._axes.set_xlabel(
+            "Temperature (°C)"
+            if figure_settings.x_axis == "temperature"
+            else "Elapsed time (s)")
         if figure_settings.view_mode == "intensity":
             trim_edges = self._refresh_intensity(series, figure_settings)
         else:
@@ -648,6 +686,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
         self._shade_trimmed_tails(trim_edges)
         self._note_hidden_points(series, log_x, log_y)
         self._note_dropped_outliers()
+        self._note_missing_temperatures(series, figure_settings)
         self.draw_idle()
 
     def _refresh_intensity(self, series, figure_settings):
@@ -868,6 +907,26 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
             transform=self._axes.transAxes, ha="center", va="bottom",
             color="gray", fontsize="x-small"))
 
+    def _note_missing_temperatures(self, series, figure_settings):
+        """Count the frames the heater log does not cover (NaN x on a
+        temperature axis) — they cannot be drawn anywhere honest, so
+        they are counted instead of silently vanishing. Frames, not
+        points: every ROI shares the same x, and multiplying the count
+        by the ROIs would overstate what is missing."""
+        if figure_settings.x_axis != "temperature":
+            return
+        frames = next((elapsed for _name, elapsed, _values
+                       in series.values()), [])
+        missing = sum(1 for x in frames if x != x)
+        if not missing:
+            return
+        self._fit_artists.append(self._axes.text(
+            0.5, NOTE_NO_TEMP_Y,
+            f"{missing} {'frame' if missing == 1 else 'frames'} "
+            f"outside the heater log's coverage",
+            transform=self._axes.transAxes, ha="center", va="bottom",
+            color="gray", fontsize="x-small"))
+
     def _draw_hint(self, message):
         self._fit_artists.append(self._axes.text(
             0.5, 0.5, message, transform=self._axes.transAxes,
@@ -1042,6 +1101,8 @@ class FluorescenceRoiPlotDockPane(DockPane):
         roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
         roi_analysis_model.observe(self._on_fit_equations,
                                    "fit_equations_button")
+        roi_analysis_model.observe(self._on_heater_dir,
+                                   "heater_dir_button")
         # The pane may be resized below the content's minimum; past that
         # point scrollbars take over instead of the dock pane locking.
         scroll = QScrollArea(parent)
@@ -1067,6 +1128,15 @@ class FluorescenceRoiPlotDockPane(DockPane):
 
     def _on_save_plot(self, event):
         _save_figure(self.canvas)
+
+    def _on_heater_dir(self, event):
+        session = roi_analysis_model.session
+        default = session.heater_log_dir or (
+            str(Path(session.directory) / HEATER_LOGS_DIR_NAME)
+            if session.directory else "")
+        dialog = DirectoryDialog(default_path=default)
+        if dialog.open() == OK:
+            session.heater_log_dir = dialog.path
 
     def _on_fit_equations(self, event):
         if (self._equations_ui is not None
@@ -1099,4 +1169,6 @@ class FluorescenceRoiPlotDockPane(DockPane):
                                        "save_plot_button", remove=True)
             roi_analysis_model.observe(self._on_fit_equations,
                                        "fit_equations_button", remove=True)
+            roi_analysis_model.observe(self._on_heater_dir,
+                                       "heater_dir_button", remove=True)
         super().destroy()
