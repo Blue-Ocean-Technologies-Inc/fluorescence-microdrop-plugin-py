@@ -54,9 +54,9 @@ def _title_for(browsed_directory: str, info_text: str) -> str:
         display = (folder.parent.name
                    if folder.name == CAPTURES_DIR_NAME and folder.parent.name
                    else folder.name)
-        title += "\t\t-\t\t" + display
+        title += "\t-\t" + display
     if info_text:
-        title += "\t\t-\t\t" + info_text
+        title += "\t-\t" + info_text
     return title
 
 

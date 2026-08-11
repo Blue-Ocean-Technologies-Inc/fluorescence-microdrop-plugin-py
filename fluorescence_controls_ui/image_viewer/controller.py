@@ -343,7 +343,7 @@ class FluorescenceImageViewerController(Controller):
         self.model.array = array
         bits = 16 if array.dtype == np.uint16 else 8
         kind = "gray" if array.ndim == 2 else "RGB"
-        self.model.info_text = (f"{Path(path).name} — {array.shape[1]}x"
+        self.model.info_text = (f"{Path(path).name} - {array.shape[1]}x"
                                 f"{array.shape[0]} {bits}-bit {kind}")
         self._sync_selection()
         logger.info(f"Loaded image: {path} ({bits}-bit {kind})")
