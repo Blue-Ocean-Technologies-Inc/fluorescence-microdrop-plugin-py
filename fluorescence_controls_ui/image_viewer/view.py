@@ -945,17 +945,19 @@ ai_group = Group(
          tooltip="Track drift: re-segment every Nth frame (the "
                  "final frame always); skipped frames inherit. "
                  "Larger N = faster tracking for slow drift."),
-    UItem("object.roi_analysis.ai_accept_button",
+    HGroup(
+        UItem("object.roi_analysis.ai_accept_button",
           editor=IconButtonEditor(
               glyph=ICON_SAVE,
               tooltip="Accept the filter-passing candidates as "
                       "ROIs"),
           visible_when="analysis.ai_accept_count > 0"),
-    UItem("object.roi_analysis.ai_clear_button",
-          editor=IconButtonEditor(
-              glyph=ICON_CANCEL,
-              tooltip="Discard all candidates"),
-          visible_when="len(analysis.ai_candidates) > 0"),
+        UItem("object.roi_analysis.ai_clear_button",
+              editor=IconButtonEditor(
+                  glyph=ICON_CANCEL,
+                  tooltip="Discard all candidates"),
+              visible_when="len(analysis.ai_candidates) > 0"),
+    ),
     label="AI Detection",
     show_border=True,
     columns=3,
