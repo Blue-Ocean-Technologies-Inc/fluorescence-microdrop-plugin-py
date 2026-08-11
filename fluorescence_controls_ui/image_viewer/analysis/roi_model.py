@@ -23,7 +23,7 @@ from .consts import (
     RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, ROI_ALPHA_BOUNDS_PCT,
     ROLLING_BALL_RADIUS_BOUNDS_PX, ROLLING_BALL_RADIUS_PX,
     SAVGOL_ORDER, SAVGOL_ORDER_BOUNDS, SAVGOL_WINDOW_BOUNDS_PTS,
-    SAVGOL_WINDOW_PTS, VIEW_MODES,
+    SAVGOL_WINDOW_PTS, VIEW_MODES, AI_MAX_SIZE_DEFAULT_PX,
 )
 from .curve_fit import FIT_METHODS
 from .plot_series import SMOOTH_METHODS
@@ -481,7 +481,7 @@ class RoiAnalysisModel(HasTraits):
     ai_min_size = Range(0, AI_SIZE_FILTER_CEILING_PX,
                         AI_MIN_SIZE_DEFAULT_PX)
     ai_max_size = Range(0, AI_SIZE_FILTER_CEILING_PX,
-                        AI_SIZE_FILTER_CEILING_PX)
+                        AI_MAX_SIZE_DEFAULT_PX)
 
     @observe("ai_min_size")
     def _keep_max_size_at_or_above_min(self, event):

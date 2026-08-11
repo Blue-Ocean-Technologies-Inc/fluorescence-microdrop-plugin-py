@@ -153,6 +153,7 @@ AI_DETECT_MAX_MASK_AREA_FRACTION = 0.35
 #: Default candidate filters and drift-check interval (options row).
 AI_SIGNIFICANCE_DEFAULT = 2
 AI_MIN_SIZE_DEFAULT_PX = 0
+AI_MAX_SIZE_DEFAULT_PX = 500
 AI_DRIFT_CHECK_INTERVAL_DEFAULT = 3
 
 #: Candidate preview outline on the canvas: a colour distinct from the
@@ -163,5 +164,5 @@ AI_CANDIDATE_COLOR = "#ff00e5"
 AI_CANDIDATE_PEN_WIDTH_PX = 1.5
 AI_CANDIDATE_DISCARDED_OPACITY = 0.3
 #: Hard ceiling of the candidate size filters (mean ellipse diameter,
-#: px) — also the max-size filter's default, i.e. no cap until lowered.
+#: px).
 AI_SIZE_FILTER_CEILING_PX = 50000
