@@ -183,6 +183,8 @@ class AiRoiController(HasTraits):
             self.analysis_model.progress_text = "No ROIs to track"
             return
         refiner = self._refiner_for_current_model()
+        self.analysis_model.ai_track_done = 0
+        self.analysis_model.ai_track_total = 0
         # Say something immediately: the first frame's encode takes
         # seconds, and until it finishes no TRACK_FRAME arrives.
         self.analysis_model.progress_text = (
@@ -271,6 +273,8 @@ class AiRoiController(HasTraits):
                 f"{len(payload['candidates'])} candidates — filter, "
                 f"then Accept")
         elif kind == TRACK_FRAME:
+            model.ai_track_done = payload["done"]
+            model.ai_track_total = payload["total"]
             model.progress_text = (
                 f"Drift check {payload['done']}/{payload['total']} frames")
             for roi_id, candidate in payload["candidates"].items():

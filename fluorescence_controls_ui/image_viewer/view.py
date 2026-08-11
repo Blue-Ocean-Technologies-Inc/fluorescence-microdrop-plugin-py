@@ -80,12 +80,18 @@ class _ProgressReadoutEditor(QtEditor):
         # TraitsUI resolves a dotted item name down to the object that
         # owns the trait, so this is the RoiAnalysisModel itself.
         analysis = self.object
-        total = analysis.batch_total
+        if analysis.ai_track_running:
+            # A drift check owns the readout while it runs; the batch
+            # counts are stale then (often full from the last batch),
+            # which read as a stuck bar.
+            total, done = analysis.ai_track_total, analysis.ai_track_done
+        else:
+            total, done = analysis.batch_total, analysis.batch_done
         self.control.setVisible(bool(self.value))
         # An unknown total (a message rather than a count) shows an
         # empty trough behind the text instead of a bogus fraction.
         self.control.setRange(0, total if total else 1)
-        self.control.setValue(analysis.batch_done if total else 0)
+        self.control.setValue(done if total else 0)
         self.control.setFormat(self.value)
         self.control.repaint()
 

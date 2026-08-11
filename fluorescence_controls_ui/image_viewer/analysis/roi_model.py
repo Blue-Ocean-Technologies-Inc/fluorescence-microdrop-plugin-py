@@ -470,6 +470,11 @@ class RoiAnalysisModel(HasTraits):
     ai_drift_interval = Range(1, 50, AI_DRIFT_CHECK_INTERVAL_DEFAULT)
     #: Whether a track pass is currently running (drives a progress UI).
     ai_track_running = Bool(False)
+    #: Drift-check progress in checked-frame units; the status-row
+    #: progress readout fills from these while ai_track_running (the
+    #: batch counts it otherwise fills from are stale during a track).
+    ai_track_done = Int(0)
+    ai_track_total = Int(0)
     #: Count of ROIs accepted from AI candidates this session (readout).
     ai_accept_count = Int(0)
 
