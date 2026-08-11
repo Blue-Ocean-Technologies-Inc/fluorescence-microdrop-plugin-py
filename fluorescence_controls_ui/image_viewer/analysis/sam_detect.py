@@ -50,6 +50,34 @@ AI_MODEL_OPTIONS = (
 )
 DEFAULT_AI_MODEL = "efficientsam:latest"
 
+#: The small EfficientSam used when the fast-tracking preference is on:
+#: drift re-segmentation prompts at an already-known droplet, an easier
+#: task than discovery, so the speed model usually suffices.
+FAST_TRACKING_AI_MODEL = "efficientsam:10m"
+
+#: Preference-driven: whether encoders built from now on may use the
+#: DirectML GPU provider (checked at session-load time by the provider
+#: patch, so a toggle + refiner rebuild applies without a restart).
+_gpu_encoder_enabled = True
+
+
+def set_gpu_encoder_enabled(enabled):
+    """Preference hook for the GPU toggle; rebuild the refiner after
+    calling for it to take effect on the next encoder session."""
+    global _gpu_encoder_enabled
+    _gpu_encoder_enabled = bool(enabled)
+
+
+def gpu_encoder_available():
+    """Whether onnxruntime carries the DirectML provider (the GPU build,
+    onnxruntime-directml). False also when osam is absent."""
+    if not sam_available():
+        return False
+    # optional dependency: only reachable once osam (which depends on
+    # onnxruntime) is installed
+    import onnxruntime
+    return "DmlExecutionProvider" in onnxruntime.get_available_providers()
+
 
 def sam_available():
     """Whether the optional osam stack imported -- retrying the import if
@@ -255,7 +283,11 @@ def _patch_osam_providers():
     original = osam_model._load_inference_session
 
     def load_with_best_provider(blob, providers=None):
-        use_dml = "encoder" in getattr(blob, "filename", "").lower()
+        # _gpu_encoder_enabled is read at load time, so flipping the
+        # preference and rebuilding the refiner switches providers
+        # without a restart.
+        use_dml = (_gpu_encoder_enabled
+                   and "encoder" in getattr(blob, "filename", "").lower())
         try:
             return onnxruntime.InferenceSession(
                 blob.path,

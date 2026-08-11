@@ -67,6 +67,17 @@ class FluorescencePreferences(PreferencesHelper):
 
     # SAM model for AI ROI detection in the image viewer. Weights are
     # downloaded on demand (cancellable dialog); cancel reverts this.
+    # Drift tracking re-segments known droplets from good prompts — an
+    # easier task than discovery — so the small EfficientSam usually
+    # suffices and runs several times faster.
+    fluorescence_ai_fast_tracking = Bool(
+        False, desc="Use the fast EfficientSam model for drift tracking")
+
+    # The DirectML (GPU) onnxruntime build encodes ~3x faster; when the
+    # provider is missing the encoder silently stays on CPU.
+    fluorescence_ai_use_gpu = Bool(
+        True, desc="Run the SAM encoder on the GPU (DirectML) when available")
+
     fluorescence_ai_model = Str(
         DEFAULT_AI_MODEL, desc="SAM model for AI ROI detection")
 
@@ -193,15 +204,22 @@ class FluorescencePreferencesPane(PreferencesPane):
     # display label is prefixed with its AI_MODEL_OPTIONS index (shown
     # after the colon by the editor) to keep speed/accuracy pairs in
     # their declared order rather than alphabetical.
-    ai_group = create_item_label_group(
-        "fluorescence_ai_model",
-        label_text="AI ROI detection model",
-        editor=EnumEditor(values={
-            name: f"{index}:{label}"
-            for index, (name, label) in enumerate(AI_MODEL_OPTIONS)}),
-        group_label="AI ROI Detection",
-        group_show_border=True,
-        group_style_sheet=preferences_group_style_sheet,
+    ai_group = VGroup(
+        create_item_label_group(
+            "fluorescence_ai_model",
+            label_text="AI ROI detection model",
+            editor=EnumEditor(values={
+                name: f"{index}:{label}"
+                for index, (name, label) in enumerate(AI_MODEL_OPTIONS)})),
+        create_item_label_group(
+            "fluorescence_ai_fast_tracking",
+            label_text="Use the fast model for drift tracking"),
+        create_item_label_group(
+            "fluorescence_ai_use_gpu",
+            label_text="Run the SAM encoder on the GPU (DirectML)"),
+        label="AI ROI Detection",
+        show_border=True,
+        style_sheet=preferences_group_style_sheet,
     )
 
     view = View(

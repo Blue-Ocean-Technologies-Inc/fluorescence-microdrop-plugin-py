@@ -14,12 +14,17 @@ from traits.api import Bool, Either, Float, HasTraits, Instance, Str, observe
 
 from logger.logger_service import get_logger
 
+from microdrop_application.dialogs.pyface_wrapper import information
+
 from ..discovery import capture_timestamp
 from ..model import FluorescenceImageViewerModel
 from ..sam_download import download_ai_model, model_is_cached
 from .roi_geometry import centre_of
 from .roi_model import RoiAnalysisModel
-from .sam_detect import DEFAULT_AI_MODEL, SamRefiner, sam_available
+from .sam_detect import (
+    DEFAULT_AI_MODEL, FAST_TRACKING_AI_MODEL, SamRefiner,
+    gpu_encoder_available, sam_available, set_gpu_encoder_enabled,
+)
 from .sam_jobs import (
     AI_FAILED, DETECT_PROGRESS, DETECT_RESULT, PICK_RESULT, SamJobRunner,
     TRACK_FINISHED, TRACK_FRAME,
@@ -38,6 +43,11 @@ class AiRoiController(HasTraits):
 
     #: The active refiner, rebuilt whenever the preferred model changes.
     refiner = Either(None, Instance(SamRefiner))
+
+    #: The tracking refiner — the fast model when that preference is on,
+    #: else the same model as ``refiner``. Cached separately so a track
+    #: pass doesn't evict the detect model's embeddings.
+    _track_refiner = Either(None, Instance(SamRefiner))
 
     #: The preference's model name as of the last successful switch, for
     #: reverting a change to an uncached model that could not download.
@@ -66,18 +76,21 @@ class AiRoiController(HasTraits):
             return
         self.analysis_model.ai_available = sam_available()
         self._last_ai_model = self.viewer_model.preferences.fluorescence_ai_model
+        set_gpu_encoder_enabled(
+            self.viewer_model.preferences.fluorescence_ai_use_gpu)
 
     # ------------------------------------------------------------------ #
     # Model gate + refiner lifecycle                                       #
     # ------------------------------------------------------------------ #
-    def _ensure_model_ready(self):
-        """Whether the preferred SAM model is available for use, prompting
-        a download (blocking, cancellable dialog) if it is not yet cached.
-        False aborts the calling launcher with a progress-text message."""
+    def _ensure_model_ready(self, name=None):
+        """Whether the SAM model ``name`` (default: the preferred model)
+        is available for use, prompting a download (blocking, cancellable
+        dialog) if it is not yet cached. False aborts the calling
+        launcher with a progress-text message."""
         if not sam_available():
             self.analysis_model.progress_text = "AI model not available"
             return False
-        name = self.viewer_model.preferences.fluorescence_ai_model
+        name = name or self.viewer_model.preferences.fluorescence_ai_model
         if model_is_cached(name) or download_ai_model(name):
             return True
         self.analysis_model.progress_text = "AI model not available"
@@ -88,6 +101,18 @@ class AiRoiController(HasTraits):
         if self.refiner is None or self.refiner.model_name != name:
             self.refiner = SamRefiner(model_name=name)
         return self.refiner
+
+    def _tracking_model_name(self):
+        if self.viewer_model.preferences.fluorescence_ai_fast_tracking:
+            return FAST_TRACKING_AI_MODEL
+        return self.viewer_model.preferences.fluorescence_ai_model
+
+    def _refiner_for_tracking(self):
+        name = self._tracking_model_name()
+        if self._track_refiner is None \
+                or self._track_refiner.model_name != name:
+            self._track_refiner = SamRefiner(model_name=name)
+        return self._track_refiner
 
     @observe("viewer_model:preferences:fluorescence_ai_model")
     def _on_preferred_model_changed(self, event):
@@ -101,12 +126,35 @@ class AiRoiController(HasTraits):
             return
         if model_is_cached(new) or download_ai_model(new):
             self._last_ai_model = new
-            self.refiner = None  # rebuilt on next use
+            self.refiner = None         # rebuilt on next use
+            self._track_refiner = None  # may follow the preferred model
             return
         self._reverting_model = True
         self.viewer_model.preferences.fluorescence_ai_model = (
             self._last_ai_model or DEFAULT_AI_MODEL)
         self._reverting_model = False
+
+    @observe("viewer_model:preferences:fluorescence_ai_fast_tracking")
+    def _on_fast_tracking_changed(self, event):
+        self._track_refiner = None  # rebuilt for the new choice on use
+
+    @observe("viewer_model:preferences:fluorescence_ai_use_gpu")
+    def _on_use_gpu_changed(self, event):
+        set_gpu_encoder_enabled(event.new)
+        # Encoder sessions pick their provider when built: drop the
+        # refiners so the next use rebuilds with the new setting.
+        self.refiner = None
+        self._track_refiner = None
+        if event.new and sam_available() and not gpu_encoder_available():
+            information(
+                message="GPU encoding is not available: the installed "
+                        "onnxruntime has no DirectML provider (the "
+                        "CPU-only build is present).\n\n"
+                        "To enable it, install the GPU build with\n"
+                        "    pixi add --pypi onnxruntime-directml\n"
+                        "(or re-run Help > Install AI ROI Support) and "
+                        "restart MicroDrop. Until then the encoder "
+                        "keeps running on the CPU.")
 
     # ------------------------------------------------------------------ #
     # Interaction mode (pick tool)                                         #
@@ -162,7 +210,7 @@ class AiRoiController(HasTraits):
         if self.runner.track_running:
             self.runner.cancel()
             return
-        if not self._ensure_model_ready():
+        if not self._ensure_model_ready(self._tracking_model_name()):
             return
         current = self.viewer_model.current_path
         paths = self.viewer_model.paths
@@ -183,7 +231,7 @@ class AiRoiController(HasTraits):
         if not start_geometries:
             self.analysis_model.progress_text = "No ROIs to track"
             return
-        refiner = self._refiner_for_current_model()
+        refiner = self._refiner_for_tracking()
         self.analysis_model.ai_track_done = 0
         self.analysis_model.ai_track_total = 0
         # Say something immediately: the first frame's encode takes
