@@ -1,3 +1,71 @@
+## v2.3.0 (2026-08-11)
+
+### Feat
+
+- **controls-ui**: bulk exclude/include images before or after
+- **controls-ui**: log the actual SAM session providers
+- **controls-ui**: add zoom in/out buttons beside fit
+- **controls-ui**: zoom sensitivity setting in the Advanced group
+- **controls-ui**: hovered-pixel readout as a bottom-right canvas HUD
+- **controls-ui**: scrollable advanced rows and analysis toolbar
+- **controls-ui**: fast-tracking and GPU-encoder preferences
+- **controls-ui**: Exclude-from-analysis checkbox under the seek slider
+- **controls-ui**: analysis consumers skip excluded images
+- **controls-ui**: per-experiment excluded-images set on the session
+- **controls-ui**: coupled max-size filter for AI candidates
+- **controls-ui**: collapsible measurement-settings row
+- **controls-ui**: collapsible clusters on the analysis toolbar
+- **controls-ui**: drift-check progress in the status readout
+- **examples**: synthetic drift-demo series for the AI tracker
+- **controls-ui**: Help-menu AI support installer and optional extra
+- **controls-ui**: AI toolbar glyphs and detection options row
+- **controls-ui**: candidate preview layer and AI-pick clicks on the canvas
+- **controls-ui**: AI ROI controller with candidate accept flow
+- **controls-ui**: cancellable SAM weight download dialog
+- **controls-ui**: AI model preference and analysis-model AI traits
+- **analysis**: SAM job runner (pick/detect/track) off the GUI thread
+- **analysis**: port osam session and SamRefiner
+- **analysis**: SAM mask -> Candidate conversion with vote dedup
+- **analysis**: SAM detection module skeleton with optional osam
+
+### Fix
+
+- **controls-ui**: give the max-size filter its own 500 px default
+- **controls-ui**: raise the candidate size-filter ceiling to 50000 px
+- **controls-ui**: platform-restrict the DirectML installer step
+- **controls-ui**: qualify the size spinners' dynamic bound names
+- **controls-ui**: progress bar fills from drift-check counts
+- **controls-ui**: give the filename readout the top row's stretch
+- **controls-ui**: wand_shine/eye_tracking/ink_highlighter_move AI glyphs
+- **controls-ui**: significance and size filters preview live on canvas
+- **controls-ui**: final-review fixes for AI ROI identification
+- **controls-ui**: tree-kill installer cancel and keep step-1 success
+- **controls-ui**: candidate clicks win in every canvas mode
+- **analysis**: keep track_running true when a newer track supersedes
+- **analysis**: use double-underscore default for SamRefiner._session
+
+### Refactor
+
+- **controls-ui**: group the bulk exclude/include rows, tidy spacing
+- **controls-ui**: pair the AI accept/clear buttons in one cell
+- **controls-ui**: tighten the pane-title separators
+- **controls-ui**: drop scrollable from sidebar and advanced groups
+- **controls-ui**: show the image summary in the pane title
+- **controls-ui**: toolbar back to a plain column
+- **controls-ui**: ball reference to the toolbar, scale readout atop advanced
+- **controls-ui**: advanced settings as titled grids
+- **controls-ui**: pixel and scale readouts join the Advanced row
+- **controls-ui**: drop the fast-model drift-tracking option
+- **controls-ui**: one Advanced dropdown over the bottom settings
+- **controls-ui**: navigation beside folder buttons, reset up top
+- **controls-ui**: cluster the analysis toolbar with fixed gaps
+- **controls-ui**: workhorse cluster right of the folder buttons
+- **controls-ui**: plot/export/clear-all buttons to the top-left
+
+### Perf
+
+- **controls-ui**: async latest-wins image loading with an LRU cache
+
 ## v2.2.0 (2026-08-07)
 
 ### Feat
