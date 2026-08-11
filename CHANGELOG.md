@@ -1,3 +1,10 @@
+## v2.4.0 (2026-08-11)
+
+### Feat
+
+- **controls-ui**: add the Bridge gaps toggle to the plot pane
+- **controls-ui**: bridge internal plot gaps by linear interpolation
+
 ## v2.3.0 (2026-08-11)
 
 ### Feat
