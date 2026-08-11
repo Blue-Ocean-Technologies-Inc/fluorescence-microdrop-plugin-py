@@ -817,10 +817,6 @@ analysis_toolbar = VGroup(
     # their fixed 12 px instead of spreading down the pane (the fixed
     # spacers are growable Minimum spacer items).
     spring,
-    # Scrollable lifts the button stack's minimum height off the dock
-    # pane: shrink the pane and the toolbar scrolls instead of
-    # blocking the resize.
-    scrollable=True,
 )
 
 # Selector sidebar: the four collapsible sections stacked, hidden as one
