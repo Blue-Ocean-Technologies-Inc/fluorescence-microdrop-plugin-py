@@ -51,6 +51,10 @@ class FluorescenceImageViewerModel(HasTraits):
     show_images = Bool(True)
     show_contrast = Bool(True)
 
+    #: The measurement-settings row under the image (background ring +
+    #: rolling ball) collapses to its chevron to reclaim vertical space.
+    show_correction = Bool(True)
+
     #: Master toggle: the whole selector sidebar collapses to the left
     #: edge (device-viewer chevron parity).
     show_sidebar = Bool(True)

@@ -775,42 +775,48 @@ sidebar_group = VGroup(
 #: decide what is measured, and because the canvas above shows their
 #: effect as they are dragged.
 correction_group = HGroup(
-    Label("Background"),
-    # auto_set: a typed value must reach the session before Calculate
-    # reads it, or the batch finds nothing missing and reports "up to
-    # date" against the old ring.
-    Item("object.roi_analysis.session.ring.gap_px", label="gap",
-         editor=RangeEditor(low=RING_GAP_BOUNDS_PX[0],
-                            high=RING_GAP_BOUNDS_PX[1],
-                            mode="spinner", auto_set=True),
-         tooltip="Pixels between an ROI's edge and the ring its "
-                 "background is read from. Fluorescence bleeds a pixel "
-                 "or two past the boundary and that halo is not "
-                 "background."),
-    Item("object.roi_analysis.session.ring.thickness_px", label="width",
-         editor=RangeEditor(low=RING_THICKNESS_BOUNDS_PX[0],
-                            high=RING_THICKNESS_BOUNDS_PX[1],
-                            mode="spinner", auto_set=True),
-         tooltip="Thickness of the background ring, in pixels. "
-                 "Changing either value recomputes the statistics."),
-    Item("object.roi_analysis.session.ball.radius_px", label="Ball r",
-         editor=RangeEditor(
-             low=ROLLING_BALL_RADIUS_BOUNDS_PX[0],
-             high=ROLLING_BALL_RADIUS_BOUNDS_PX[1],
-             mode="spinner", auto_set=True),
-         enabled_when="object.roi_analysis.rolling_ball_enabled",
-         tooltip="Ball radius in pixels — the scale of the unevenness "
-                 "removed. Keep it comfortably larger than the "
-                 "droplets, or the ball rolls over them and takes the "
-                 "signal too. The image shows the result as you drag."),
-    UItem("object.roi_analysis.session.ball.show_reference",
-          editor=IconToggleEditor(
-              on_glyph=ICON_ADJUST, off_glyph=ICON_ADJUST,
-              tooltip="Draw the ball on the image at its true size, to "
-                      "hold against the droplets it has to clear. Drag "
-                      "the circle to move it, or its grip to set the "
-                      "radius by eye."),
-          enabled_when="object.roi_analysis.rolling_ball_enabled"),
+    UItem("show_correction", editor=IconToggleEditor(
+        tooltip="Show or hide the measurement settings (background "
+                "ring and rolling ball)")),
+    HGroup(
+        Label("Background"),
+        # auto_set: a typed value must reach the session before Calculate
+        # reads it, or the batch finds nothing missing and reports "up to
+        # date" against the old ring.
+        Item("object.roi_analysis.session.ring.gap_px", label="gap",
+             editor=RangeEditor(low=RING_GAP_BOUNDS_PX[0],
+                                high=RING_GAP_BOUNDS_PX[1],
+                                mode="spinner", auto_set=True),
+             tooltip="Pixels between an ROI's edge and the ring its "
+                     "background is read from. Fluorescence bleeds a pixel "
+                     "or two past the boundary and that halo is not "
+                     "background."),
+        Item("object.roi_analysis.session.ring.thickness_px", label="width",
+             editor=RangeEditor(low=RING_THICKNESS_BOUNDS_PX[0],
+                                high=RING_THICKNESS_BOUNDS_PX[1],
+                                mode="spinner", auto_set=True),
+             tooltip="Thickness of the background ring, in pixels. "
+                     "Changing either value recomputes the statistics."),
+        Item("object.roi_analysis.session.ball.radius_px", label="Ball r",
+             editor=RangeEditor(
+                 low=ROLLING_BALL_RADIUS_BOUNDS_PX[0],
+                 high=ROLLING_BALL_RADIUS_BOUNDS_PX[1],
+                 mode="spinner", auto_set=True),
+             enabled_when="object.roi_analysis.rolling_ball_enabled",
+             tooltip="Ball radius in pixels — the scale of the unevenness "
+                     "removed. Keep it comfortably larger than the "
+                     "droplets, or the ball rolls over them and takes the "
+                     "signal too. The image shows the result as you drag."),
+        UItem("object.roi_analysis.session.ball.show_reference",
+              editor=IconToggleEditor(
+                  on_glyph=ICON_ADJUST, off_glyph=ICON_ADJUST,
+                  tooltip="Draw the ball on the image at its true size, to "
+                          "hold against the droplets it has to clear. Drag "
+                          "the circle to move it, or its grip to set the "
+                          "radius by eye."),
+              enabled_when="object.roi_analysis.rolling_ball_enabled"),
+        visible_when="show_correction",
+    ),
     springy=True,
 )
 
