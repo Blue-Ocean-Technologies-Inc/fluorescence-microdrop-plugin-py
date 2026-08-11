@@ -110,6 +110,10 @@ class FigureSettings(HasTraits):
                               OUTLIER_THRESHOLD_MAD)
     outlier_window = Range(*OUTLIER_WINDOW_BOUNDS_PTS,
                            OUTLIER_WINDOW_PTS, mode="spinner")
+    #: Draw each line straight across its missing points (dropped
+    #: outliers, uncomputed images) instead of breaking it. Display
+    #: only — the fits and the CSV keep the gaps.
+    interpolate_gaps = Bool(True)
 
     #: Display-only smoothing of the drawn curves. The fits keep the
     #: unsmoothed points: neighbouring values in a smoothed curve are
