@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 from traits.api import Any, Instance
 from traitsui.api import (
-    EnumEditor, HGroup, Item, Label, RangeEditor, Tabbed, UItem,
+    EnumEditor, HGroup, Item, Label, Tabbed, UItem,
     VGrid, VGroup, View,
 )
 
@@ -41,11 +41,8 @@ from microdrop_utils.traitsui_qt_helpers import (
 from ...consts import PKG
 from ..scale_bar import area_unit
 from .consts import (
-    BUTTER_CUTOFF_BOUNDS, BUTTER_ORDER_BOUNDS,
-    HEATER_LOGS_DIR_NAME, OUTLIER_THRESHOLD_BOUNDS_MAD,
-    OUTLIER_WINDOW_BOUNDS_PTS,
+    HEATER_LOGS_DIR_NAME,
     PLOT_ZOOM_STEP, ROI_PLOT_BATCH_COALESCE_MS,
-    SAVGOL_ORDER_BOUNDS, SAVGOL_WINDOW_BOUNDS_PTS,
     ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
     ROI_PLOT_COALESCE_MS, ROI_PLOT_CONTROLS_MAX_HEIGHT,
     ROI_PLOT_SECTION_MIN_PX, VIEW_MODE_LABELS, VIEW_MODES,
@@ -166,15 +163,6 @@ def _axis_spin(name, auto_flag):
                                             decimals=1, step=1.0),
                  enabled_when=f"not figure.{auto_flag}")
 
-
-def _param_spin(name, label, bounds, enabled_when="", visible_when="",
-                tooltip=""):
-    return Item(name, label=label, width=PARAM_SPIN_W,
-                editor=RangeEditor(low=bounds[0], high=bounds[1],
-                                   mode="spinner", auto_set=True),
-                enabled_when=enabled_when, visible_when=visible_when,
-                tooltip=tooltip)
-
 def custom_stylesheet(checked):
     return toggle_editor_default_style_sheet_factory(checked, padding="2px 4px")
 
@@ -240,22 +228,31 @@ def _axes_tab():
             _toggle("figure.show_legend", "Legend",
                     tooltip="Show the ROI legend on the figure"),
         ),
-        HGroup(
-            Item("session.heater_log_dir", label="Heater logs",
-                 springy=True,
-                 tooltip="Folder of the heater's .jsonl logs, joined "
-                         "to the captures by wall-clock time; defaults "
-                         "to the experiment's heater_logs folder"),
-            UItem("model.heater_dir_button", editor=IconButtonEditor(
-                glyph=ICON_FOLDER_OPEN,
-                tooltip="Choose the heater-log folder")),
+        VGroup(
+            HGroup(
+                Item("session.heater_log_dir", label="Heater logs",
+                     springy=True,
+                     tooltip="Folder of the heater's .jsonl logs, joined "
+                             "to the captures by wall-clock time; defaults "
+                             "to the experiment's heater_logs folder"),
+                UItem("model.heater_dir_button", editor=IconButtonEditor(
+                    glyph=ICON_FOLDER_OPEN,
+                    tooltip="Choose the heater-log folder")),
+            ),
             Item("figure.heater_sensor", label="Sensor",
-                 width=DROPDOWN_W,
                  editor=EnumEditor(name="model.heater_sensor_choices"),
                  tooltip="Which thermistor the temperature axis "
                          "reads; mean averages every sensor on each "
                          "log line"),
+            Item("figure.heater_window_ms", label="Window (ms)",
+                        tooltip="How generous the time join is: a "
+                                "capture's temperature is the mean of "
+                                "every heater sample within ±window/2 "
+                                "of it. 0 is exact — interpolation at "
+                                "the capture instant. Frames with no "
+                                "sample in the window become gaps."),
             visible_when="figure.x_axis == 'temperature'",
+            show_border=True,
         ),
         label="Axes",
     )
@@ -320,16 +317,14 @@ def _cleanup_tab():
                             "catch it. Dropped points are counted on "
                             "the plot, flagged in the CSV, and kept "
                             "out of the fits."),
-            _param_spin("figure.outlier_threshold", "MADs",
-                        OUTLIER_THRESHOLD_BOUNDS_MAD,
+            Item("figure.outlier_threshold", label="MADs",
                         enabled_when="figure.remove_outliers",
                         tooltip="How far from the local median counts "
                                 "as an outlier, in scaled MADs — "
                                 "about what the same number of "
                                 "standard deviations would mean for "
                                 "clean data."),
-            _param_spin("figure.outlier_window", "win",
-                        OUTLIER_WINDOW_BOUNDS_PTS,
+            Item("figure.outlier_window", label="win",
                         enabled_when="figure.remove_outliers",
                         tooltip="Points either side used for the "
                                 "local median and MAD. Wide enough to "
@@ -352,26 +347,22 @@ def _cleanup_tab():
                          "neighbouring values dependent, which "
                          "flatters R² and shrinks the parameter "
                          "uncertainties for the wrong reason."),
-            _param_spin("figure.savgol_window", "win",
-                        SAVGOL_WINDOW_BOUNDS_PTS,
+            Item("figure.savgol_window", label="win",
                         visible_when="figure.smooth_method == "
                                      "'savgol'",
                         tooltip="Points per polynomial fit (forced "
                                 "odd)."),
-            _param_spin("figure.savgol_order", "order",
-                        SAVGOL_ORDER_BOUNDS,
+            Item("figure.savgol_order", label="order",
                         visible_when="figure.smooth_method == "
                                      "'savgol'",
                         tooltip="Polynomial order. Higher follows "
                                 "sharper features and smooths less."),
-            _param_spin("figure.butter_order", "order",
-                        BUTTER_ORDER_BOUNDS,
+            Item("figure.butter_order", label="order",
                         visible_when="figure.smooth_method == "
                                      "'butterworth'",
                         tooltip="Filter order: higher cuts more "
                                 "sharply at the cutoff."),
-            _param_spin("figure.butter_cutoff", "cutoff",
-                        BUTTER_CUTOFF_BOUNDS,
+            Item("figure.butter_cutoff", label="cutoff",
                         visible_when="figure.smooth_method == "
                                      "'butterworth'",
                         tooltip="Cutoff as a fraction of the Nyquist "
@@ -461,6 +452,7 @@ _PLOT_STATE = ("session, session:stats_revision, session:rois.items, "
                "session:figure:interpolate_gaps, "
                "session:figure:x_axis, "
                "session:figure:heater_sensor, "
+               "session:figure:heater_window_ms, "
                "session:heater_samples, "
                "session:figure:smooth_method, "
                "session:figure:savgol_window, "
