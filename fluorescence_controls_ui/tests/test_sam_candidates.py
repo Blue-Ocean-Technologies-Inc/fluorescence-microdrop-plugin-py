@@ -58,6 +58,10 @@ def test_click_candidates_are_exempt_from_significance():
     clicked = candidate_from_detection(_disk_detection(),
                                        prompt=[30.0, 30.0], source="click")
     swept = candidate_from_detection(_disk_detection(), votes=1)
-    assert clicked.passes(min_votes=2, min_size=0)
-    assert not swept.passes(min_votes=2, min_size=0)
-    assert not clicked.passes(min_votes=2, min_size=50)
+    assert clicked.passes(min_votes=2, min_size=0, max_size=500)
+    assert not swept.passes(min_votes=2, min_size=0, max_size=500)
+    assert not clicked.passes(min_votes=2, min_size=50, max_size=500)
+    # The size window's upper edge cuts oversized candidates for every
+    # source, clicked ones included (~20 px mean diameter here).
+    assert not clicked.passes(min_votes=2, min_size=0, max_size=10)
+    assert clicked.passes(min_votes=2, min_size=10, max_size=30)

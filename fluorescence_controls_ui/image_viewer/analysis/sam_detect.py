@@ -140,11 +140,12 @@ class Candidate(HasTraits):
             return normalize("polygon", list(self.polygon))
         return normalize("ellipse", list(self.ellipse))
 
-    def passes(self, min_votes, min_size):
+    def passes(self, min_votes, min_size, max_size):
         """Whether this candidate survives significance filtering.
-        Click-sourced candidates are exempt from the vote threshold."""
+        Click-sourced candidates are exempt from the vote threshold;
+        the size window applies to all."""
         return ((self.source == "click" or self.votes >= min_votes)
-                and self.size >= min_size)
+                and min_size <= self.size <= max_size)
 
 
 def candidate_from_detection(detection, prompt=None, votes=1, source="auto"):

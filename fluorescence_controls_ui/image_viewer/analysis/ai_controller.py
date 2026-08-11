@@ -210,7 +210,8 @@ class AiRoiController(HasTraits):
                  for candidate in model.ai_candidates
                  if not candidate.discarded
                  and candidate.passes(model.ai_significance,
-                                      model.ai_min_size)]
+                                      model.ai_min_size,
+                                      model.ai_max_size)]
         if pairs:
             model.ai_rois_accepted = (pairs, self._detect_anchor)
         model.ai_candidates = []
@@ -221,13 +222,15 @@ class AiRoiController(HasTraits):
 
     @observe("analysis_model:ai_candidates.items, analysis_model:ai_candidates, "
              "analysis_model:ai_significance, analysis_model:ai_min_size, "
+             "analysis_model:ai_max_size, "
              "analysis_model:ai_candidates:items:discarded")
     def _update_accept_count(self, event):
         model = self.analysis_model
         model.ai_accept_count = len([
             candidate for candidate in model.ai_candidates
             if not candidate.discarded
-            and candidate.passes(model.ai_significance, model.ai_min_size)])
+            and candidate.passes(model.ai_significance, model.ai_min_size,
+                                 model.ai_max_size)])
 
     # ------------------------------------------------------------------ #
     # Draining the job runner                                              #

@@ -31,8 +31,8 @@ from microdrop_utils.traitsui_qt_helpers import (
 
 from ..cameras.asi_thread import frame_to_qimage
 from .analysis.consts import (
-    RING_GAP_BOUNDS_PX, RING_THICKNESS_BOUNDS_PX,
-    ROLLING_BALL_RADIUS_BOUNDS_PX,
+    AI_SIZE_FILTER_CEILING_PX, RING_GAP_BOUNDS_PX,
+    RING_THICKNESS_BOUNDS_PX, ROLLING_BALL_RADIUS_BOUNDS_PX,
 )
 from .analysis.roi_canvas_layer import RoiCanvasLayer
 from .analysis.roi_compute import subtract_rolling_ball
@@ -346,7 +346,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:ai_candidates:items:discarded, "
             "roi_analysis:ai_output_kind, "
             "roi_analysis:ai_significance, "
-            "roi_analysis:ai_min_size")
+            "roi_analysis:ai_min_size, "
+            "roi_analysis:ai_max_size")
 
     def dispose(self):
         self.object.observe(self._on_window_changed,
@@ -383,7 +384,8 @@ class _ImageCanvasEditor(QtEditor):
             "roi_analysis:ai_candidates:items:discarded, "
             "roi_analysis:ai_output_kind, "
             "roi_analysis:ai_significance, "
-            "roi_analysis:ai_min_size",
+            "roi_analysis:ai_min_size, "
+            "roi_analysis:ai_max_size",
             remove=True)
         super().dispose()
 
@@ -436,7 +438,8 @@ class _ImageCanvasEditor(QtEditor):
              candidate.discarded)
             for index, candidate in enumerate(analysis.ai_candidates)
             if candidate.passes(analysis.ai_significance,
-                                analysis.ai_min_size)])
+                                analysis.ai_min_size,
+                                analysis.ai_max_size)])
 
     def _on_ball_radius_dragged(self, radius):
         """The guide was resized on the canvas: that IS the setting, so
@@ -837,11 +840,20 @@ ai_group = HGroup(
                  "droplets score 2-4, one-off noise 1; click-added "
                  "ROIs are exempt. Non-destructive: sliding back "
                  "reveals hidden candidates."),
+    # The size window's spinners bound each other (magnet z-stage
+    # preferences parity): min cannot pass max, max cannot dip under
+    # min — the editors' live limits track the opposite trait.
     Item("object.roi_analysis.ai_min_size", label="min size",
-         editor=RangeEditor(low=0, high=500, mode="spinner",
-                            auto_set=True),
+         editor=RangeEditor(low=0, high_name="ai_max_size",
+                            mode="spinner", auto_set=True),
          tooltip="Hide candidates whose mean ellipse diameter (px) "
                  "is below this. Applies to all candidates."),
+    Item("object.roi_analysis.ai_max_size", label="max size",
+         editor=RangeEditor(low_name="ai_min_size",
+                            high=AI_SIZE_FILTER_CEILING_PX,
+                            mode="spinner", auto_set=True),
+         tooltip="Hide candidates whose mean ellipse diameter (px) "
+                 "is above this. Applies to all candidates."),
     Item("object.roi_analysis.ai_output_kind", label="as",
          tooltip="Shape an accepted candidate becomes: the traced "
                  "polygon outline, or the fitted ellipse."),

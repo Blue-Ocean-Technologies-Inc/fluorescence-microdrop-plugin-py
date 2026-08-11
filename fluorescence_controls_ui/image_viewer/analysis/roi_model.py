@@ -15,7 +15,8 @@ from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
 from .consts import (
     AI_DRIFT_CHECK_INTERVAL_DEFAULT, AI_MIN_SIZE_DEFAULT_PX,
-    AI_SIGNIFICANCE_DEFAULT, BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS,
+    AI_SIGNIFICANCE_DEFAULT, AI_SIZE_FILTER_CEILING_PX,
+    BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER, BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_BOUNDS_MAD,
     OUTLIER_THRESHOLD_MAD, OUTLIER_WINDOW_BOUNDS_PTS,
     OUTLIER_WINDOW_PTS, RING_GAP_BOUNDS_PX, RING_GAP_PX,
@@ -463,7 +464,24 @@ class RoiAnalysisModel(HasTraits):
     #: needs to survive (click-sourced candidates are exempt).
     ai_significance = Int(AI_SIGNIFICANCE_DEFAULT)
     #: Size filter: minimum mean ellipse diameter (px) a candidate needs.
-    ai_min_size = Int(AI_MIN_SIZE_DEFAULT_PX)
+    #: Candidate size window (mean ellipse diameter, px). Coupled: the
+    #: observers below drag one bound along when the other crosses it,
+    #: so min can never sit above max (mutually-referencing dynamic
+    #: Range bounds would recurse — traits evaluates them on read).
+    ai_min_size = Range(0, AI_SIZE_FILTER_CEILING_PX,
+                        AI_MIN_SIZE_DEFAULT_PX)
+    ai_max_size = Range(0, AI_SIZE_FILTER_CEILING_PX,
+                        AI_SIZE_FILTER_CEILING_PX)
+
+    @observe("ai_min_size")
+    def _keep_max_size_at_or_above_min(self, event):
+        if self.ai_max_size < event.new:
+            self.ai_max_size = event.new
+
+    @observe("ai_max_size")
+    def _keep_min_size_at_or_below_max(self, event):
+        if self.ai_min_size > event.new:
+            self.ai_min_size = event.new
     #: Geometry accepted candidates are converted to.
     ai_output_kind = Enum("polygon", "ellipse")
     #: How many images between drift re-checks while tracking.
