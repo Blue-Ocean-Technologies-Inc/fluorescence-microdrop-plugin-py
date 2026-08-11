@@ -107,7 +107,8 @@ class FluorescenceImageViewerModel(HasTraits):
     #: Loaded pixel data (numpy uint16/uint8, gray or RGB), or None.
     array = Any()
 
-    #: "name — WxH 16-bit gray" summary of the loaded image.
+    #: "name — WxH 16-bit gray" summary of the loaded image (shown in
+    #: the dock pane's title).
     info_text = Str()
 
     #: "(x, y) = value" readout under the cursor (true stored values).

@@ -644,11 +644,10 @@ buttons_group = HGroup(
               tooltip="Remove all ROIs")),
 
     UItem("position_text", style="readonly"),
-    # Springy: the readout's size policy is Ignored (a long filename
-    # must not dictate the pane width), so it only shows if the layout
-    # hands it the row's leftover width — which the fixed spacers above
-    # otherwise absorb (their Qt policy is Minimum, i.e. growable).
-    UItem("info_text", style="readonly", springy=True),
+    # Takes the row's leftover width so the cluster gaps above stay at
+    # their fixed 12 px (the numeric spacers are growable Minimum
+    # spacer items). The image summary itself lives in the pane title.
+    spring,
 )
 
 

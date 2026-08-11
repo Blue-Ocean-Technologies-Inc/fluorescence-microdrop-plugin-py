@@ -42,18 +42,22 @@ logger = get_logger(__name__)
 _dock_pane_name = "Image Viewer"
 
 
-def _title_for(browsed_directory: str) -> str:
+def _title_for(browsed_directory: str, info_text: str) -> str:
     """The pane title for the browsed folder — "Name - folder", the
-    device-viewer dock pane's convention. The default captures dir would
+    device-viewer dock pane's convention — plus the loaded image's
+    summary (the model's ``info_text``). The default captures dir would
     just read "captures", so its parent (the experiment folder) names it
     instead; '' (nothing resolved yet) keeps the bare name."""
-    if not browsed_directory:
-        return _dock_pane_name
-    folder = Path(browsed_directory)
-    display = (folder.parent.name
-               if folder.name == CAPTURES_DIR_NAME and folder.parent.name
-               else folder.name)
-    return _dock_pane_name + "\t\t-\t\t" + display
+    title = _dock_pane_name
+    if browsed_directory:
+        folder = Path(browsed_directory)
+        display = (folder.parent.name
+                   if folder.name == CAPTURES_DIR_NAME and folder.parent.name
+                   else folder.name)
+        title += "\t\t-\t\t" + display
+    if info_text:
+        title += "\t\t-\t\t" + info_text
+    return title
 
 
 class FluorescenceImageViewerDockPane(TraitsDockPane):
@@ -144,9 +148,10 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self.analysis_controller.drain_results()
         self.analysis_controller.flush_stats()
 
-    @observe("model:browsed_directory")
+    @observe("model:browsed_directory, model:info_text")
     def _update_title(self, event):
-        self.name = _title_for(event.new)
+        self.name = _title_for(self.model.browsed_directory,
+                               self.model.info_text)
 
     @observe("model:playing")
     def _sync_slideshow_timer(self, event):
