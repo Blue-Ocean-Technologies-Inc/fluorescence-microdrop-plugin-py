@@ -39,7 +39,7 @@ _FIGURE_FIELDS = ("x_auto", "x_min", "x_max", "y_auto", "y_min",
                   "outlier_window", "interpolate_gaps",
                   "smooth_method", "savgol_window",
                   "savgol_order", "butter_order", "butter_cutoff",
-                  "x_axis", "heater_sensor",
+                  "x_axis", "heater_sensor", "heater_window_ms",
                   "show_method_group", "show_metrics_group")
 _STYLE_FIELDS = ("color", "line_style", "marker", "marker_size",
                  "visible", "alpha")

@@ -629,6 +629,7 @@ class RoiAnalysisController(HasTraits):
              "analysis_model:session:figure:interpolate_gaps, "
              "analysis_model:session:figure:x_axis, "
              "analysis_model:session:figure:heater_sensor, "
+             "analysis_model:session:figure:heater_window_ms, "
              "analysis_model:session:heater_log_dir, "
              "analysis_model:session:figure:show_method_group, "
              "analysis_model:session:figure:show_metrics_group, "
@@ -805,7 +806,9 @@ class RoiAnalysisController(HasTraits):
         self._ensure_heater_samples()
         temperatures = (temperature_at(session.heater_samples,
                                        session.figure.heater_sensor,
-                                       times)
+                                       times,
+                                       session.figure.heater_window_ms
+                                       / 1000.0)
                         if session.heater_samples
                         else [math.nan] * len(times))
         rows = []

@@ -81,7 +81,8 @@ def derive_series(session, filtered_paths):
     start_time = times[0]
     figure = session.figure
     x_values = (temperature_at(session.heater_samples,
-                               figure.heater_sensor, times)
+                               figure.heater_sensor, times,
+                               figure.heater_window_ms / 1000.0)
                 if figure.x_axis == "temperature"
                 else [capture_time - start_time
                       for capture_time in times])

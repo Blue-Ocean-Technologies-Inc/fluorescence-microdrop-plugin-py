@@ -19,7 +19,8 @@ from .consts import (
     BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER, BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_BOUNDS_MAD,
     OUTLIER_THRESHOLD_MAD, OUTLIER_WINDOW_BOUNDS_PTS,
-    OUTLIER_WINDOW_PTS, HEATER_SENSOR_MEAN, RING_GAP_BOUNDS_PX, RING_GAP_PX,
+    OUTLIER_WINDOW_PTS, HEATER_SENSOR_MEAN, HEATER_WINDOW_BOUNDS_MS,
+    HEATER_WINDOW_MS, RING_GAP_BOUNDS_PX, RING_GAP_PX,
     RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, ROI_ALPHA_BOUNDS_PCT,
     ROLLING_BALL_RADIUS_BOUNDS_PX, ROLLING_BALL_RADIUS_PX,
     SAVGOL_ORDER, SAVGOL_ORDER_BOUNDS, SAVGOL_WINDOW_BOUNDS_PTS,
@@ -158,6 +159,11 @@ class FigureSettings(HasTraits):
     #: Which thermistor the temperature axis reads; "mean" averages
     #: every sensor on each log line.
     heater_sensor = Str(HEATER_SENSOR_MEAN)
+    #: How generous the time join is (ms): a capture's temperature is
+    #: the mean of every heater sample within ±window/2 of it. 0 means
+    #: exact — linear interpolation at the capture instant.
+    heater_window_ms = Range(*HEATER_WINDOW_BOUNDS_MS,
+                             HEATER_WINDOW_MS, mode="spinner")
 
     #: Which of the Fit tab's groups are open — display state, but
     #: persisted so the panel reopens the way it was left.

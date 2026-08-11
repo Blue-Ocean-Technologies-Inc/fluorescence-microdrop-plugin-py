@@ -34,9 +34,15 @@ follow the chosen x. The CSV export always carries a
   so interpolation has bracketing points. Malformed lines skipped;
   missing/empty folder → `[]`.
 - `sensors_in(samples)` → sorted sensor names (feeds the dropdown).
-- `temperature_at(samples, sensor, epochs)` → linear interpolation
-  of the named sensor ("mean" = per-line mean of all sensors) at
-  each epoch; NaN outside the sampled range.
+- `temperature_at(samples, sensor, epochs, window_s=0)` → the
+  temperature of the named sensor ("mean" = per-line mean of all
+  sensors) at each epoch. With a window — the user's say on how
+  generous the time join may be — the mean of every sample within
+  ±window/2, NaN when none falls inside; with none, linear
+  interpolation at the instant, NaN outside the sampled range. The
+  user sets the window in **milliseconds**
+  (`FigureSettings.heater_window_ms`, spinner beside the sensor
+  dropdown, persisted); callers convert to seconds.
 
 ### Model (`roi_model.py`)
 
@@ -94,8 +100,11 @@ mtimes and cannot join to anything.
 Reads a captures folder, synthesizes a 1 Hz heater log across its
 capture span — hold ~20 °C, linear ramp to ~95 °C, hold — two
 near-identical thermistors with light noise, filename from the
-first stamp. Run once to create
-`Experiments/2026_08_11-19_34_50/heater_logs/20260504_182844.jsonl`.
+first stamp. Timing mischief is planted for the averaging window:
+a few hundred ms of clock jitter on every line, and two dead spans
+(30 s and 75 s) where a narrow window honestly gaps. Run once to
+create
+`Experiments/2026_08_05-16_09_10/heater_logs/20251203_084404.jsonl`.
 
 ## Testing
 

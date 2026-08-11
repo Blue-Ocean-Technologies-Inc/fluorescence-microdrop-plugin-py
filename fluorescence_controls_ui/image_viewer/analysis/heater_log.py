@@ -106,16 +106,31 @@ def _sensor_value(temperatures, sensor):
     return math.nan if value is None else value
 
 
-def temperature_at(samples, sensor, epochs):
-    """``sensor``'s temperature linearly interpolated at each epoch —
-    NaN outside the sampled range (an extrapolated temperature would
-    be invented data) or where no sample carries the sensor."""
+def temperature_at(samples, sensor, epochs, window_s=0.0):
+    """``sensor``'s temperature at each epoch. With a ``window_s``,
+    the mean of every sample within ±window_s/2 — the user's say on
+    how generous the match in time may be — and NaN when none falls
+    inside (a too-narrow window near a logger dropout is a gap, not
+    a guess). With none, linear interpolation at the instant — NaN
+    outside the sampled range (an extrapolated temperature would be
+    invented data) or where no sample carries the sensor."""
     pairs = [(epoch, value) for epoch, temperatures in samples
              if (value := _sensor_value(temperatures, sensor)) == value]
     times = [epoch for epoch, _value in pairs]
+    half = window_s / 2.0
     results = []
     for query in epochs:
-        if not pairs or query < times[0] or query > times[-1]:
+        if not pairs:
+            results.append(math.nan)
+            continue
+        if window_s > 0:
+            low = bisect.bisect_left(times, query - half)
+            high = bisect.bisect_right(times, query + half)
+            inside = [value for _epoch, value in pairs[low:high]]
+            results.append(sum(inside) / len(inside) if inside
+                           else math.nan)
+            continue
+        if query < times[0] or query > times[-1]:
             results.append(math.nan)
             continue
         index = bisect.bisect_left(times, query)
