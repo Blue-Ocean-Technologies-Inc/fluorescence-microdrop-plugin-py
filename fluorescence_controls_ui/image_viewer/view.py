@@ -47,7 +47,6 @@ from .scale_layer import ScaleCanvasLayer
 #: Inset of the scale bar from the viewport's bottom-left corner.
 SCALE_BAR_MARGIN_PX = 12
 
-
 #: The scale bar's backdrop and lettering, in viewport pixels:
 #: padding around the bar, the backdrop height, the end ticks, and
 #: the text row above the bar.
@@ -451,10 +450,10 @@ class _ImageCanvasEditor(QtEditor):
         self.control.set_zoom_step(event.new)
 
     def _on_window_changed(self, event):
-        self._redraw()   # window edit: keep the user's zoom
+        self._redraw()  # window edit: keep the user's zoom
 
     def _on_correction_changed(self, event):
-        self._redraw()   # a different frame to show, same zoom
+        self._redraw()  # a different frame to show, same zoom
 
     def _on_fit_request(self, event):
         self.control.fit()
@@ -709,7 +708,8 @@ images_group = VGroup(
                  "(stats batch, plot, export, drift tracking). Viewing "
                  "and ROI drawing on it still work; the mark is saved "
                  "with the experiment."),
-    HGroup(
+
+    VGroup(
         Label("Exclude all images:"),
         UItem("object.roi_analysis.exclude_before_button",
               tooltip="Exclude every image before the shown one "
@@ -717,8 +717,7 @@ images_group = VGroup(
         UItem("object.roi_analysis.exclude_after_button",
               tooltip="Exclude every image after the shown one "
                       "from the analysis"),
-    ),
-    HGroup(
+
         Label("Include all images:"),
         UItem("object.roi_analysis.include_before_button",
               tooltip="Clear the exclusion mark from every image "
@@ -726,6 +725,9 @@ images_group = VGroup(
         UItem("object.roi_analysis.include_after_button",
               tooltip="Clear the exclusion mark from every image "
                       "after the shown one"),
+
+        columns=3,
+
     ),
     visible_when="show_images",
     show_border=True,
@@ -804,7 +806,7 @@ analysis_toolbar = VGroup(
               on_glyph=ICON_CROP, off_glyph=ICON_CROP,
               tooltip="Show the background ring each ROI's correction "
                       "is measured from")),
-    "12",   # select/edit the existing ROIs
+    "12",  # select/edit the existing ROIs
     UItem("object.roi_analysis.edit_mode",
           editor=IconToggleEditor(
               on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
@@ -830,7 +832,7 @@ analysis_toolbar = VGroup(
               glyph=ICON_PASTE,
               tooltip="Paste the copied shape as a new ROI, offset "
                       "from the original (Ctrl+V)")),
-    "12",   # AI tools
+    "12",  # AI tools
     UItem("object.roi_analysis.ai_pick_button",
           editor=IconModeButtonEditor(
               glyph="wand_shine", mode="ai_pick",
@@ -922,7 +924,6 @@ correction_group = Group(
     columns=3,
 )
 
-
 # AI (SAM) detection options: significance/size filters over the last
 # pick/detect/track pass's candidates, the shape accepted candidates
 # become, and the drift re-check interval, plus Accept/Clear over the
@@ -965,11 +966,11 @@ ai_group = Group(
                  "Larger N = faster tracking for slow drift."),
     HGroup(
         UItem("object.roi_analysis.ai_accept_button",
-          editor=IconButtonEditor(
-              glyph=ICON_SAVE,
-              tooltip="Accept the filter-passing candidates as "
-                      "ROIs"),
-          visible_when="analysis.ai_accept_count > 0"),
+              editor=IconButtonEditor(
+                  glyph=ICON_SAVE,
+                  tooltip="Accept the filter-passing candidates as "
+                          "ROIs"),
+              visible_when="analysis.ai_accept_count > 0"),
         UItem("object.roi_analysis.ai_clear_button",
               editor=IconButtonEditor(
                   glyph=ICON_CANCEL,
@@ -989,7 +990,6 @@ advanced_settings_group = VGroup(
     ai_group,
     visible_when="show_advanced_settings",
 )
-
 
 ImageViewerView = View(
     HGroup(
