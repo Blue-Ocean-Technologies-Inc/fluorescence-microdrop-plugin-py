@@ -640,6 +640,48 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.current_image_path = \
             self.viewer_model.current_path
 
+    # ------------------------------------------------------------------ #
+    # Exclude-from-analysis (sidebar checkbox <-> session)                 #
+    # ------------------------------------------------------------------ #
+    #: Guards the checkbox observer while the mirror below writes it.
+    _syncing_excluded = Bool(False)
+
+    @observe("analysis_model:current_image_path, analysis_model:session")
+    def _mirror_current_image_excluded(self, event):
+        """Point the checkbox at the displayed image's exclusion state
+        (image navigation and session swaps both land here)."""
+        current = self.analysis_model.current_image_path
+        self._syncing_excluded = True
+        try:
+            self.analysis_model.current_image_excluded = (
+                bool(current) and self.session.is_excluded(current))
+        finally:
+            self._syncing_excluded = False
+
+    @observe("analysis_model:current_image_excluded")
+    def _on_current_image_excluded(self, event):
+        """The checkbox was toggled by the user: mark/unmark the
+        displayed image and re-run whatever is consuming the series."""
+        if self._syncing_excluded:
+            return
+        current = self.analysis_model.current_image_path
+        if not current:
+            return
+        name = Path(current).name
+        excluded = list(self.session.excluded_images)
+        if event.new and name not in excluded:
+            self.session.excluded_images = excluded + [name]
+        elif not event.new and name in excluded:
+            self.session.excluded_images = [entry for entry in excluded
+                                            if entry != name]
+        else:
+            return
+        # The plot derives its series from the (now different) included
+        # set; stats_revision is what it redraws on.
+        self.session.stats_revision += 1
+        self._save_config()
+        self._restart_batch_if_running()
+
     def _write_export(self):
         self._pending_export = False
         directory = self._experiment_directory()

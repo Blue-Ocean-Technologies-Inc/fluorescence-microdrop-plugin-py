@@ -535,6 +535,11 @@ class RoiAnalysisModel(HasTraits):
     filtered_paths = List(Str)
     current_image_path = Str()
 
+    #: Whether the DISPLAYED image is excluded from analysis — the
+    #: sidebar checkbox edits this; RoiAnalysisController mirrors it
+    #: against session.excluded_images in both directions.
+    current_image_excluded = Bool(False)
+
 
 #: The single analysis state shared by the viewer pane and the plot pane
 #: (both owned by this plugin) — the media_capture_event_model pattern.

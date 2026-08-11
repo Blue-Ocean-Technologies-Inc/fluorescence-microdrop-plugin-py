@@ -636,6 +636,12 @@ images_group = VGroup(
          editor=RangeEditor(low=1, high_name="object.max_image_number",
                             mode="slider"),
          tooltip="Drag through the image group's images"),
+    Item("object.roi_analysis.current_image_excluded",
+         label="Exclude from analysis",
+         tooltip="Ignore the shown image in the ROI calculations "
+                 "(stats batch, plot, export, drift tracking). Viewing "
+                 "and ROI drawing on it still work; the mark is saved "
+                 "with the experiment."),
     visible_when="show_images",
     show_border=True,
 )
