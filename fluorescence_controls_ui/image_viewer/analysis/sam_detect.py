@@ -332,6 +332,15 @@ class OsamSession(HasTraits):
             if self._model is None:
                 self._model = osam.apis.get_model_type_by_name(
                     self._model_name)()
+                # osam's own "Initialized inference sessions" line only
+                # shows the LAST session's providers (the decoder, kept
+                # on CPU on purpose) — log the true per-session split.
+                providers = {
+                    key: session.get_providers()[0]
+                    for key, session
+                    in self._model._inference_sessions.items()}
+                logger.info(f"SAM {self._model_name} session providers: "
+                            f"{providers}")
             return self._model
 
     def ensure_embedding(self, image, image_id):
