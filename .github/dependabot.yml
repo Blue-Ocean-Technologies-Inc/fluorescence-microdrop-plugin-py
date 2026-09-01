@@ -1,0 +1,21 @@
+# Keeps the repo's own tooling current: action majors in .github/workflows
+# (an end-of-life major breaks the publish job) and the pre-commit hook revs.
+# Both land as chore(deps) commits, which never trigger a release.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(deps)"
