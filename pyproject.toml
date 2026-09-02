@@ -54,4 +54,8 @@ version_provider = "pep621"
 tag_format = "v$version"
 bump_message = "chore: release v$new_version [skip ci]"
 update_changelog_on_bump = true
+# Repo-root Jinja template: release headers link to the GitHub release and
+# every entry links to its commit (see the template header for the variables).
+template = "CHANGELOG.md.j2"
+extras = { repo_url = "https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py" }
 version_files = ["pyproject.toml:^version"]
