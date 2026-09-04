@@ -1,5 +1,5 @@
 _commit: v0.1.1
-_src_path: C:/Users/Info/PycharmProjects/microdrop-plugin-template
+_src_path: https://github.com/Blue-Ocean-Technologies-Inc/microdrop-plugin-template.git
 anchor_package: fluorescence_controller
 backend_group_label: Fluorescence backend (board driver)
 backend_group_name: fluorescence_backend
