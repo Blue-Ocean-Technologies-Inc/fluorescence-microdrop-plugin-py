@@ -1,0 +1,55 @@
+# Shared ruff baseline for the MicroDrop repos. Copy to <repo>/ruff.toml;
+# repo-specific additions (extend-exclude, per-file-ignores,
+# known-first-party) go below the copied block. Source of truth:
+# https://github.com/Blue-Ocean-Technologies-Inc/microdrop-dev-hooks
+
+line-length = 88
+target-version = "py312"
+src = ["."]
+
+[lint]
+select = ["CPY001", "E", "F", "W", "I"]
+# CPY001 is a preview rule; explicit-preview-rules keeps every other rule on
+# stable behavior.
+preview = true
+explicit-preview-rules = true
+
+[lint.flake8-copyright]
+# The authoritative header text lives in AGENTS.md; this regex pins the
+# owner but accepts any year range, so there is no annual churn.
+notice-rgx = '\(C\) Copyright \d{4}-\d{4} Blue Ocean Technologies, Inc\., Toronto, ON'
+# Empty files (bare __init__.py) need no notice.
+min-file-size = 1
+
+[lint.isort]
+# AGENTS.md import order: standard -> third-party -> enthought -> other
+# microdrop packages (first-party) -> microdrop_style -> microdrop_utils
+# -> local relative -> logger last.
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "enthought",
+    "first-party",
+    "microdrop-style",
+    "microdrop-utils",
+    "local-folder",
+    "logger",
+]
+# Repo-specific: Microdrop packages are importable via the pixi-microdrop
+# workspace, not from this tree, so ruff and the stamper need telling they
+# are first-party ("Microdrop package imports.").
+known-first-party = [
+    "device_viewer", "dropbot_controller", "dropbot_preferences_ui",
+    "dropbot_protocol_controls", "dropbot_status_and_controls",
+    "dropbot_tools_menu", "electrode_controller", "manual_controls",
+    "message_router", "microdrop_application", "microdrop_status_bar",
+    "peripheral_device_controller_base", "pluggable_protocol_tree",
+    "plugin_management", "template_status_and_controls",
+]
+
+[lint.isort.sections]
+enthought = ["apptools", "envisage", "pyface", "traits", "traitsui"]
+"microdrop-style" = ["microdrop_style"]
+"microdrop-utils" = ["microdrop_utils"]
+logger = ["logger"]

@@ -1,22 +1,46 @@
-# Local guardrails mirroring the CI gates. One-time setup per clone:
-#   pre-commit install --hook-type commit-msg --hook-type pre-commit
+# Local guardrails mirroring the CI gates. One-time setup per clone (from
+# pixi-microdrop/microdrop-py): `pixi run setup-hooks`.
 repos:
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.18.0
     hooks:
-      - id: commitizen        # commit-msg: enforce Conventional Commits
+      - id: commitizen
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-      - id: check-ast         # staged .py files must parse
+      - id: check-ast
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=500]
         exclude: ^ASI_SDK/
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: insert-license
+        files: \.py$
+        args: [--license-filepath, .copyright-header.txt, --comment-style, "#"]
+  - repo: https://github.com/Blue-Ocean-Technologies-Inc/microdrop-dev-hooks
+    rev: v0.1.0
+    hooks:
+      - id: stamp-import-sections
+      - id: forbid-scratch-files
   - repo: local
     hooks:
-      - id: forbid-scratch-files
-        name: forbid scratch/artifact files
-        entry: scratch/artifact paths must never be committed
-        language: fail
-        files: (^|/)(\.task-report\.md$|\.superpowers/|__pycache__/|\.pixi/)
+      - id: import-linter
+        name: import-linter (plugin decoupling contract)
+        # Whole-graph check. Runs in the pixi-microdrop `test` environment,
+        # because the contract distinguishes Microdrop consts modules from
+        # internals and import-linter can only see that when the Microdrop
+        # packages are importable (they are, via the workspace's editable
+        # src install). This assumes the desk layout: this repo cloned under
+        # pixi-microdrop/microdrop-py/.
+        entry: pixi run --manifest-path ../pyproject.toml -e test lint-imports --config .importlinter
+        language: system
+        pass_filenames: false
+        always_run: true

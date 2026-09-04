@@ -1,0 +1,33 @@
+_commit: v0.1.1
+_src_path: C:/Users/Info/PycharmProjects/microdrop-plugin-template
+anchor_package: fluorescence_controller
+backend_group_label: Fluorescence backend (board driver)
+backend_group_name: fluorescence_backend
+backend_plugins:
+- fluorescence_controller.plugin:FluorescenceControllerPlugin
+description: 'MicroDrop fluorescence plugin: board driver and status/controls UI'
+device_label: Fluorescence
+device_name: fluorescence
+entry_point_name: fluorescence
+extra_force_includes:
+    ASI_SDK: fluorescence_controls_ui/ASI_SDK
+has_redis_gated_tests: false
+large_file_exclude: ^ASI_SDK/
+microdrop_dev_hooks_rev: v0.1.0
+optional_extras:
+    ai:
+    - osam
+package_name: fluorescence-microdrop-plugin
+packages:
+- fluorescence_controller
+- fluorescence_controls_ui
+- fluorescence_protocol_controls
+run_dependencies:
+    mpremote: '>=1.20'
+    scipy: '*'
+ui_group_label: Fluorescence UI (status/controls dock-pane + statusbar icon)
+ui_group_name: fluorescence_ui
+ui_plugins:
+- fluorescence_controls_ui.plugin:FluorescenceControlsUiPlugin
+- fluorescence_protocol_controls.plugin:FluorescenceProtocolControlsPlugin
+version: 2.5.0

@@ -1,0 +1,57 @@
+[importlinter]
+root_packages =
+    fluorescence_controller
+    fluorescence_controls_ui
+    fluorescence_protocol_controls
+    device_viewer
+    dropbot_controller
+    dropbot_preferences_ui
+    dropbot_protocol_controls
+    dropbot_status_and_controls
+    dropbot_tools_menu
+    electrode_controller
+    logger
+    manual_controls
+    message_router
+    microdrop_application
+    microdrop_status_bar
+    microdrop_style
+    microdrop_utils
+    peripheral_device_controller_base
+    pluggable_protocol_tree
+    plugin_management
+    template_status_and_controls
+
+[importlinter:contract:no-microdrop-plugin-internals]
+name = Only consts may be imported from Microdrop plugins
+type = forbidden
+source_modules =
+    fluorescence_controller
+    fluorescence_controls_ui
+    fluorescence_protocol_controls
+forbidden_modules =
+    device_viewer
+    dropbot_controller
+    dropbot_preferences_ui
+    dropbot_protocol_controls
+    dropbot_status_and_controls
+    dropbot_tools_menu
+    electrode_controller
+    manual_controls
+    microdrop_application
+    microdrop_status_bar
+    plugin_management
+ignore_imports =
+    ** -> *.consts
+    ** -> microdrop_application.helpers
+    ** -> microdrop_application.dialogs.**
+    # --- seeded debt: existing violations, may only shrink ---
+
+[importlinter:contract:plugin-layers]
+name = UI and protocol-controls sit above the backend and stay independent
+type = layers
+layers =
+    fluorescence_controls_ui | fluorescence_protocol_controls
+    fluorescence_controller
+ignore_imports =
+    # --- seeded debt: existing violations, may only shrink ---

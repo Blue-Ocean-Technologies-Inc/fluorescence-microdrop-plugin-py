@@ -8,3 +8,5 @@ build/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
+.pytest_cache/
+.ruff_cache/

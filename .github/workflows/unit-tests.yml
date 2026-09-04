@@ -1,0 +1,60 @@
+name: Unit tests
+
+# Pure-unit pytest partition on every PR. Plugin repos are not pixi
+# workspaces: tests run inside pixi-microdrop's `test` environment (Microdrop
+# src on the path via the editable install, no released plugin packages),
+# with this checkout placed where the desk workflow clones it.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the launcher workspace (with Microdrop src)
+        uses: actions/checkout@v7
+        with:
+          repository: Blue-Ocean-Technologies-Inc/pixi-microdrop
+          ref: master
+          submodules: recursive
+          path: launcher
+
+      - name: Check out this plugin where the workspace expects it
+        uses: actions/checkout@v7
+        with:
+          path: launcher/microdrop-py/${{ github.event.repository.name }}
+
+      - uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          manifest-path: launcher/microdrop-py/pyproject.toml
+          environments: test
+          locked: true
+          cache: true
+
+      - name: Run the pure-unit partition
+        working-directory: launcher/microdrop-py/${{ github.event.repository.name }}
+        env:
+          QT_QPA_PLATFORM: offscreen
+        # continue-on-error until this repo is green on main; then remove it
+        # so the job gates merges.
+        continue-on-error: true
+        run: >
+          pixi run --manifest-path ../pyproject.toml -e test python -m pytest . -q
+          --ignore-glob="**/tests_with_redis_server_need"
+          --ignore-glob="**/tests_with_dropbot_connection_need"
+
+      - name: Import-linter contract
+        working-directory: launcher/microdrop-py/${{ github.event.repository.name }}
+        run: pixi run --manifest-path ../pyproject.toml -e test lint-imports --config .importlinter
