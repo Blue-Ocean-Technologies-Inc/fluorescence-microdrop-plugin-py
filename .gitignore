@@ -10,3 +10,6 @@ build/
 !.pixi/config.toml
 .pytest_cache/
 .ruff_cache/
+
+# Agent planning artefacts stay local
+docs/superpowers/
