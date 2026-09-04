@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for `FluorescenceChainHandler.on_pre_step` and
 `on_post_step` (issue #6, Task 7): the per-entry burst execution loop —
 apply camera settings, publish the LED state, wait for the executor's
@@ -9,14 +19,20 @@ faked wholesale (it is imported lazily inside `_run_phase`, mirroring
 `controller.run_capture`'s pattern), and the publisher + `ctx.wait_for`
 are recorded fakes.
 """
+
+# Standard library imports.
 import json
 import sys
 
+# Third-party imports.
 import pytest
 
+# Microdrop package imports.
 import fluorescence_controls_ui
 from fluorescence_controller.consts import (
-    ALL_LEDS_OFF, FLUORESCENCE_APPLIED, PROTOCOL_STEP_FLUORESCENCE,
+    ALL_LEDS_OFF,
+    FLUORESCENCE_APPLIED,
+    PROTOCOL_STEP_FLUORESCENCE,
 )
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 from fluorescence_protocol_controls.consts import LED_STABILIZATION_S
@@ -25,16 +41,16 @@ from fluorescence_protocol_controls.protocol_columns import (
 )
 from fluorescence_protocol_controls.protocol_columns.chain_column import (
     FluorescenceChainHandler,
-)
-from microdrop_utils import dramatiq_pub_sub_helpers
-from pluggable_protocol_tree.models.row import BaseRow, build_row_type
-
-from fluorescence_protocol_controls.protocol_columns.chain_column import (
     make_fluorescence_chain_column,
 )
+from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
-ENTRY_KW = dict(wavelength="Blue (460 nm)", intensity=50, frequency=40000,
-                exposure_ms=10.0, gain=0)
+# Microdrop utils imports.
+from microdrop_utils import dramatiq_pub_sub_helpers
+
+ENTRY_KW = dict(
+    wavelength="Blue (460 nm)", intensity=50, frequency=40000, exposure_ms=10.0, gain=0
+)
 
 FAKE_FOLDER = "FAKE_FOLDER"
 
@@ -101,7 +117,8 @@ def fake_capture_service(monkeypatch):
 
     def burst_folder(step_desc=None, dotted_id=None, step_id=None):
         calls["burst_folder"].append(
-            dict(step_desc=step_desc, dotted_id=dotted_id, step_id=step_id))
+            dict(step_desc=step_desc, dotted_id=dotted_id, step_id=step_id)
+        )
         return FAKE_FOLDER
 
     def save_entry_capture(entry, folder):
@@ -112,10 +129,10 @@ def fake_capture_service(monkeypatch):
     fake.burst_folder = burst_folder
     fake.save_entry_capture = save_entry_capture
 
-    monkeypatch.setitem(
-        sys.modules, "fluorescence_controls_ui.capture_service", fake)
+    monkeypatch.setitem(sys.modules, "fluorescence_controls_ui.capture_service", fake)
     monkeypatch.setattr(
-        fluorescence_controls_ui, "capture_service", fake, raising=False)
+        fluorescence_controls_ui, "capture_service", fake, raising=False
+    )
     return calls
 
 
@@ -145,23 +162,23 @@ def publisher_calls(monkeypatch):
         calls.append(kw)
 
     monkeypatch.setattr(
-        column_module.protocol_set_fluorescence_publisher, "publish",
-        fake_publish)
+        column_module.protocol_set_fluorescence_publisher, "publish", fake_publish
+    )
     return calls
 
 
-def test_fake_capture_service_actually_intercepts_the_lazy_import(
-        fake_capture_service):
+def test_fake_capture_service_actually_intercepts_the_lazy_import(fake_capture_service):
     # Proves the monkeypatch mechanism works BEFORE relying on it below:
     # exactly what on_pre_step's lazy import statement would resolve to.
     from fluorescence_controls_ui import capture_service
-    assert capture_service is sys.modules[
-        "fluorescence_controls_ui.capture_service"]
+
+    assert capture_service is sys.modules["fluorescence_controls_ui.capture_service"]
     assert capture_service.burst_folder() == FAKE_FOLDER
 
 
 def test_two_ticked_entries_run_in_order_one_folder(
-        row_type, fake_capture_service, publisher_calls):
+    row_type, fake_capture_service, publisher_calls
+):
     Row, col = row_type
     row = Row()
     row.name = "Step A"
@@ -174,27 +191,39 @@ def test_two_ticked_entries_run_in_order_one_folder(
 
     assert len(fake_capture_service["burst_folder"]) == 1
     assert fake_capture_service["burst_folder"][0] == dict(
-        step_desc="Step A_start", dotted_id=row.dotted_path(), step_id=None)
+        step_desc="Step A_start", dotted_id=row.dotted_path(), step_id=None
+    )
 
     assert [e.label for e in fake_capture_service["apply"]] == ["a", "c"]
 
     assert len(publisher_calls) == 2
     assert publisher_calls[0] == dict(
-        light_on=True, led=entries[0].led_index, duty=entries[0].intensity,
-        frequency=entries[0].frequency, settle_s=LED_STABILIZATION_S)
+        light_on=True,
+        led=entries[0].led_index,
+        duty=entries[0].intensity,
+        frequency=entries[0].frequency,
+        settle_s=LED_STABILIZATION_S,
+    )
     assert publisher_calls[1] == dict(
-        light_on=True, led=entries[2].led_index, duty=entries[2].intensity,
-        frequency=entries[2].frequency, settle_s=LED_STABILIZATION_S)
+        light_on=True,
+        led=entries[2].led_index,
+        duty=entries[2].intensity,
+        frequency=entries[2].frequency,
+        settle_s=LED_STABILIZATION_S,
+    )
 
     assert ctx.wait_for_calls == [
-        (FLUORESCENCE_APPLIED, 5.0), (FLUORESCENCE_APPLIED, 5.0)]
+        (FLUORESCENCE_APPLIED, 5.0),
+        (FLUORESCENCE_APPLIED, 5.0),
+    ]
 
-    assert [(e.label, folder) for e, folder in fake_capture_service["save"]] \
-        == [("a", FAKE_FOLDER), ("c", FAKE_FOLDER)]
+    assert [(e.label, folder) for e, folder in fake_capture_service["save"]] == [
+        ("a", FAKE_FOLDER),
+        ("c", FAKE_FOLDER),
+    ]
 
 
-def test_preview_mode_is_a_noop(row_type, fake_capture_service,
-                                publisher_calls):
+def test_preview_mode_is_a_noop(row_type, fake_capture_service, publisher_calls):
     Row, col = row_type
     row = Row()
     col.model.set_value(row, [e.model_dump() for e in [_entry("a")]])
@@ -209,7 +238,8 @@ def test_preview_mode_is_a_noop(row_type, fake_capture_service,
 
 
 def test_preview_mode_reads_from_ctx_protocol_not_ctx_itself(
-        row_type, fake_capture_service, publisher_calls):
+    row_type, fake_capture_service, publisher_calls
+):
     """Regression pin: `on_pre_step` receives a `StepContext`, which has
     NO `preview_mode` of its own — the real flag lives on
     `ctx.protocol` (a `ProtocolContext`). A ctx object that lacks its
@@ -242,8 +272,7 @@ def test_preview_mode_reads_from_ctx_protocol_not_ctx_itself(
     assert ctx.wait_for_calls == []
 
 
-def test_empty_chain_is_a_noop(row_type, fake_capture_service,
-                               publisher_calls):
+def test_empty_chain_is_a_noop(row_type, fake_capture_service, publisher_calls):
     Row, col = row_type
     row = Row()
 
@@ -255,12 +284,10 @@ def test_empty_chain_is_a_noop(row_type, fake_capture_service,
     assert ctx.wait_for_calls == []
 
 
-def test_all_unticked_chain_is_a_noop(row_type, fake_capture_service,
-                                      publisher_calls):
+def test_all_unticked_chain_is_a_noop(row_type, fake_capture_service, publisher_calls):
     Row, col = row_type
     row = Row()
-    col.model.set_value(
-        row, [e.model_dump() for e in [_entry("a", run=False)]])
+    col.model.set_value(row, [e.model_dump() for e in [_entry("a", run=False)]])
 
     ctx = _Ctx()
     FluorescenceChainHandler().on_pre_step(row, ctx)
@@ -271,7 +298,8 @@ def test_all_unticked_chain_is_a_noop(row_type, fake_capture_service,
 
 
 def test_wait_for_timeout_propagates_and_aborts_the_loop(
-        row_type, fake_capture_service, publisher_calls):
+    row_type, fake_capture_service, publisher_calls
+):
     Row, col = row_type
     row = Row()
     entries = [_entry("a"), _entry("b")]
@@ -291,8 +319,10 @@ def test_wait_for_timeout_propagates_and_aborts_the_loop(
 
 # --- capture_start / capture_end phase routing --------------------------
 
+
 def test_pre_step_runs_only_start_entries_post_step_only_end_entries(
-        row_type, fake_capture_service, publisher_calls):
+    row_type, fake_capture_service, publisher_calls
+):
     Row, col = row_type
     row = Row()
     row.name = "Step A"
@@ -308,16 +338,20 @@ def test_pre_step_runs_only_start_entries_post_step_only_end_entries(
 
     ctx = _Ctx()
     handler.on_pre_step(row, ctx)
-    assert [e.label for e in fake_capture_service["apply"]] \
-        == ["start_only", "both"]
+    assert [e.label for e in fake_capture_service["apply"]] == ["start_only", "both"]
 
     handler.on_post_step(row, ctx)
-    assert [e.label for e in fake_capture_service["apply"]] \
-        == ["start_only", "both", "end_only", "both"]
+    assert [e.label for e in fake_capture_service["apply"]] == [
+        "start_only",
+        "both",
+        "end_only",
+        "both",
+    ]
 
 
 def test_post_step_with_no_end_entries_is_a_noop(
-        row_type, fake_capture_service, publisher_calls):
+    row_type, fake_capture_service, publisher_calls
+):
     Row, col = row_type
     row = Row()
     col.model.set_value(row, [_entry("start_only").model_dump()])
@@ -331,7 +365,8 @@ def test_post_step_with_no_end_entries_is_a_noop(
 
 
 def test_legacy_entries_without_phase_keys_run_at_pre_step_only(
-        row_type, fake_capture_service, publisher_calls):
+    row_type, fake_capture_service, publisher_calls
+):
     Row, col = row_type
     row = Row()
     raw = _entry("legacy").model_dump()
@@ -347,13 +382,14 @@ def test_legacy_entries_without_phase_keys_run_at_pre_step_only(
     assert len(fake_capture_service["burst_folder"]) == 1
 
 
-def test_post_step_preview_mode_is_a_noop(row_type, fake_capture_service,
-                                          publisher_calls):
+def test_post_step_preview_mode_is_a_noop(
+    row_type, fake_capture_service, publisher_calls
+):
     Row, col = row_type
     row = Row()
-    col.model.set_value(row, [
-        _entry("end_only", capture_start=False, capture_end=True)
-        .model_dump()])
+    col.model.set_value(
+        row, [_entry("end_only", capture_start=False, capture_end=True).model_dump()]
+    )
 
     ctx = _Ctx(preview_mode=True)
     FluorescenceChainHandler().on_post_step(row, ctx)
@@ -364,35 +400,41 @@ def test_post_step_preview_mode_is_a_noop(row_type, fake_capture_service,
 
 
 def test_post_step_burst_folder_is_phase_disambiguated(
-        row_type, fake_capture_service, publisher_calls):
+    row_type, fake_capture_service, publisher_calls
+):
     """A both-phases entry in a sub-second step must not overwrite its
     step-start capture: each phase bursts into its own suffixed folder
     (`_start` / `_end`)."""
     Row, col = row_type
     row = Row()
     row.name = "Step A"
-    col.model.set_value(row, [
-        _entry("both", capture_start=True, capture_end=True).model_dump()])
+    col.model.set_value(
+        row, [_entry("both", capture_start=True, capture_end=True).model_dump()]
+    )
 
     handler = FluorescenceChainHandler()
     ctx = _Ctx()
     handler.on_pre_step(row, ctx)
     handler.on_post_step(row, ctx)
 
-    assert [c["step_desc"] for c in fake_capture_service["burst_folder"]] \
-        == ["Step A_start", "Step A_end"]
+    assert [c["step_desc"] for c in fake_capture_service["burst_folder"]] == [
+        "Step A_start",
+        "Step A_end",
+    ]
 
 
 def test_each_burst_phase_turns_the_light_off_when_done(
-        row_type, fake_capture_service, publisher_calls, published):
+    row_type, fake_capture_service, publisher_calls, published
+):
     """The LED is lit only for the capture: each phase's burst must end
     with an ALL_LEDS_OFF so the light never stays on between the start and
     end phases nor after the last capture (idle heat)."""
     Row, col = row_type
     row = Row()
     row.name = "Step A"
-    col.model.set_value(row, [
-        _entry("a", capture_start=True, capture_end=True).model_dump()])
+    col.model.set_value(
+        row, [_entry("a", capture_start=True, capture_end=True).model_dump()]
+    )
 
     handler = FluorescenceChainHandler()
     ctx = _Ctx()
@@ -400,16 +442,17 @@ def test_each_burst_phase_turns_the_light_off_when_done(
     handler.on_post_step(row, ctx)
 
     topics = [topic for topic, _msg in published]
-    assert topics.count(ALL_LEDS_OFF) == 2   # one per phase burst
+    assert topics.count(ALL_LEDS_OFF) == 2  # one per phase burst
     # The last signal of each phase is the light-off broadcast to the pane.
-    step_signals = [msg for topic, msg in published
-                    if topic == PROTOCOL_STEP_FLUORESCENCE]
+    step_signals = [
+        msg for topic, msg in published if topic == PROTOCOL_STEP_FLUORESCENCE
+    ]
     assert json.loads(step_signals[-1])["light_on"] is False
 
 
 def test_burst_light_off_fires_even_when_a_capture_raises(
-        row_type, fake_capture_service, publisher_calls, published,
-        monkeypatch):
+    row_type, fake_capture_service, publisher_calls, published, monkeypatch
+):
     """A failed capture must not leave the LED lit: the ALL_LEDS_OFF is in
     the phase's ``finally``, so it fires even when a save raises."""
     Row, col = row_type
@@ -422,7 +465,9 @@ def test_burst_light_off_fires_even_when_a_capture_raises(
 
     monkeypatch.setattr(
         sys.modules["fluorescence_controls_ui.capture_service"],
-        "save_entry_capture", boom)
+        "save_entry_capture",
+        boom,
+    )
 
     with pytest.raises(RuntimeError):
         FluorescenceChainHandler().on_pre_step(row, _Ctx())

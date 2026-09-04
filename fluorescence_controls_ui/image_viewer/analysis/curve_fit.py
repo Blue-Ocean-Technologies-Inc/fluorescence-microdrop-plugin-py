@@ -1,30 +1,50 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Curve fitting for the ROI intensity series: pure math over
 (elapsed, value) sequences — Qt-free, session-free. Each method yields
 a FitResult carrying the equation text, R², a vectorized predictor,
 and the analytic second derivative (for the curvature extremum
 markers)."""
+
+# Standard library imports.
 import math
 import re
 import warnings
 
+# Third-party imports.
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.special import expit
+
+# Enthought library imports.
 from traits.api import Any, Bool, Dict, Float, HasTraits, Str
 
+# Local imports.
 from .fit_expression import FitExpressionError, parse_expression
 
 #: Selectable fit models, in dropdown order ("none" = fitting off,
 #: CUSTOM_METHOD = whatever equation the user typed).
 CUSTOM_METHOD = "custom"
-FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential",
-               "sigmoid")
+FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential", "sigmoid")
 
 #: Human labels (fit dropdown + equations table).
-FIT_LABELS = {"none": "No fit", "linear": "Linear",
-              "poly2": "Quadratic", "poly3": "Cubic",
-              "exponential": "Exponential", "sigmoid": "Sigmoid",
-              CUSTOM_METHOD: "Custom"}
+FIT_LABELS = {
+    "none": "No fit",
+    "linear": "Linear",
+    "poly2": "Quadratic",
+    "poly3": "Cubic",
+    "exponential": "Exponential",
+    "sigmoid": "Sigmoid",
+    CUSTOM_METHOD: "Custom",
+}
 
 #: What each built-in fits, in the notation the equation field uses —
 #: so selecting one shows the form it will solve, and editing that text
@@ -41,8 +61,7 @@ FIT_TEMPLATES = {
 }
 
 #: Fewest finite points each model can be solved on.
-_MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4,
-               "sigmoid": 5}
+_MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4, "sigmoid": 5}
 
 #: Constant initial guesses tried for a custom equation (see
 #: _custom_seeds for the data-derived ones). All-zeros alone —
@@ -122,16 +141,16 @@ def _signed(value):
 def _poly_equation(coeffs):
     parts = []
     for power, coeff in zip(range(len(coeffs) - 1, -1, -1), coeffs):
-        variable = ("" if power == 0
-                    else "·t" if power == 1 else f"·t^{power}")
-        parts.append(f"{coeff:.3g}{variable}" if not parts
-                     else f"{_signed(coeff)}{variable}")
+        variable = "" if power == 0 else "·t" if power == 1 else f"·t^{power}"
+        parts.append(
+            f"{coeff:.3g}{variable}" if not parts else f"{_signed(coeff)}{variable}"
+        )
     return "y = " + "".join(parts)
 
 
 def _r_squared(values, fitted):
     residual = values - fitted
-    ss_res = float(np.sum(residual ** 2))
+    ss_res = float(np.sum(residual**2))
     ss_tot = float(np.sum((values - np.mean(values)) ** 2))
     if ss_tot == 0.0:
         return 1.0 if ss_res < _NEGLIGIBLE else 0.0
@@ -144,17 +163,22 @@ def _fit_polynomial(elapsed, values, degree):
     if not len(d1_coeffs):
         d1_coeffs = np.array([0.0])
     d2_coeffs = np.polyder(coeffs, 2)
-    if not len(d2_coeffs):          # degree 1: d² is identically zero
+    if not len(d2_coeffs):  # degree 1: d² is identically zero
         d2_coeffs = np.array([0.0])
     return FitResult(
-        params={f"c{power}": float(coeff) for power, coeff
-                in zip(range(degree, -1, -1), coeffs)},
+        params={
+            f"c{power}": float(coeff)
+            for power, coeff in zip(range(degree, -1, -1), coeffs)
+        },
         equation=_poly_equation(coeffs),
         predict=lambda t, coeffs=coeffs: np.polyval(coeffs, t),
         first_derivative=lambda t, d1_coeffs=d1_coeffs: np.polyval(
-            d1_coeffs, np.asarray(t, dtype=float)),
+            d1_coeffs, np.asarray(t, dtype=float)
+        ),
         second_derivative=lambda t, d2_coeffs=d2_coeffs: np.polyval(
-            d2_coeffs, np.asarray(t, dtype=float)))
+            d2_coeffs, np.asarray(t, dtype=float)
+        ),
+    )
 
 
 def _exponential(t, amplitude, rate, offset):
@@ -167,28 +191,31 @@ def _fit_exponential(elapsed, values):
     amplitude0 = float(values[0] - offset0)
     if abs(amplitude0) < _NEGLIGIBLE:
         amplitude0 = float(np.ptp(values)) or 1.0
-    params, _ = curve_fit(_exponential, elapsed, values,
-                          p0=(amplitude0,
-                              _EXPONENTIAL_RATE_SEED / t_span,
-                              offset0),
-                          maxfev=_MAX_FIT_EVALUATIONS)
+    params, _ = curve_fit(
+        _exponential,
+        elapsed,
+        values,
+        p0=(amplitude0, _EXPONENTIAL_RATE_SEED / t_span, offset0),
+        maxfev=_MAX_FIT_EVALUATIONS,
+    )
     amplitude, rate, offset = (float(value) for value in params)
-    if not all(math.isfinite(value)
-               for value in (amplitude, rate, offset)):
+    if not all(math.isfinite(value) for value in (amplitude, rate, offset)):
         return None
     return FitResult(
         params={"amplitude": amplitude, "rate": rate, "offset": offset},
         equation=f"y = {amplitude:.3g}·e^({rate:.3g}·t){_signed(offset)}",
         predict=lambda t: _exponential(t, amplitude, rate, offset),
-        first_derivative=lambda t: amplitude * rate * np.exp(
-            rate * np.asarray(t, dtype=float)),
-        second_derivative=lambda t: amplitude * rate * rate * np.exp(
-            rate * np.asarray(t, dtype=float)))
+        first_derivative=lambda t: (
+            amplitude * rate * np.exp(rate * np.asarray(t, dtype=float))
+        ),
+        second_derivative=lambda t: (
+            amplitude * rate * rate * np.exp(rate * np.asarray(t, dtype=float))
+        ),
+    )
 
 
 def _sigmoid(t, amplitude, rate, midpoint, offset):
-    return amplitude * expit(
-        rate * (np.asarray(t, dtype=float) - midpoint)) + offset
+    return amplitude * expit(rate * (np.asarray(t, dtype=float) - midpoint)) + offset
 
 
 def _logistic_4p(t, initial, final, midpoint, rate):
@@ -211,13 +238,15 @@ def _fit_sigmoid(elapsed, values):
         final0 = initial0 + (float(np.ptp(values)) or 1.0)
     half = (initial0 + final0) / 2.0
     midpoint0 = float(elapsed[int(np.argmin(np.abs(values - half)))])
-    params, _ = curve_fit(_logistic_4p, elapsed, values,
-                          p0=(initial0, final0, midpoint0,
-                              _SIGMOID_RATE_SEED / t_span),
-                          maxfev=_MAX_FIT_EVALUATIONS)
+    params, _ = curve_fit(
+        _logistic_4p,
+        elapsed,
+        values,
+        p0=(initial0, final0, midpoint0, _SIGMOID_RATE_SEED / t_span),
+        maxfev=_MAX_FIT_EVALUATIONS,
+    )
     initial, final, midpoint, rate = (float(value) for value in params)
-    if not all(math.isfinite(value)
-               for value in (initial, final, midpoint, rate)):
+    if not all(math.isfinite(value) for value in (initial, final, midpoint, rate)):
         return None
     # Canonical rate > 0: since s(-x) == 1 - s(x), swapping the
     # plateaus and negating the rate is the very same curve (a decay
@@ -237,16 +266,18 @@ def _fit_sigmoid(elapsed, values):
         # template writes them — an amplitude-on-offset pair would hide
         # the far plateau behind a sum, which is the whole reason this
         # fits the 4PL form.
-        params={"initial": initial, "final": final, "rate": rate,
-                "midpoint": midpoint},
+        params={"initial": initial, "final": final, "rate": rate, "midpoint": midpoint},
         inflection=midpoint,
-        equation=(f"y = {initial:.3g} + ({final:.3g} - {initial:.3g})"
-                  f"/(1+e^(-{rate:.3g}·(t{_signed(-midpoint)})))"),
+        equation=(
+            f"y = {initial:.3g} + ({final:.3g} - {initial:.3g})"
+            f"/(1+e^(-{rate:.3g}·(t{_signed(-midpoint)})))"
+        ),
         predict=lambda t: _logistic_4p(t, initial, final, midpoint, rate),
-        first_derivative=lambda t: amplitude * rate * sig(t)
-        * (1.0 - sig(t)),
-        second_derivative=lambda t: amplitude * rate * rate * sig(t)
-        * (1.0 - sig(t)) * (1.0 - 2.0 * sig(t)))
+        first_derivative=lambda t: amplitude * rate * sig(t) * (1.0 - sig(t)),
+        second_derivative=lambda t: (
+            amplitude * rate * rate * sig(t) * (1.0 - sig(t)) * (1.0 - 2.0 * sig(t))
+        ),
+    )
 
 
 def _numeric_derivatives(predict, step):
@@ -256,14 +287,16 @@ def _numeric_derivatives(predict, step):
     consumers of these — the d²-extrema markers and the fastest-change
     time — only ever sample them on a grid, so differencing satisfies
     the FitResult contract exactly as an analytic form would."""
+
     def first(t):
         t = np.asarray(t, dtype=float)
         return (predict(t + step) - predict(t - step)) / (2.0 * step)
 
     def second(t):
         t = np.asarray(t, dtype=float)
-        return (predict(t + step) - 2.0 * predict(t)
-                + predict(t - step)) / (step * step)
+        return (predict(t + step) - 2.0 * predict(t) + predict(t - step)) / (
+            step * step
+        )
 
     return first, second
 
@@ -291,8 +324,10 @@ def _custom_seeds(elapsed, values, count):
     bleaching fluorescence series actually has."""
     span = float(elapsed[-1] - elapsed[0]) or 1.0
     magnitudes = list(_CUSTOM_SEEDS) + [
-        float(np.mean(values)), float(np.ptp(values)) or 1.0,
-        1.0 / span, -1.0 / span,
+        float(np.mean(values)),
+        float(np.ptp(values)) or 1.0,
+        1.0 / span,
+        -1.0 / span,
     ]
     return [[magnitude] * count for magnitude in magnitudes]
 
@@ -301,8 +336,9 @@ def _solve_from(expression, elapsed, values, seed):
     """(R², parameters) for one starting point, or None when it does
     not converge to something finite."""
     try:
-        solved, _ = curve_fit(expression, elapsed, values, p0=seed,
-                              maxfev=_MAX_FIT_EVALUATIONS)
+        solved, _ = curve_fit(
+            expression, elapsed, values, p0=seed, maxfev=_MAX_FIT_EVALUATIONS
+        )
     except Exception:
         return None
     solved = [float(value) for value in solved]
@@ -357,11 +393,9 @@ def _fit_custom(elapsed, values, expression, initial_guesses=None):
         # Say so rather than silently fitting something else.
         auto_seeded = True
     if best is None:
-        for candidate in _custom_seeds(elapsed, values,
-                                       len(expression.parameters)):
+        for candidate in _custom_seeds(elapsed, values, len(expression.parameters)):
             scored = _solve_from(expression, elapsed, values, candidate)
-            if scored is not None and (best is None
-                                       or scored[0] > best[0]):
+            if scored is not None and (best is None or scored[0] > best[0]):
                 best = scored
     if best is None:
         return None
@@ -370,16 +404,18 @@ def _fit_custom(elapsed, values, expression, initial_guesses=None):
     def predict(t, values=best[1]):
         return np.asarray(expression(t, *values), dtype=float)
 
-    first, second = _numeric_derivatives(
-        predict, span * _DERIVATIVE_STEP_FRACTION)
-    return FitResult(params=params,
-                     equation=_custom_equation_text(expression, params),
-                     predict=predict, first_derivative=first,
-                     second_derivative=second, auto_seeded=auto_seeded)
+    first, second = _numeric_derivatives(predict, span * _DERIVATIVE_STEP_FRACTION)
+    return FitResult(
+        params=params,
+        equation=_custom_equation_text(expression, params),
+        predict=predict,
+        first_derivative=first,
+        second_derivative=second,
+        auto_seeded=auto_seeded,
+    )
 
 
-def _solve(elapsed, values, method, expression=None,
-           initial_guesses=None):
+def _solve(elapsed, values, method, expression=None, initial_guesses=None):
     """One fit over exactly the points given (already finite-filtered),
     scored and stamped with the domain it used. None when the model
     cannot be solved on them."""
@@ -395,16 +431,15 @@ def _solve(elapsed, values, method, expression=None,
         with np.errstate(all="ignore"), warnings.catch_warnings():
             warnings.simplefilter("ignore")
             if method == CUSTOM_METHOD:
-                result = _fit_custom(elapsed, values, expression,
-                                     initial_guesses)
+                result = _fit_custom(elapsed, values, expression, initial_guesses)
             elif method == "exponential":
                 result = _fit_exponential(elapsed, values)
             elif method == "sigmoid":
                 result = _fit_sigmoid(elapsed, values)
             else:
                 result = _fit_polynomial(
-                    elapsed, values,
-                    {"linear": 1, "poly2": 2, "poly3": 3}[method])
+                    elapsed, values, {"linear": 1, "poly2": 2, "poly3": 3}[method]
+                )
     except Exception:
         return None
     if result is None:
@@ -416,8 +451,9 @@ def _solve(elapsed, values, method, expression=None,
     return result
 
 
-def fit_series(elapsed, values, method, trim_tail=False,
-               expression="", initial_guesses=None):
+def fit_series(
+    elapsed, values, method, trim_tail=False, expression="", initial_guesses=None
+):
     """Fit one series. None when fitting is off, too few finite points
     remain after NaN filtering, or the optimizer fails — callers render
     that as "fit failed", never a traceback. ``expression`` is the typed
@@ -453,10 +489,8 @@ def fit_series(elapsed, values, method, trim_tail=False,
     elapsed, values = elapsed[finite], values[finite]
     if len(elapsed) < minimum:
         return None
-    result = _solve(elapsed, values, method, parsed,
-                    initial_guesses)
-    if (result is None or not trim_tail
-            or result.r_squared >= TRIM_TARGET_R_SQUARED):
+    result = _solve(elapsed, values, method, parsed, initial_guesses)
+    if result is None or not trim_tail or result.r_squared >= TRIM_TARGET_R_SQUARED:
         return result
     floor = max(minimum, _TRIM_MIN_POINTS)
     kept = len(elapsed)
@@ -465,10 +499,8 @@ def fit_series(elapsed, values, method, trim_tail=False,
         kept = min(kept - 1, int(kept * _TRIM_KEEP_FRACTION))
         if kept < floor:
             break
-        trimmed = _solve(elapsed[:kept], values[:kept], method,
-                         parsed, initial_guesses)
-        if (trimmed is not None
-                and trimmed.r_squared >= TRIM_TARGET_R_SQUARED):
+        trimmed = _solve(elapsed[:kept], values[:kept], method, parsed, initial_guesses)
+        if trimmed is not None and trimmed.r_squared >= TRIM_TARGET_R_SQUARED:
             return trimmed
     return result
 
@@ -487,10 +519,9 @@ def second_derivative_extrema(fit, t_start, t_end):
     [t_start, t_end] — the y is the FITTED CURVE's value there, so the
     marker sits on the curve. {} when d² is flat (linear/quadratic):
     no meaningful extremum, draw nothing rather than mislead."""
-    grid = np.linspace(float(t_start), float(t_end),
-                       _SEARCH_GRID_POINTS)
+    grid = np.linspace(float(t_start), float(t_end), _SEARCH_GRID_POINTS)
     d2 = np.asarray(fit.second_derivative(grid), dtype=float)
-    if d2.shape != grid.shape:      # scalar-returning closure
+    if d2.shape != grid.shape:  # scalar-returning closure
         d2 = np.full_like(grid, float(d2))
     if not np.all(np.isfinite(d2)):
         return {}
@@ -498,8 +529,10 @@ def second_derivative_extrema(fit, t_start, t_end):
         return {}
     t_max = float(grid[int(np.argmax(d2))])
     t_min = float(grid[int(np.argmin(d2))])
-    return {"max": (t_max, float(fit.predict(t_max))),
-            "min": (t_min, float(fit.predict(t_min)))}
+    return {
+        "max": (t_max, float(fit.predict(t_max))),
+        "min": (t_min, float(fit.predict(t_min))),
+    }
 
 
 def fastest_change_time(fit, t_start, t_end):
@@ -510,10 +543,9 @@ def fastest_change_time(fit, t_start, t_end):
     None when the speed is flat (linear fits): no meaningful "fastest"
     moment exists, so callers draw nothing rather than an arbitrary
     bar."""
-    grid = np.linspace(float(t_start), float(t_end),
-                       _SEARCH_GRID_POINTS)
+    grid = np.linspace(float(t_start), float(t_end), _SEARCH_GRID_POINTS)
     speed = np.abs(np.asarray(fit.first_derivative(grid), dtype=float))
-    if speed.shape != grid.shape:   # scalar-returning closure
+    if speed.shape != grid.shape:  # scalar-returning closure
         speed = np.full_like(grid, float(speed))
     if not np.all(np.isfinite(speed)):
         return None
@@ -521,7 +553,6 @@ def fastest_change_time(fit, t_start, t_end):
         return None
     # Outside the window the parameter is no answer to "when, in what
     # we plotted?" — there the rate is monotonic and the edge is.
-    if (fit.inflection is not None
-            and float(t_start) <= fit.inflection <= float(t_end)):
+    if fit.inflection is not None and float(t_start) <= fit.inflection <= float(t_end):
         return float(fit.inflection)
     return float(grid[int(np.argmax(speed))])

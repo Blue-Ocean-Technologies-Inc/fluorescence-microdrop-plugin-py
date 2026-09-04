@@ -1,12 +1,29 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Batch runner end-to-end on tiny synthetic images (real process pool)."""
+
+# Standard library imports.
 import queue
 import time
 
+# Third-party imports.
 import cv2
 import numpy as np
 
+# Microdrop package imports.
 from fluorescence_controls_ui.image_viewer.analysis.roi_batch import (
-    BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
+    BATCH_FINISHED,
+    BATCH_RESULT,
+    INSTANT_RESULT,
+    RoiBatchRunner,
 )
 
 
@@ -38,10 +55,11 @@ def test_batch_computes_all_images_and_finishes(tmp_path):
     runner = RoiBatchRunner()
     runner.start([(path, rois, (2, 4, 0)) for path in paths])
     messages = _drain_until(runner.results, BATCH_FINISHED)
-    payloads = [payload for kind, payload in messages
-                if kind == BATCH_RESULT]
-    assert sorted(payload["stats"]["r1"]["mean"]
-                  for payload in payloads) == [100.0, 200.0]
+    payloads = [payload for kind, payload in messages if kind == BATCH_RESULT]
+    assert sorted(payload["stats"]["r1"]["mean"] for payload in payloads) == [
+        100.0,
+        200.0,
+    ]
 
 
 def test_compute_single_reports_on_queue(tmp_path):
@@ -49,8 +67,8 @@ def test_compute_single_reports_on_queue(tmp_path):
     _write_image(path, 300)
     runner = RoiBatchRunner()
     runner.compute_single(
-        str(path), {"r1": ("ellipse", (10.0, 10.0, 4.0, 4.0, 0.0))},
-        (2, 4, 0))
+        str(path), {"r1": ("ellipse", (10.0, 10.0, 4.0, 4.0, 0.0))}, (2, 4, 0)
+    )
     messages = _drain_until(runner.results, INSTANT_RESULT, timeout_s=15.0)
     kind, payload = messages[-1]
     assert payload["stats"]["r1"]["mean"] == 300.0

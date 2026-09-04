@@ -1,0 +1,82 @@
+[importlinter]
+root_packages =
+    fluorescence_controller
+    fluorescence_controls_ui
+    fluorescence_protocol_controls
+    device_viewer
+    dropbot_controller
+    dropbot_preferences_ui
+    dropbot_protocol_controls
+    dropbot_status_and_controls
+    dropbot_tools_menu
+    electrode_controller
+    logger
+    manual_controls
+    message_router
+    microdrop_application
+    microdrop_status_bar
+    microdrop_style
+    microdrop_utils
+    peripheral_device_controller_base
+    pluggable_protocol_tree
+    plugin_management
+    template_status_and_controls
+
+[importlinter:contract:no-microdrop-plugin-internals]
+name = Only consts may be imported from Microdrop plugins
+type = forbidden
+source_modules =
+    fluorescence_controller
+    fluorescence_controls_ui
+    fluorescence_protocol_controls
+forbidden_modules =
+    device_viewer
+    dropbot_controller
+    dropbot_preferences_ui
+    dropbot_protocol_controls
+    dropbot_status_and_controls
+    dropbot_tools_menu
+    electrode_controller
+    manual_controls
+    microdrop_application
+    microdrop_status_bar
+    plugin_management
+ignore_imports =
+    ** -> *.consts
+    ** -> microdrop_application.helpers
+    ** -> microdrop_application.dialogs.**
+    # --- seeded debt: existing violations, may only shrink ---
+    # image_viewer preview settings (frame cache size, etc.) are read
+    # straight out of the global MicrodropPreferences object instead of a
+    # published topic/consts flag. Should switch to the pub/sub pattern.
+    fluorescence_controls_ui.image_viewer.controller -> microdrop_application.preferences
+
+[importlinter:contract:plugin-layers]
+name = UI and protocol-controls sit above the backend and stay independent
+type = layers
+layers =
+    fluorescence_controls_ui | fluorescence_protocol_controls
+    fluorescence_controller
+ignore_imports =
+    # --- seeded debt: existing violations, may only shrink ---
+    # UI <-> protocol-controls cycle: the capture chain (protocol column
+    # side) and the capture service / chain model (UI side) call directly
+    # into each other instead of going through Dramatiq pub/sub. Needs a
+    # real decoupling (topics/consts contract) to unwind, not a rename.
+    fluorescence_controls_ui.image_viewer.discovery -> fluorescence_protocol_controls.capture_chain
+    fluorescence_controls_ui.controller -> fluorescence_protocol_controls.capture_chain
+    fluorescence_controls_ui.controller -> fluorescence_protocol_controls.consts
+    fluorescence_controls_ui.capture_service -> fluorescence_protocol_controls.consts
+    fluorescence_controls_ui.capture_service -> fluorescence_protocol_controls.capture_chain
+    fluorescence_controls_ui.chain_model -> fluorescence_protocol_controls.capture_chain
+    fluorescence_controls_ui.image_viewer.analysis.roi_controller -> fluorescence_protocol_controls.capture_chain
+    fluorescence_controls_ui.tests.test_led_controls -> fluorescence_protocol_controls.consts
+    fluorescence_controls_ui.tests.test_capture_service -> fluorescence_protocol_controls.capture_chain
+    fluorescence_controls_ui.tests.test_attach_flow -> fluorescence_protocol_controls.consts
+    fluorescence_controls_ui.tests.test_attach_flow -> fluorescence_protocol_controls.capture_chain
+    fluorescence_controls_ui.tests.test_chain_model -> fluorescence_protocol_controls.capture_chain
+    fluorescence_protocol_controls.tests.test_chain_execution -> fluorescence_controls_ui.capture_service
+    fluorescence_protocol_controls.capture_chain -> fluorescence_controls_ui.consts
+    fluorescence_protocol_controls.protocol_columns.chain_column -> fluorescence_controls_ui.capture_service
+    fluorescence_protocol_controls.capture_chain -> fluorescence_controls_ui.cameras.consts
+    fluorescence_protocol_controls.tests.test_chain_execution -> fluorescence_controls_ui

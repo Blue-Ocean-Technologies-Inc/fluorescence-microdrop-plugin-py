@@ -1,13 +1,37 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Enthought library imports.
 from traitsui.api import (
-    CustomEditor, EnumEditor, Group, HGroup, Item, Readonly, UItem, VGroup,
+    CustomEditor,
+    EnumEditor,
+    Group,
+    HGroup,
+    Item,
+    Readonly,
+    UItem,
+    VGroup,
     View,
 )
 
+# Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import SteppedSliderEditor
 
+# Local imports.
 from ..cameras.consts import (
-    DISPLAY_BRIGHTNESS_MAX, DISPLAY_BRIGHTNESS_MIN, DISPLAY_CONTRAST_MAX,
-    DISPLAY_CONTRAST_MIN, DISPLAY_GAMMA_MAX, DISPLAY_GAMMA_MIN,
+    DISPLAY_BRIGHTNESS_MAX,
+    DISPLAY_BRIGHTNESS_MIN,
+    DISPLAY_CONTRAST_MAX,
+    DISPLAY_CONTRAST_MIN,
+    DISPLAY_GAMMA_MAX,
+    DISPLAY_GAMMA_MIN,
 )
 from .temperature_canvas import temperature_canvas_factory
 
@@ -16,12 +40,17 @@ from .temperature_canvas import temperature_canvas_factory
 # model's dynamic dicts, narrowed to the connected camera's capabilities
 # (resolutions turn concrete once the sensor size is known).
 format_tab = VGroup(
-    Item("binning", label="Binning",
-         editor=EnumEditor(name="object.binning_choices")),
-    Item("image_type", label="Image Type",
-         editor=EnumEditor(name="object.image_type_choices")),
-    Item("resolution", label="Resolution",
-         editor=EnumEditor(name="object.resolution_choices")),
+    Item("binning", label="Binning", editor=EnumEditor(name="object.binning_choices")),
+    Item(
+        "image_type",
+        label="Image Type",
+        editor=EnumEditor(name="object.image_type_choices"),
+    ),
+    Item(
+        "resolution",
+        label="Resolution",
+        editor=EnumEditor(name="object.resolution_choices"),
+    ),
     UItem("format_defaults_button"),
     label="Format",
 )
@@ -30,19 +59,29 @@ format_tab = VGroup(
 # image panel), sliding in 0.1 increments. White balance only exists on
 # color sensors, so it shows only when the camera reports color.
 display_tab = VGroup(
-    Item("display_gamma", label="Gamma",
-         editor=SteppedSliderEditor(low=DISPLAY_GAMMA_MIN,
-                                    high=DISPLAY_GAMMA_MAX, step=0.1)),
-    Item("display_contrast", label="Contrast",
-         editor=SteppedSliderEditor(low=DISPLAY_CONTRAST_MIN,
-                                    high=DISPLAY_CONTRAST_MAX, step=0.1)),
-    Item("display_brightness", label="Brightness",
-         editor=SteppedSliderEditor(low=DISPLAY_BRIGHTNESS_MIN,
-                                    high=DISPLAY_BRIGHTNESS_MAX, step=0.1)),
-    Item("white_balance_red", label="WB Red",
-         visible_when="camera_is_color"),
-    Item("white_balance_blue", label="WB Blue",
-         visible_when="camera_is_color"),
+    Item(
+        "display_gamma",
+        label="Gamma",
+        editor=SteppedSliderEditor(
+            low=DISPLAY_GAMMA_MIN, high=DISPLAY_GAMMA_MAX, step=0.1
+        ),
+    ),
+    Item(
+        "display_contrast",
+        label="Contrast",
+        editor=SteppedSliderEditor(
+            low=DISPLAY_CONTRAST_MIN, high=DISPLAY_CONTRAST_MAX, step=0.1
+        ),
+    ),
+    Item(
+        "display_brightness",
+        label="Brightness",
+        editor=SteppedSliderEditor(
+            low=DISPLAY_BRIGHTNESS_MIN, high=DISPLAY_BRIGHTNESS_MAX, step=0.1
+        ),
+    ),
+    Item("white_balance_red", label="WB Red", visible_when="camera_is_color"),
+    Item("white_balance_blue", label="WB Blue", visible_when="camera_is_color"),
     UItem("display_defaults_button"),
     label="Display",
 )
@@ -55,11 +94,18 @@ usb_tab = VGroup(
     Item("hardware_bin", label="Hardware Bin"),
     Item("mono_bin", label="Mono Bin", visible_when="camera_is_color"),
     Item("add_timestamp", label="Add Timestamp"),
-    Item("flip", label="Flip",
-         editor=EnumEditor(values={"none": "None",
-                                   "horizontal": "Horizontal",
-                                   "vertical": "Vertical",
-                                   "both": "Both"})),
+    Item(
+        "flip",
+        label="Flip",
+        editor=EnumEditor(
+            values={
+                "none": "None",
+                "horizontal": "Horizontal",
+                "vertical": "Vertical",
+                "both": "Both",
+            }
+        ),
+    ),
     UItem("usb_defaults_button"),
     label="USB",
 )
@@ -84,8 +130,7 @@ temp_tab = VGroup(
         Readonly("current_temperature_text", label="Current"),
         Readonly("monitor_time_text", label="Time"),
     ),
-    UItem("temperature_history",
-          editor=CustomEditor(temperature_canvas_factory)),
+    UItem("temperature_history", editor=CustomEditor(temperature_canvas_factory)),
     label="Temp",
 )
 

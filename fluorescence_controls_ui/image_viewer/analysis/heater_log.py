@@ -1,7 +1,19 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Heater-log reading for the temperature x-axis: the heater plugin
 writes 1 Hz JSONL logs (``TEMP`` lines carrying {sensor: °C}) on the
 same wall clock the captures are stamped with, so time is the join
 key. Pure file/number logic, Qt-free."""
+
+# Standard library imports.
 import bisect
 import json
 import math
@@ -10,9 +22,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from .consts import HEATER_SAMPLE_MARGIN_S, HEATER_SENSOR_MEAN
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -29,8 +43,7 @@ def _file_start(path):
     if not match:
         return None
     try:
-        return time.mktime(time.strptime(match.group(0),
-                                         HEATER_LOG_STAMP_FORMAT))
+        return time.mktime(time.strptime(match.group(0), HEATER_LOG_STAMP_FORMAT))
     except (ValueError, OverflowError):
         return None
 
@@ -44,15 +57,15 @@ def heater_log_files(folder, start_epoch, end_epoch):
         stamped = sorted(
             (stamp, path)
             for path in Path(folder).glob("*.jsonl")
-            if (stamp := _file_start(path)) is not None)
+            if (stamp := _file_start(path)) is not None
+        )
     except OSError:
         return []
     low = start_epoch - HEATER_SAMPLE_MARGIN_S
     high = end_epoch + HEATER_SAMPLE_MARGIN_S
     chosen = []
     for index, (stamp, path) in enumerate(stamped):
-        until = (stamped[index + 1][0] if index + 1 < len(stamped)
-                 else math.inf)
+        until = stamped[index + 1][0] if index + 1 < len(stamped) else math.inf
         if stamp <= high and until >= low:
             chosen.append(path)
     return chosen
@@ -78,11 +91,11 @@ def read_heater_samples(folder, start_epoch, end_epoch):
                 record = json.loads(line)
                 if record.get("_frame") != "TEMP":
                     continue
-                epoch = datetime.fromisoformat(
-                    record["timestamp"]).timestamp()
+                epoch = datetime.fromisoformat(record["timestamp"]).timestamp()
                 temperatures = {
                     str(name): float(value)
-                    for name, value in record["temperatures"].items()}
+                    for name, value in record["temperatures"].items()
+                }
             except (ValueError, KeyError, TypeError, AttributeError):
                 continue
             if temperatures and low <= epoch <= high:
@@ -114,8 +127,11 @@ def temperature_at(samples, sensor, epochs, window_s=0.0):
     a guess). With none, linear interpolation at the instant — NaN
     outside the sampled range (an extrapolated temperature would be
     invented data) or where no sample carries the sensor."""
-    pairs = [(epoch, value) for epoch, temperatures in samples
-             if (value := _sensor_value(temperatures, sensor)) == value]
+    pairs = [
+        (epoch, value)
+        for epoch, temperatures in samples
+        if (value := _sensor_value(temperatures, sensor)) == value
+    ]
     times = [epoch for epoch, _value in pairs]
     half = window_s / 2.0
     results = []
@@ -127,8 +143,7 @@ def temperature_at(samples, sensor, epochs, window_s=0.0):
             low = bisect.bisect_left(times, query - half)
             high = bisect.bisect_right(times, query + half)
             inside = [value for _epoch, value in pairs[low:high]]
-            results.append(sum(inside) / len(inside) if inside
-                           else math.nan)
+            results.append(sum(inside) / len(inside) if inside else math.nan)
             continue
         if query < times[0] or query > times[-1]:
             results.append(math.nan)
@@ -137,10 +152,9 @@ def temperature_at(samples, sensor, epochs, window_s=0.0):
         if index < len(times) and times[index] == query:
             results.append(pairs[index][1])
             continue
-        (left_time, left), (right_time, right) = (pairs[index - 1],
-                                                  pairs[index])
+        (left_time, left), (right_time, right) = (pairs[index - 1], pairs[index])
         span = right_time - left_time
-        results.append(left if span <= 0 else
-                       left + (right - left)
-                       * (query - left_time) / span)
+        results.append(
+            left if span <= 0 else left + (right - left) * (query - left_time) / span
+        )
     return results

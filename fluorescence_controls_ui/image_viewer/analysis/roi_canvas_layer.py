@@ -1,35 +1,65 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 # fluorescence_controls_ui/image_viewer/analysis/roi_canvas_layer.py
 """Owns the ROI items on the image scene and turns the canvas view's
 forwarded mouse events into creation/edit/selection callbacks. Plain
 wiring around Qt items, so it stays a plain class; it never touches the
 analysis model. The canvas editor points these callbacks at the model's
 canvas_* event traits and the controller reacts."""
+
+# Standard library imports.
 import math
 
+# Third-party imports.
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPainterPath, QPen, QTransform
 from PySide6.QtWidgets import (
-    QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsRectItem,
+    QGraphicsEllipseItem,
+    QGraphicsPathItem,
+    QGraphicsRectItem,
 )
 
+# Local imports.
 from .consts import (
-    AI_CANDIDATE_COLOR, AI_CANDIDATE_DISCARDED_OPACITY,
-    AI_CANDIDATE_PEN_WIDTH_PX, MIN_POLYGON_POINTS, MIN_ROI_SIZE_PX,
+    AI_CANDIDATE_COLOR,
+    AI_CANDIDATE_DISCARDED_OPACITY,
+    AI_CANDIDATE_PEN_WIDTH_PX,
+    MIN_POLYGON_POINTS,
+    MIN_ROI_SIZE_PX,
     POLYGON_CLOSE_DISTANCE_PX,
 )
 from .roi_compute import ring_contours
 from .roi_handles import ROI_SELECTED_PEN
 from .roi_items import (
-    BallReferenceItem, BoxRoiItem, CapsuleRoiItem, EllipseRoiItem,
-    PolygonRoiItem, capsule_path,
+    BallReferenceItem,
+    BoxRoiItem,
+    CapsuleRoiItem,
+    EllipseRoiItem,
+    PolygonRoiItem,
+    capsule_path,
 )
 
-
 #: Canvas item per ROI kind, and the kind each draw mode creates.
-ITEM_CLASSES = {"ellipse": EllipseRoiItem, "box": BoxRoiItem,
-                "capsule": CapsuleRoiItem, "polygon": PolygonRoiItem}
-DRAW_KINDS = {"draw_ellipse": "ellipse", "draw_box": "box",
-              "draw_capsule": "capsule", "draw_polygon": "polygon"}
+ITEM_CLASSES = {
+    "ellipse": EllipseRoiItem,
+    "box": BoxRoiItem,
+    "capsule": CapsuleRoiItem,
+    "polygon": PolygonRoiItem,
+}
+DRAW_KINDS = {
+    "draw_ellipse": "ellipse",
+    "draw_box": "box",
+    "draw_capsule": "capsule",
+    "draw_polygon": "polygon",
+}
 
 #: The ring is filled as well as outlined: two thin dashed circles in
 #: the ROI's own colour read as stray lines, especially once a wide
@@ -58,9 +88,10 @@ BALL_REFERENCE_ID = "__rolling_ball_reference__"
 
 
 def _candidate_pen():
-    pen = QPen(QColor(AI_CANDIDATE_COLOR), AI_CANDIDATE_PEN_WIDTH_PX,
-              Qt.PenStyle.DashLine)
-    pen.setCosmetic(True)   # zoom-independent width, like the ROI pens
+    pen = QPen(
+        QColor(AI_CANDIDATE_COLOR), AI_CANDIDATE_PEN_WIDTH_PX, Qt.PenStyle.DashLine
+    )
+    pen.setCosmetic(True)  # zoom-independent width, like the ROI pens
     return pen
 
 
@@ -104,14 +135,14 @@ class RoiCanvasLayer:
 
     def __init__(self, scene):
         self._scene = scene
-        self._items = {}          # roi_id -> item
-        self._draft = None        # item being rubber-band drawn
+        self._items = {}  # roi_id -> item
+        self._draft = None  # item being rubber-band drawn
         self._draft_kind = ""
-        self._draft_points = []   # contour vertices placed so far
+        self._draft_points = []  # contour vertices placed so far
         self._press_point = None
         self._ring_items = []
-        self._ring = (0, 0, False)   # gap, thickness, visible
-        self._candidate_items = {}   # index -> item; never a session ROI
+        self._ring = (0, 0, False)  # gap, thickness, visible
+        self._candidate_items = {}  # index -> item; never a session ROI
         self.mode = "pan"
         self.on_roi_created = lambda kind, geometry: None
         self.on_roi_edited = lambda roi_id, geometry: None
@@ -125,7 +156,7 @@ class RoiCanvasLayer:
         self._scene.selectionChanged.connect(self._selection_changed)
 
     def set_mode(self, mode):
-        self._discard_contour()   # switching tools abandons a trace
+        self._discard_contour()  # switching tools abandons a trace
         self.mode = mode
         for item in self._items.values():
             item.set_editable(mode == "edit")
@@ -136,8 +167,7 @@ class RoiCanvasLayer:
             # ai_pick is armed (its clicks never reach Qt's own item
             # dispatch, so a "draggable" guide there could never
             # actually be grabbed).
-            self._ball_item.set_editable(mode not in DRAW_KINDS
-                                         and mode != "ai_pick")
+            self._ball_item.set_editable(mode not in DRAW_KINDS and mode != "ai_pick")
 
     def set_ball_reference(self, visible, radius_px):
         """Show the rolling ball at its true size, or take it away.
@@ -155,19 +185,18 @@ class RoiCanvasLayer:
         if self._ball_centre is None:
             if bounds.isEmpty():
                 return
-            self._ball_centre = (bounds.center().x(),
-                                 bounds.center().y())
+            self._ball_centre = (bounds.center().x(), bounds.center().y())
         centre_x, centre_y = self._ball_centre
-        geometry = [centre_x, centre_y, float(radius_px),
-                    float(radius_px), 0.0]
+        geometry = [centre_x, centre_y, float(radius_px), float(radius_px), 0.0]
         if self._ball_item is None:
             self._ball_item = BallReferenceItem(
-                BALL_REFERENCE_ID, "Rolling Ball Ref", geometry,
-                self._on_ball_edited)
+                BALL_REFERENCE_ID, "Rolling Ball Ref", geometry, self._on_ball_edited
+            )
             self._ball_item.setZValue(ROI_Z)
             self._scene.addItem(self._ball_item)
-            self._ball_item.set_editable(self.mode not in DRAW_KINDS
-                                         and self.mode != "ai_pick")
+            self._ball_item.set_editable(
+                self.mode not in DRAW_KINDS and self.mode != "ai_pick"
+            )
         elif not self._ball_item.is_dragging():
             self._ball_item.set_geometry(geometry)
 
@@ -191,8 +220,7 @@ class RoiCanvasLayer:
         for index, kind, geometry, discarded in candidates:
             item = QGraphicsPathItem(_candidate_path(kind, geometry))
             item.setPen(_candidate_pen())
-            item.setOpacity(AI_CANDIDATE_DISCARDED_OPACITY if discarded
-                            else 1.0)
+            item.setOpacity(AI_CANDIDATE_DISCARDED_OPACITY if discarded else 1.0)
             item.setZValue(CANDIDATE_Z)
             item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
             self._scene.addItem(item)
@@ -245,8 +273,7 @@ class RoiCanvasLayer:
             if item is None:
                 continue
             path = QPainterPath()
-            for contour in ring_contours(shape, kind, geometry,
-                                         gap_px, thickness_px):
+            for contour in ring_contours(shape, kind, geometry, gap_px, thickness_px):
                 path.moveTo(contour[0][0], contour[0][1])
                 for x, y in contour[1:]:
                     path.lineTo(x, y)
@@ -270,8 +297,9 @@ class RoiCanvasLayer:
     def sync(self, effective, selected_roi_id):
         """Match the items to ``effective`` ([(roi_id, name, kind,
         geometry), ...] for the SHOWN image) — create, update, drop."""
-        wanted = {roi_id: (name, kind, geometry)
-                  for roi_id, name, kind, geometry in effective}
+        wanted = {
+            roi_id: (name, kind, geometry) for roi_id, name, kind, geometry in effective
+        }
         for roi_id in list(self._items):
             if roi_id not in wanted:
                 self._scene.removeItem(self._items.pop(roi_id))
@@ -282,8 +310,7 @@ class RoiCanvasLayer:
                 self._scene.removeItem(self._items.pop(roi_id))
                 item = None
             if item is None:
-                item = item_class(roi_id, name, geometry,
-                                  self.on_roi_edited)
+                item = item_class(roi_id, name, geometry, self.on_roi_edited)
                 item.set_editable(self.mode == "edit")
                 item.setZValue(ROI_Z)
                 self._scene.addItem(item)
@@ -326,9 +353,11 @@ class RoiCanvasLayer:
             return False
         self._press_point = scene_point
         self._draft_kind = DRAW_KINDS[self.mode]
-        self._draft = {"ellipse": QGraphicsEllipseItem,
-                       "box": QGraphicsRectItem,
-                       "capsule": QGraphicsPathItem}[self._draft_kind]()
+        self._draft = {
+            "ellipse": QGraphicsEllipseItem,
+            "box": QGraphicsRectItem,
+            "capsule": QGraphicsPathItem,
+        }[self._draft_kind]()
         self._draft.setPen(ROI_SELECTED_PEN)
         self._scene.addItem(self._draft)
         return True
@@ -344,8 +373,9 @@ class RoiCanvasLayer:
         geometry = self._drag_geometry(scene_point)
         if self._draft_kind == "ellipse":
             centre_x, centre_y, radius_x, radius_y, _angle = geometry
-            self._draft.setRect(centre_x - radius_x, centre_y - radius_y,
-                                2 * radius_x, 2 * radius_y)
+            self._draft.setRect(
+                centre_x - radius_x, centre_y - radius_y, 2 * radius_x, 2 * radius_y
+            )
         elif self._draft_kind == "box":
             self._draft.setRect(*geometry[:4])
         else:
@@ -387,15 +417,22 @@ class RoiCanvasLayer:
         if self._draft_kind == "box":
             # Trailing 0.0 is the corner radius: a box is drawn square
             # and rounded afterwards with its own grip.
-            return [min(press.x(), scene_point.x()),
-                    min(press.y(), scene_point.y()),
-                    abs(span_x), abs(span_y), 0.0, 0.0]
+            return [
+                min(press.x(), scene_point.x()),
+                min(press.y(), scene_point.y()),
+                abs(span_x),
+                abs(span_y),
+                0.0,
+                0.0,
+            ]
         length = math.hypot(span_x, span_y)
-        return [press.x() + span_x / 2, press.y() + span_y / 2,
-                length / 2,
-                max(length * CAPSULE_DRAFT_RADIUS_FRACTION,
-                    MIN_ROI_SIZE_PX),
-                math.degrees(math.atan2(span_y, span_x))]
+        return [
+            press.x() + span_x / 2,
+            press.y() + span_y / 2,
+            length / 2,
+            max(length * CAPSULE_DRAFT_RADIUS_FRACTION, MIN_ROI_SIZE_PX),
+            math.degrees(math.atan2(span_y, span_x)),
+        ]
 
     # ------------------------------------------------------------------ #
     # Contour drawing: clicks place vertices, and the loop closes on the  #
@@ -406,8 +443,7 @@ class RoiCanvasLayer:
         back on its first one."""
         if self._draft_points:
             first = self._draft_points[0]
-            reach = math.hypot(scene_point.x() - first.x(),
-                               scene_point.y() - first.y())
+            reach = math.hypot(scene_point.x() - first.x(), scene_point.y() - first.y())
             if reach <= POLYGON_CLOSE_DISTANCE_PX:
                 self._close_contour()
                 return True
@@ -434,9 +470,9 @@ class RoiCanvasLayer:
         self._discard_contour()
         if len(points) < MIN_POLYGON_POINTS:
             return
-        self.on_roi_created("polygon", [value for point in points
-                                        for value in (point.x(),
-                                                      point.y())])
+        self.on_roi_created(
+            "polygon", [value for point in points for value in (point.x(), point.y())]
+        )
 
     def _discard_contour(self):
         if self._draft_kind == "polygon" and self._draft is not None:
@@ -464,15 +500,15 @@ class RoiCanvasLayer:
             elif key == Qt.Key.Key_Backspace:
                 self._draft_points.pop()
                 if self._draft_points:
-                    self._draft.setPath(
-                        self._contour_path(self._draft_points[-1]))
+                    self._draft.setPath(self._contour_path(self._draft_points[-1]))
                 else:
                     self._discard_contour()
             else:
                 return False
             return True
-        if key == Qt.Key.Key_Escape and (self.mode in DRAW_KINDS
-                                         or self.mode == "ai_pick"):
+        if key == Qt.Key.Key_Escape and (
+            self.mode in DRAW_KINDS or self.mode == "ai_pick"
+        ):
             self.on_draw_cancelled()
             return True
         return False

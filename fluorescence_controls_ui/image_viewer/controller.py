@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Controller for the image viewer pane: turns toolbar events into model
 mutations, loads whatever ``current_path`` points at, keeps the dropdown /
 seek slider / path selection in sync, and rescans the browsed folder
@@ -9,28 +19,41 @@ never decodes the frames dragged past and never blocks the GUI thread.
 Finished decodes land through ``drain_loaded()`` (the dock pane's drain
 timer) and a small LRU cache makes recently viewed frames instant.
 """
+
+# Standard library imports.
 import queue
 import threading
 from collections import OrderedDict
 from pathlib import Path
 
+# Third-party imports.
 import numpy as np
+
+# Enthought library imports.
+from pyface.api import OK, DirectoryDialog
 from traits.api import Any, Instance, Str, observe
 from traitsui.api import Controller
-from pyface.api import DirectoryDialog, OK
 
-from logger.logger_service import get_logger
+# Microdrop package imports.
 from microdrop_application.preferences import MicrodropPreferences
 
+# Local imports.
 from ..consts import IMAGE_CACHE_FRAMES
 from .discovery import (
-    current_captures_directory, detect_wavelength, discover_bursts,
+    current_captures_directory,
+    detect_wavelength,
+    discover_bursts,
     discover_experiments,
 )
 from .display import load_image_array
 from .model import (
-    BURST_FILTER_ALL, FluorescenceImageViewerModel, WAVELENGTH_FILTER_ALL,
+    BURST_FILTER_ALL,
+    WAVELENGTH_FILTER_ALL,
+    FluorescenceImageViewerModel,
 )
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -77,7 +100,7 @@ class FluorescenceImageViewerController(Controller):
         # Open the built-in Pyface directory dialog
         dialog = DirectoryDialog(
             default_path=MicrodropPreferences().EXPERIMENTS_DIR,
-            message="Select Images Directory"
+            message="Select Images Directory",
         )
 
         # If the user clicks 'OK', update the hidden directory trait
@@ -186,14 +209,11 @@ class FluorescenceImageViewerController(Controller):
         """Move to the next/previous image group (wrapping) and show its
         first/last image. With the "All" choice (or a single group) the
         visible list already spans everything: wrap within it."""
-        if (self.model.selected_burst == BURST_FILTER_ALL
-                or len(self.model.bursts) <= 1):
+        if self.model.selected_burst == BURST_FILTER_ALL or len(self.model.bursts) <= 1:
             paths = self.model.paths
-            self.model.current_path = str(paths[0] if direction > 0
-                                          else paths[-1])
+            self.model.current_path = str(paths[0] if direction > 0 else paths[-1])
             return
-        group_index = (self.model.burst_index - 1 + direction) \
-            % len(self.model.bursts)
+        group_index = (self.model.burst_index - 1 + direction) % len(self.model.bursts)
         self._jump_to_burst(group_index + 1, show)
 
     # ------------------------------------------------------------------ #
@@ -226,8 +246,7 @@ class FluorescenceImageViewerController(Controller):
 
     def _visible_paths(self):
         """The selected burst's images through the wavelength filter."""
-        return self.model.visible_of(
-            self.model.burst_paths(self.model.selected_burst))
+        return self.model.visible_of(self.model.burst_paths(self.model.selected_burst))
 
     def _refresh_visible(self, show):
         """Rebuild ``model.paths`` and pick what to display: "first" /
@@ -296,8 +315,7 @@ class FluorescenceImageViewerController(Controller):
     def _ensure_load_worker(self):
         if self._load_worker is not None and self._load_worker.is_alive():
             return
-        self._load_worker = threading.Thread(target=self._run_loader,
-                                             daemon=True)
+        self._load_worker = threading.Thread(target=self._run_loader, daemon=True)
         self._load_worker.start()
 
     def _run_loader(self):
@@ -343,8 +361,9 @@ class FluorescenceImageViewerController(Controller):
         self.model.array = array
         bits = 16 if array.dtype == np.uint16 else 8
         kind = "gray" if array.ndim == 2 else "RGB"
-        self.model.info_text = (f"{Path(path).name} - {array.shape[1]}x"
-                                f"{array.shape[0]} {bits}-bit {kind}")
+        self.model.info_text = (
+            f"{Path(path).name} - {array.shape[1]}x{array.shape[0]} {bits}-bit {kind}"
+        )
         self._sync_selection()
         logger.info(f"Loaded image: {path} ({bits}-bit {kind})")
 
@@ -378,18 +397,26 @@ class FluorescenceImageViewerController(Controller):
         # captures land; anyone parked elsewhere stays parked.
         on_all = self.model.selected_burst == BURST_FILTER_ALL
         following_newest = (
-            not self.model.current_path or not self.model.paths
-            or (on_all
-                and self.model.current_path == str(self.model.paths[-1]))
-            or (not on_all and self.model.burst_names
+            not self.model.current_path
+            or not self.model.paths
+            or (on_all and self.model.current_path == str(self.model.paths[-1]))
+            or (
+                not on_all
+                and self.model.burst_names
                 and self.model.selected_burst == self.model.burst_names[-1]
-                and self.model.current_path == str(self.model.paths[-1])))
+                and self.model.current_path == str(self.model.paths[-1])
+            )
+        )
         self.model.bursts = bursts
 
-        detected = sorted({wavelength
-                           for _name, paths in bursts
-                           for wavelength in map(detect_wavelength, paths)
-                           if wavelength})
+        detected = sorted(
+            {
+                wavelength
+                for _name, paths in bursts
+                for wavelength in map(detect_wavelength, paths)
+                if wavelength
+            }
+        )
         self.model.wavelength_names = [WAVELENGTH_FILTER_ALL] + detected
         if self.model.selected_wavelength not in self.model.wavelength_names:
             self.model.selected_wavelength = WAVELENGTH_FILTER_ALL

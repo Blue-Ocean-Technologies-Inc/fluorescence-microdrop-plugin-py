@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Help-menu installer for the optional SAM (osam) ROI-detection stack.
 
 Runs ``pixi add --pypi osam`` (plus ``onnxruntime-directml`` on Windows, a
@@ -6,6 +16,8 @@ worker thread, streaming output into a cancellable ``QProgressDialog``.
 Mirrors ``image_viewer/sam_download.py``'s QThread + QProgressDialog
 pattern for consistency.
 """
+
+# Standard library imports.
 import importlib
 import os
 import signal
@@ -13,9 +25,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Third-party imports.
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QProgressDialog
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
@@ -87,7 +101,8 @@ class _InstallThread(QThread):
             try:
                 subprocess.run(
                     ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             except Exception as e:
                 logger.debug(f"taskkill failed for pid {process.pid}: {e}")
@@ -106,8 +121,12 @@ class _InstallThread(QThread):
         else:
             group_kwargs = {"start_new_session": True}
         self._process = subprocess.Popen(
-            args, cwd=self._root, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, **group_kwargs,
+            args,
+            cwd=self._root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            **group_kwargs,
         )
         for line in self._process.stdout:
             line = line.rstrip()
@@ -137,8 +156,15 @@ class _InstallThread(QThread):
                     # --platform: the DirectML wheel exists only for
                     # win_amd64, and a multi-platform pixi manifest
                     # fails to resolve it without the restriction.
-                    ["pixi", "add", "--pypi", "--platform", "win-64",
-                     "onnxruntime-directml"])
+                    [
+                        "pixi",
+                        "add",
+                        "--pypi",
+                        "--platform",
+                        "win-64",
+                        "onnxruntime-directml",
+                    ]
+                )
             except Exception as e:
                 gpu_code = None
                 logger.warning(

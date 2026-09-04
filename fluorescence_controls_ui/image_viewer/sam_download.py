@@ -1,20 +1,28 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Cancellable SAM model-weight download dialog for the fluorescence-controls
 image viewer's automatic ROI identification feature.
 
 Ported from labelme's droplet_roi/download.py progress-dialog widget.
 """
-from PySide6.QtCore import Qt
-from PySide6.QtCore import QThread
-from PySide6.QtCore import Signal
+
+# Third-party imports.
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QProgressDialog
-from PySide6.QtWidgets import QWidget
 
-from logger.logger_service import get_logger
-
-# sam_detect owns the module-level osam binding (its sam_available() knows
-# how to retry the import after an in-process Help-menu install); this
-# module reads sam_detect.osam instead of importing/tracking its own copy.
+# Local imports.
 from .analysis import sam_detect
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -86,8 +94,9 @@ def model_is_cached(model_name):
     """Whether the model's weights are already in the osam cache."""
     if not sam_detect.sam_available():
         raise RuntimeError("osam is not installed")
-    return (sam_detect.osam.apis.get_model_type_by_name(model_name)
-           .get_size() is not None)
+    return (
+        sam_detect.osam.apis.get_model_type_by_name(model_name).get_size() is not None
+    )
 
 
 def download_ai_model(model_name, parent=None):

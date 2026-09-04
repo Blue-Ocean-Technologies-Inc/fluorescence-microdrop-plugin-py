@@ -1,34 +1,78 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Qt-free ROI analysis state: the ROI definitions (shared base geometry
 plus forward drift-overrides), the intensity-stats cache, and batch
 progress. Mutated only on the GUI thread (button events and the dock
 pane's drain timer), so no Qt bridging is needed."""
+
+# Standard library imports.
 import re
 import uuid
 from pathlib import Path
 
+# Enthought library imports.
 from traits.api import (
-    Bool, Button, Dict, Enum, Event, Float, HasTraits, Instance, Int, List,
-    Range, Str, Tuple, observe,
+    Bool,
+    Button,
+    Dict,
+    Enum,
+    Event,
+    Float,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Range,
+    Str,
+    Tuple,
+    observe,
 )
 
+# Local imports.
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
 from .consts import (
-    AI_DRIFT_CHECK_INTERVAL_DEFAULT, AI_MIN_SIZE_DEFAULT_PX,
-    AI_SIGNIFICANCE_DEFAULT, AI_SIZE_FILTER_CEILING_PX,
-    BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS,
-    BUTTER_ORDER, BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_BOUNDS_MAD,
-    OUTLIER_THRESHOLD_MAD, OUTLIER_WINDOW_BOUNDS_PTS,
-    OUTLIER_WINDOW_PTS, HEATER_SENSOR_MEAN, HEATER_WINDOW_BOUNDS_MS,
-    HEATER_WINDOW_MS, RING_GAP_BOUNDS_PX, RING_GAP_PX,
-    RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, ROI_ALPHA_BOUNDS_PCT,
-    ROLLING_BALL_RADIUS_BOUNDS_PX, ROLLING_BALL_RADIUS_PX,
-    SAVGOL_ORDER, SAVGOL_ORDER_BOUNDS, SAVGOL_WINDOW_BOUNDS_PTS,
-    SAVGOL_WINDOW_PTS, VIEW_MODES, X_AXIS_MODES, AI_MAX_SIZE_DEFAULT_PX,
+    AI_DRIFT_CHECK_INTERVAL_DEFAULT,
+    AI_MAX_SIZE_DEFAULT_PX,
+    AI_MIN_SIZE_DEFAULT_PX,
+    AI_SIGNIFICANCE_DEFAULT,
+    AI_SIZE_FILTER_CEILING_PX,
+    BUTTER_CUTOFF,
+    BUTTER_CUTOFF_BOUNDS,
+    BUTTER_ORDER,
+    BUTTER_ORDER_BOUNDS,
+    HEATER_SENSOR_MEAN,
+    HEATER_WINDOW_BOUNDS_MS,
+    HEATER_WINDOW_MS,
+    OUTLIER_THRESHOLD_BOUNDS_MAD,
+    OUTLIER_THRESHOLD_MAD,
+    OUTLIER_WINDOW_BOUNDS_PTS,
+    OUTLIER_WINDOW_PTS,
+    RING_GAP_BOUNDS_PX,
+    RING_GAP_PX,
+    RING_THICKNESS_BOUNDS_PX,
+    RING_THICKNESS_PX,
+    ROI_ALPHA_BOUNDS_PCT,
+    ROLLING_BALL_RADIUS_BOUNDS_PX,
+    ROLLING_BALL_RADIUS_PX,
+    SAVGOL_ORDER,
+    SAVGOL_ORDER_BOUNDS,
+    SAVGOL_WINDOW_BOUNDS_PTS,
+    SAVGOL_WINDOW_PTS,
+    VIEW_MODES,
+    X_AXIS_MODES,
 )
 from .curve_fit import FIT_METHODS
-from .plot_series import SMOOTH_METHODS
 from .fit_presets import choices_for
+from .plot_series import SMOOTH_METHODS
 from .sam_detect import Candidate
 
 #: Matches the "ROI N" names next_roi_name() itself produces, to find
@@ -41,9 +85,18 @@ ROI_NAME_PATTERN = re.compile(r"^ROI (\d+)$")
 #: the ROI's total signal, and "per_area" its density — which is the
 #: mean times a constant, since the pixel counts cancel (see the
 #: area-statistics design note).
-PLOT_STATS = ("mean", "bg_corrected", "median", "min", "max",
-              "outline_mean", "integrated", "bg_integrated",
-              "per_area", "bg_per_area")
+PLOT_STATS = (
+    "mean",
+    "bg_corrected",
+    "median",
+    "min",
+    "max",
+    "outline_mean",
+    "integrated",
+    "bg_integrated",
+    "per_area",
+    "bg_per_area",
+)
 
 
 class RoiStyle(HasTraits):
@@ -60,8 +113,7 @@ class RoiStyle(HasTraits):
     #: stats table, and still exported to CSV. Range needs the explicit
     #: default, or it would start every ROI fully transparent.
     visible = Bool(True)
-    alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1],
-                  mode="spinner")
+    alpha = Range(*ROI_ALPHA_BOUNDS_PCT, ROI_ALPHA_BOUNDS_PCT[1], mode="spinner")
 
     @property
     def plot_alpha(self):
@@ -107,10 +159,10 @@ class FigureSettings(HasTraits):
     #: MAD — before anything is fitted or drawn. They are marked on
     #: the plot and flagged in the CSV rather than vanishing.
     remove_outliers = Bool(False)
-    outlier_threshold = Range(*OUTLIER_THRESHOLD_BOUNDS_MAD,
-                              OUTLIER_THRESHOLD_MAD)
-    outlier_window = Range(*OUTLIER_WINDOW_BOUNDS_PTS,
-                           OUTLIER_WINDOW_PTS, mode="spinner")
+    outlier_threshold = Range(*OUTLIER_THRESHOLD_BOUNDS_MAD, OUTLIER_THRESHOLD_MAD)
+    outlier_window = Range(
+        *OUTLIER_WINDOW_BOUNDS_PTS, OUTLIER_WINDOW_PTS, mode="spinner"
+    )
     #: Draw each line straight across its missing points (dropped
     #: outliers, uncomputed images) instead of breaking it. Display
     #: only — the fits and the CSV keep the gaps.
@@ -121,12 +173,9 @@ class FigureSettings(HasTraits):
     #: no longer independent, which flatters R² and shrinks the
     #: parameter uncertainties for the wrong reason.
     smooth_method = Enum(*SMOOTH_METHODS)
-    savgol_window = Range(*SAVGOL_WINDOW_BOUNDS_PTS,
-                          SAVGOL_WINDOW_PTS, mode="spinner")
-    savgol_order = Range(*SAVGOL_ORDER_BOUNDS, SAVGOL_ORDER,
-                         mode="spinner")
-    butter_order = Range(*BUTTER_ORDER_BOUNDS, BUTTER_ORDER,
-                         mode="spinner")
+    savgol_window = Range(*SAVGOL_WINDOW_BOUNDS_PTS, SAVGOL_WINDOW_PTS, mode="spinner")
+    savgol_order = Range(*SAVGOL_ORDER_BOUNDS, SAVGOL_ORDER, mode="spinner")
+    butter_order = Range(*BUTTER_ORDER_BOUNDS, BUTTER_ORDER, mode="spinner")
     #: Cutoff as a fraction of the Nyquist frequency: 1.0 passes
     #: everything, small values keep only the slowest changes. A
     #: fraction rather than Hz because a burst-captured series is not
@@ -162,8 +211,7 @@ class FigureSettings(HasTraits):
     #: How generous the time join is (ms): a capture's temperature is
     #: the mean of every heater sample within ±window/2 of it. 0 means
     #: exact — linear interpolation at the capture instant.
-    heater_window_ms = Range(*HEATER_WINDOW_BOUNDS_MS,
-                             HEATER_WINDOW_MS, mode="spinner")
+    heater_window_ms = Range(*HEATER_WINDOW_BOUNDS_MS, HEATER_WINDOW_MS, mode="spinner")
 
     #: Which of the Fit tab's groups are open — display state, but
     #: persisted so the panel reopens the way it was left.
@@ -196,8 +244,9 @@ class RollingBall(HasTraits):
     rolls over them and takes the signal with the background."""
 
     enabled = Bool(False)
-    radius_px = Range(*ROLLING_BALL_RADIUS_BOUNDS_PX,
-                      ROLLING_BALL_RADIUS_PX, mode="spinner")
+    radius_px = Range(
+        *ROLLING_BALL_RADIUS_BOUNDS_PX, ROLLING_BALL_RADIUS_PX, mode="spinner"
+    )
 
     #: Draw the ball on the image at its true size, as a guide for
     #: choosing the radius by eye. Display only — it is measured with
@@ -217,10 +266,8 @@ class BackgroundRing(HasTraits):
 
     #: Pixels between the ROI's edge and the ring — fluorescence bleeds
     #: past the boundary and that halo is not background.
-    gap_px = Range(*RING_GAP_BOUNDS_PX, RING_GAP_PX,
-                   mode="spinner")
-    thickness_px = Range(*RING_THICKNESS_BOUNDS_PX,
-                         RING_THICKNESS_PX, mode="spinner")
+    gap_px = Range(*RING_GAP_BOUNDS_PX, RING_GAP_PX, mode="spinner")
+    thickness_px = Range(*RING_THICKNESS_BOUNDS_PX, RING_THICKNESS_PX, mode="spinner")
     show_on_canvas = Bool(True)
 
 
@@ -271,8 +318,7 @@ class Roi(HasTraits):
         """The geometry in force for an image captured at
         ``capture_time``: the override with the greatest anchor at or
         before it, else the base geometry."""
-        anchors = [anchor for anchor in self.overrides
-                   if anchor <= capture_time]
+        anchors = [anchor for anchor in self.overrides if anchor <= capture_time]
         if anchors:
             return list(self.overrides[max(anchors)])
         return list(self.geometry)
@@ -317,7 +363,7 @@ class AnalysisSession(HasTraits):
 
     #: Bumped after every drain absorption and after a store load — Dict
     #: item writes don't notify, so observers watch this instead.
-    stats_revision = Int(0) #TODO: convert to Event trait
+    stats_revision = Int(0)  # TODO: convert to Event trait
 
     #: Which stat the plot shows.
     plot_stat = Enum(*PLOT_STATS)
@@ -385,25 +431,30 @@ class AnalysisSession(HasTraits):
         ``stat_cache`` through from stat_info() to avoid re-stating the
         same path for every ROI."""
         mtime, capture_time = self.stat_info(path, stat_cache)
-        return (str(path), mtime, roi.roi_id, roi.kind,
-                tuple(roi.effective_geometry(capture_time)),
-                self.correction_key())
+        return (
+            str(path),
+            mtime,
+            roi.roi_id,
+            roi.kind,
+            tuple(roi.effective_geometry(capture_time)),
+            self.correction_key(),
+        )
 
     def correction_key(self):
         """Everything about how the image is treated before a stat is
         read off it — the ring, and the rolling ball that runs before
         it. One tuple, so the cache key and the work item cannot drift
         apart."""
-        return (self.ring.gap_px, self.ring.thickness_px,
-                self.ball.effective_radius())
+        return (self.ring.gap_px, self.ring.thickness_px, self.ball.effective_radius())
 
     def effective_for(self, path):
         """[(roi_id, name, kind, geometry), ...] in force for ``path`` —
         what the canvas draws and the batch computes for that image."""
         capture_time = capture_timestamp(path)
-        return [(roi.roi_id, roi.name, roi.kind,
-                 roi.effective_geometry(capture_time))
-                for roi in self.rois]
+        return [
+            (roi.roi_id, roi.name, roi.kind, roi.effective_geometry(capture_time))
+            for roi in self.rois
+        ]
 
 
 class RoiAnalysisModel(HasTraits):
@@ -414,9 +465,16 @@ class RoiAnalysisModel(HasTraits):
     #: Canvas interaction: pan (normal navigation), one-shot draw modes,
     #: edit (move/resize/select existing ROIs), or ai_pick (click the
     #: canvas to prompt SAM at that point).
-    interaction_mode = Enum("pan", "draw_ellipse", "draw_box",
-                            "draw_capsule", "draw_polygon", "draw_scale",
-                            "edit", "ai_pick")
+    interaction_mode = Enum(
+        "pan",
+        "draw_ellipse",
+        "draw_box",
+        "draw_capsule",
+        "draw_polygon",
+        "draw_scale",
+        "edit",
+        "ai_pick",
+    )
 
     #: roi_id of the canvas-selected ROI (edit mode), '' when none.
     selected_roi_id = Str()
@@ -459,8 +517,8 @@ class RoiAnalysisModel(HasTraits):
     heater_sensor_choices = List(Str, [HEATER_SENSOR_MEAN])
 
     #: View -> controller channels fired by the canvas ROI layer.
-    canvas_roi_created = Event()   # (kind, geometry)
-    canvas_roi_edited = Event()    # (roi_id, geometry)
+    canvas_roi_created = Event()  # (kind, geometry)
+    canvas_roi_edited = Event()  # (roi_id, geometry)
     #: Escape out of an armed draw tool (which now stays armed until
     #: told otherwise, so that a series of shapes is one trip to the
     #: toolbar rather than one trip each).
@@ -475,15 +533,14 @@ class RoiAnalysisModel(HasTraits):
     #: presets and with whatever the session currently fits.
     fit_method_choices = List(Str)
 
-    @observe("fit_presets.items, fit_presets, session, "
-             "session:figure:fit_method")
+    @observe("fit_presets.items, fit_presets, session, session:figure:fit_method")
     def _update_fit_method_choices(self, event):
         self.fit_method_choices = choices_for(
-            self.fit_presets, self.session.figure.fit_method)
+            self.fit_presets, self.session.figure.fit_method
+        )
 
     def _fit_method_choices_default(self):
-        return choices_for(self.fit_presets,
-                           self.session.figure.fit_method)
+        return choices_for(self.fit_presets, self.session.figure.fit_method)
 
     # ---------------------------------------------------------------- #
     # AI (SAM) ROI detection: toolbar/options state and canvas<->
@@ -513,10 +570,8 @@ class RoiAnalysisModel(HasTraits):
     #: observers below drag one bound along when the other crosses it,
     #: so min can never sit above max (mutually-referencing dynamic
     #: Range bounds would recurse — traits evaluates them on read).
-    ai_min_size = Range(0, AI_SIZE_FILTER_CEILING_PX,
-                        AI_MIN_SIZE_DEFAULT_PX)
-    ai_max_size = Range(0, AI_SIZE_FILTER_CEILING_PX,
-                        AI_MAX_SIZE_DEFAULT_PX)
+    ai_min_size = Range(0, AI_SIZE_FILTER_CEILING_PX, AI_MIN_SIZE_DEFAULT_PX)
+    ai_max_size = Range(0, AI_SIZE_FILTER_CEILING_PX, AI_MAX_SIZE_DEFAULT_PX)
 
     @observe("ai_min_size")
     def _keep_max_size_at_or_above_min(self, event):
@@ -527,6 +582,7 @@ class RoiAnalysisModel(HasTraits):
     def _keep_min_size_at_or_below_max(self, event):
         if self.ai_min_size > event.new:
             self.ai_min_size = event.new
+
     #: Geometry accepted candidates are converted to.
     ai_output_kind = Enum("polygon", "ellipse")
     #: How many images between drift re-checks while tracking.

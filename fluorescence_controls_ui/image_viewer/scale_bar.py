@@ -1,6 +1,18 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Scale-bar maths: the units a calibration can be entered in, the
 calibration a drawn line implies, and the round bar a map draws for a
 given zoom. Qt-free, so the snapping ladder is testable on its own."""
+
+# Standard library imports.
 import math
 
 #: Dropdown order (largest first) and each unit's size in metres.
@@ -43,8 +55,7 @@ def nice_scale(metres_per_screen_px, target_px=SCALE_BAR_TARGET_PX):
     """``(bar_px, label)`` for a bar of about ``target_px``, its length
     snapped DOWN to 1, 2 or 5 times a power of ten so the label always
     reads round. None when there is no usable calibration."""
-    if (not math.isfinite(metres_per_screen_px)
-            or metres_per_screen_px <= 0):
+    if not math.isfinite(metres_per_screen_px) or metres_per_screen_px <= 0:
         return None
     span = metres_per_screen_px * target_px
     decade = 10.0 ** math.floor(math.log10(span))

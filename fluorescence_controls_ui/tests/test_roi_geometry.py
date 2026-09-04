@@ -1,8 +1,25 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Unit tests for the canonical ROI geometry helpers."""
+
+# Third-party imports.
 import numpy as np
 
+# Microdrop package imports.
 from fluorescence_controls_ui.image_viewer.analysis.roi_geometry import (
-    box_polygon, capsule_polygon, centre_of, normalize, outline_of,
+    box_polygon,
+    capsule_polygon,
+    centre_of,
+    normalize,
+    outline_of,
     translated,
 )
 
@@ -20,7 +37,13 @@ def test_normalize_upgrades_a_legacy_box():
     assert kind == "box"
     assert geometry == [1.0, 2.0, 30.0, 40.0, 0.0, 0.0]
     assert normalize("box", [1.0, 2.0, 30.0, 40.0, 15.0])[1] == [
-        1.0, 2.0, 30.0, 40.0, 15.0, 0.0]
+        1.0,
+        2.0,
+        30.0,
+        40.0,
+        15.0,
+        0.0,
+    ]
 
 
 def test_normalize_clamps_a_corner_radius_to_the_shorter_side():
@@ -48,12 +71,11 @@ def test_box_polygon_rotates_clockwise_in_image_coordinates():
 
 def test_capsule_polygon_area_matches_the_analytic_value():
     half_length, radius = 20.0, 6.0
-    polygon = capsule_polygon([50.0, 50.0, half_length, radius, 0.0],
-                              samples=256)
+    polygon = capsule_polygon([50.0, 50.0, half_length, radius, 0.0], samples=256)
     x, y = polygon[:, 0], polygon[:, 1]
     # Shoelace formula over the closed outline.
     area = 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
-    expected = np.pi * radius ** 2 + 4.0 * radius * half_length
+    expected = np.pi * radius**2 + 4.0 * radius * half_length
     assert abs(area - expected) / expected < 0.01
 
 
@@ -101,22 +123,40 @@ def test_a_rounded_box_keeps_its_bounds_and_loses_its_corners():
     assert rounded[:, 0].min() == 0.0 and rounded[:, 0].max() == 100.0
     assert rounded[:, 1].min() == 0.0 and rounded[:, 1].max() == 60.0
     assert len(rounded) > len(sharp)
-    assert not any(x in (0.0, 100.0) and y in (0.0, 60.0)
-                   for x, y in rounded)
+    assert not any(x in (0.0, 100.0) and y in (0.0, 60.0) for x, y in rounded)
 
 
 def test_a_rounded_box_still_rotates_about_its_centre():
     upright = box_polygon([0.0, 0.0, 40.0, 40.0, 0.0, 10.0])
     turned = box_polygon([0.0, 0.0, 40.0, 40.0, 90.0, 10.0])
     # A square rounded equally at every corner maps onto itself.
-    assert np.allclose(sorted(map(tuple, np.round(upright, 6))),
-                       sorted(map(tuple, np.round(turned, 6))))
+    assert np.allclose(
+        sorted(map(tuple, np.round(upright, 6))),
+        sorted(map(tuple, np.round(turned, 6))),
+    )
 
 
 def test_translated_moves_an_anchor_or_every_vertex():
-    assert translated("box", [10.0, 20.0, 30.0, 40.0, 0.0, 5.0],
-                      12.0, -3.0) == [22.0, 17.0, 30.0, 40.0, 0.0, 5.0]
-    assert translated("ellipse", [10.0, 20.0, 5.0, 5.0, 45.0],
-                      1.0, 2.0) == [11.0, 22.0, 5.0, 5.0, 45.0]
-    assert translated("polygon", [0.0, 0.0, 10.0, 0.0, 10.0, 10.0],
-                      2.0, 3.0) == [2.0, 3.0, 12.0, 3.0, 12.0, 13.0]
+    assert translated("box", [10.0, 20.0, 30.0, 40.0, 0.0, 5.0], 12.0, -3.0) == [
+        22.0,
+        17.0,
+        30.0,
+        40.0,
+        0.0,
+        5.0,
+    ]
+    assert translated("ellipse", [10.0, 20.0, 5.0, 5.0, 45.0], 1.0, 2.0) == [
+        11.0,
+        22.0,
+        5.0,
+        5.0,
+        45.0,
+    ]
+    assert translated("polygon", [0.0, 0.0, 10.0, 0.0, 10.0, 10.0], 2.0, 3.0) == [
+        2.0,
+        3.0,
+        12.0,
+        3.0,
+        12.0,
+        13.0,
+    ]

@@ -1,11 +1,24 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 # fluorescence_controls_ui/image_viewer/analysis/roi_handles.py
 """Drag grips shared by the ROI canvas items. Each marks its parent as
 dragging on press so the layer's sync() leaves that shape alone, edits
 it on move, and commits exactly one edit on release."""
+
+# Third-party imports.
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPen
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsRectItem
 
+# Local imports.
 from .consts import ROTATE_SNAP_DEGREES
 
 #: Cosmetic (zoom-independent 1px) pens; cyan reads on dark raws.
@@ -27,12 +40,10 @@ class ResizeHandle(QGraphicsRectItem):
 
     def __init__(self, parent):
         half = HANDLE_SIZE_PX / 2
-        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX,
-                         parent)
+        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX, parent)
         self.setBrush(HANDLE_BRUSH)
         self.setPen(QPen(Qt.PenStyle.NoPen))
-        self.setFlag(
-            self.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.setFlag(self.GraphicsItemFlag.ItemIgnoresTransformations)
         self.setCursor(Qt.CursorShape.SizeFDiagCursor)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
 
@@ -43,8 +54,7 @@ class ResizeHandle(QGraphicsRectItem):
         event.accept()
 
     def mouseMoveEvent(self, event):
-        uniform = bool(event.modifiers()
-                       & Qt.KeyboardModifier.ShiftModifier)
+        uniform = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
         self.parentItem().resize_to(event.scenePos(), uniform)
         event.accept()
 
@@ -59,8 +69,7 @@ class NodeHandle(QGraphicsRectItem):
 
     def __init__(self, parent, index):
         half = HANDLE_SIZE_PX / 2
-        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX,
-                         parent)
+        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX, parent)
         self._index = index
         self.setBrush(HANDLE_BRUSH)
         self.setPen(QPen(Qt.PenStyle.NoPen))
@@ -90,8 +99,7 @@ class CornerRadiusHandle(QGraphicsRectItem):
 
     def __init__(self, parent):
         half = HANDLE_SIZE_PX / 2
-        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX,
-                         parent)
+        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX, parent)
         self.setBrush(RADIUS_HANDLE_BRUSH)
         self.setPen(QPen(Qt.PenStyle.NoPen))
         self.setFlag(self.GraphicsItemFlag.ItemIgnoresTransformations)
@@ -120,8 +128,7 @@ class RotateHandle(QGraphicsEllipseItem):
 
     def __init__(self, parent):
         half = HANDLE_SIZE_PX / 2
-        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX,
-                         parent)
+        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX, parent)
         self.setBrush(HANDLE_BRUSH)
         self.setPen(QPen(Qt.PenStyle.NoPen))
         self.setFlag(self.GraphicsItemFlag.ItemIgnoresTransformations)
@@ -134,16 +141,14 @@ class RotateHandle(QGraphicsEllipseItem):
         parent._dragging = True
         # Remember where on the circle it was grabbed, so the shape
         # does not jump to the cursor on the first move.
-        self._grab_offset = (parent.angle_to(event.scenePos())
-                             - parent.rotation())
+        self._grab_offset = parent.angle_to(event.scenePos()) - parent.rotation()
         event.accept()
 
     def mouseMoveEvent(self, event):
         parent = self.parentItem()
         angle = parent.angle_to(event.scenePos()) - self._grab_offset
         if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-            angle = (round(angle / ROTATE_SNAP_DEGREES)
-                     * ROTATE_SNAP_DEGREES)
+            angle = round(angle / ROTATE_SNAP_DEGREES) * ROTATE_SNAP_DEGREES
         parent.set_angle(angle)
         event.accept()
 

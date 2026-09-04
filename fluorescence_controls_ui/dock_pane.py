@@ -1,20 +1,41 @@
-from traits.api import Instance, observe
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Enthought library imports.
 from pyface.qt.QtCore import Qt
+from traits.api import observe
 
-from template_status_and_controls.base_dock_pane import (
-    BaseStatusDockPane, build_status_icon_tooltip, status_bar_icon_font)
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import information
-from microdrop_style.icons.icons import ICON_EMOJI_OBJECTS
-from microdrop_utils.pyside_helpers import ClickableLabel
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from logger.logger_service import get_logger
+from template_status_and_controls.base_dock_pane import (
+    BaseStatusDockPane,
+    build_status_icon_tooltip,
+    status_bar_icon_font,
+)
 
-from .consts import PKG, PKG_name, listener_name, START_DEVICE_MONITORING
-from .model import FluorescenceStatusModel
+# Microdrop style imports.
+from microdrop_style.icons.icons import ICON_EMOJI_OBJECTS
+
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.pyside_helpers import ClickableLabel
+
+# Local imports.
+from .consts import PKG, START_DEVICE_MONITORING, PKG_name, listener_name
 from .controller import FluorescenceControlsController
-from .preferences import FluorescencePreferences
-from .view import UnifiedView
 from .message_handler import FluorescenceMessageHandler
+from .model import FluorescenceStatusModel
+from .view import UnifiedView
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -78,8 +99,9 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
                 (self.model.DISCONNECTED_COLOR, "Disconnected"),
                 (self.model.CONNECTED_COLOR, "Connected"),
             ],
-            hint="Searching for device…" if self.model.searching
-                 else "Click to search for a connection.",
+            hint="Searching for device…"
+            if self.model.searching
+            else "Click to search for a connection.",
         )
 
     # ------------------------------------------------------------------ #
@@ -90,7 +112,9 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
         running. The backend acknowledges by publishing its searching state,
         which disables the icon (see _sync_search_affordance)."""
         if self.model.searching:
-            logger.debug("Fluorescence search already active; ignoring status-icon click")
+            logger.debug(
+                "Fluorescence search already active; ignoring status-icon click"
+            )
             return
         publish_message(topic=START_DEVICE_MONITORING, message="")
 
@@ -121,6 +145,8 @@ class FluorescenceStatusDockPane(BaseStatusDockPane):
         when no scan is currently active — and flip the tooltip to match."""
         if self.status_bar_icon is not None:
             self.status_bar_icon.setCursor(
-                Qt.CursorShape.ArrowCursor if self.model.searching
-                else Qt.CursorShape.PointingHandCursor)
+                Qt.CursorShape.ArrowCursor
+                if self.model.searching
+                else Qt.CursorShape.PointingHandCursor
+            )
         self._refresh_status_bar_tooltip()

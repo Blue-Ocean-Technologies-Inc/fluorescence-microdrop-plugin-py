@@ -1,20 +1,36 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from traits.api import Instance
 
-from template_status_and_controls.base_message_handler import BaseMessageHandler
-from logger.logger_service import get_logger
-
+# Microdrop package imports.
+from fluorescence_controller.consts import (
+    FIRMWARE_UPLOAD_FINISHED,
+    FIRMWARE_UPLOAD_LOG,
+    FIRMWARE_UPLOAD_STARTED,
+)
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedMessage,
 )
+from template_status_and_controls.base_message_handler import BaseMessageHandler
 
-from fluorescence_controller.consts import (
-    FIRMWARE_UPLOAD_FINISHED, FIRMWARE_UPLOAD_LOG, FIRMWARE_UPLOAD_STARTED,
-)
-
+# Local imports.
 from .live_state import fluorescence_live_state
 from .model import FluorescenceStatusModel
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,8 +51,7 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         dialog itself (the controller's dispatch="ui" observer does,
         safely, on the GUI thread)."""
         try:
-            row_selected_msg = ProtocolTreeRowSelectedMessage.deserialize(
-                body)
+            row_selected_msg = ProtocolTreeRowSelectedMessage.deserialize(body)
         except Exception as e:
             logger.warning(f"Unparseable row-selected payload: {e}")
             return
@@ -55,6 +70,7 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         which shadows tests' `sys.modules` monkeypatching of it."""
         logger.debug(f"Fluorescence applied ack: {body}")
         from . import capture_service
+
         capture_service.notify_applied()
 
     def _on_connected_triggered(self, body):
@@ -82,17 +98,20 @@ class FluorescenceMessageHandler(BaseMessageHandler):
         live_state (the firmware-upload dialog's dispatch="ui" observer
         applies it; never touch a model here)."""
         fluorescence_live_state.firmware_upload_message = (
-            FIRMWARE_UPLOAD_STARTED, body)
+            FIRMWARE_UPLOAD_STARTED,
+            body,
+        )
 
     def _on_firmware_upload_log_triggered(self, body):
         """One uploader progress line — ferry to the GUI thread."""
-        fluorescence_live_state.firmware_upload_message = (
-            FIRMWARE_UPLOAD_LOG, body)
+        fluorescence_live_state.firmware_upload_message = (FIRMWARE_UPLOAD_LOG, body)
 
     def _on_firmware_upload_finished_triggered(self, body):
         """Upload outcome — ferry to the GUI thread."""
         fluorescence_live_state.firmware_upload_message = (
-            FIRMWARE_UPLOAD_FINISHED, body)
+            FIRMWARE_UPLOAD_FINISHED,
+            body,
+        )
 
     def _on_protocol_step_fluorescence_triggered(self, body):
         """The entry a running protocol is firing right now — ferry to the
@@ -116,9 +135,12 @@ class FluorescenceMessageHandler(BaseMessageHandler):
             logger.error(f"Unparseable protocol-session payload: {body!r}")
             return
         from pyface.api import GUI
+
         from . import camera_session
+
         GUI.invoke_later(
-            camera_session.activate if active else camera_session.deactivate)
+            camera_session.activate if active else camera_session.deactivate
+        )
         fluorescence_live_state.protocol_session_active = active
 
     def _on_searching_triggered(self, body):
@@ -143,6 +165,6 @@ class FluorescenceMessageHandler(BaseMessageHandler):
             logger.error(f"Unparseable board id payload: {body!r}")
             return
         self.model.board_id_text = str(
-            identity.get("device_id") or identity.get("uid") or "unknown")
-        fluorescence_live_state.board_device_id = str(
-            identity.get("device_id") or "")
+            identity.get("device_id") or identity.get("uid") or "unknown"
+        )
+        fluorescence_live_state.board_device_id = str(identity.get("device_id") or "")

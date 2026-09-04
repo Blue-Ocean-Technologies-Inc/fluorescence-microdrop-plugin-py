@@ -1,19 +1,35 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Capture discovery for the image viewer: where the device viewer saves
 the raw (16-bit) sensor frames for the current experiment, and the ordered
 list of those files. Pure path logic so it stays hardware/Qt-free testable.
 """
+
+# Standard library imports.
 import calendar
 import re
 import time
 from pathlib import Path
 
+# Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME, RAW_CAPTURES_SUBDIR
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import sanitize_label
 from microdrop_application.helpers import get_current_experiment_directory
-from logger.logger_service import get_logger
 
-from ..consts import IMAGE_PATTERNS, CAPTURE_TIMESTAMP_FORMAT
+# Local imports.
+from ..consts import CAPTURE_TIMESTAMP_FORMAT, IMAGE_PATTERNS
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -48,10 +64,14 @@ def discover_experiments() -> list:
         return []
     if not root.is_dir():
         return []
-    experiments = [(child.name, child / CAPTURES_DIR_NAME)
-                   for child in root.iterdir() if child.is_dir()]
-    return sorted(experiments,
-                  key=lambda item: (item[1].parent.stat().st_mtime, item[0]))
+    experiments = [
+        (child.name, child / CAPTURES_DIR_NAME)
+        for child in root.iterdir()
+        if child.is_dir()
+    ]
+    return sorted(
+        experiments, key=lambda item: (item[1].parent.stat().st_mtime, item[0])
+    )
 
 
 def discover_captures(directory) -> list:
@@ -66,9 +86,12 @@ def discover_captures(directory) -> list:
     still matches the old flat ``captures/16bit_raw/`` layout."""
     if directory is None or not Path(directory).is_dir():
         return []
-    paths = {path for pattern in IMAGE_PATTERNS
-             for path in Path(directory).rglob(pattern)
-             if path.parent.name == RAW_CAPTURES_SUBDIR}
+    paths = {
+        path
+        for pattern in IMAGE_PATTERNS
+        for path in Path(directory).rglob(pattern)
+        if path.parent.name == RAW_CAPTURES_SUBDIR
+    }
     return sorted(paths, key=lambda path: (path.stat().st_mtime, path.name))
 
 
@@ -87,11 +110,12 @@ def discover_bursts(directory) -> list:
     groups: dict = {}
     root = Path(directory) if directory is not None else None
     for path in discover_captures(directory):
-        burst_dir = path.parent.parent   # <burst>/16bit_raw/<file>
+        burst_dir = path.parent.parent  # <burst>/16bit_raw/<file>
         name = UNGROUPED_BURST if burst_dir == root else burst_dir.name
         groups.setdefault(name, []).append(path)
-    return sorted(groups.items(),
-                  key=lambda item: (item[1][0].stat().st_mtime, item[0]))
+    return sorted(
+        groups.items(), key=lambda item: (item[1][0].stat().st_mtime, item[0])
+    )
 
 
 #: sanitized-token -> display name for the six LED wavelengths; derived
@@ -112,14 +136,12 @@ def detect_wavelength(path) -> str:
 
 
 #: The utc_stamp() pattern as it appears inside capture filenames.
-CAPTURE_TIMESTAMP_PATTERN = re.compile(
-    r"\d{4}_\d{2}_\d{2}-\d{2}_\d{2}_\d{2}")
+CAPTURE_TIMESTAMP_PATTERN = re.compile(r"\d{4}_\d{2}_\d{2}-\d{2}_\d{2}_\d{2}")
 
 #: The standalone fluorescence app's stamp (dashes and underscores
 #: swapped relative to utc_stamp's) — LOCAL time, which is the clock
 #: that app wrote, where utc_stamp writes UTC.
-LEGACY_TIMESTAMP_PATTERN = re.compile(
-    r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}")
+LEGACY_TIMESTAMP_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}")
 LEGACY_TIMESTAMP_FORMAT = "%Y-%m-%d_%H-%M-%S"
 
 
@@ -133,15 +155,15 @@ def capture_timestamp(path) -> float:
     match = CAPTURE_TIMESTAMP_PATTERN.search(name)
     if match:
         try:
-            return float(calendar.timegm(
-                time.strptime(match.group(0), CAPTURE_TIMESTAMP_FORMAT)))
+            return float(
+                calendar.timegm(time.strptime(match.group(0), CAPTURE_TIMESTAMP_FORMAT))
+            )
         except ValueError:
             pass
     match = LEGACY_TIMESTAMP_PATTERN.search(name)
     if match:
         try:
-            return time.mktime(
-                time.strptime(match.group(0), LEGACY_TIMESTAMP_FORMAT))
+            return time.mktime(time.strptime(match.group(0), LEGACY_TIMESTAMP_FORMAT))
         except (ValueError, OverflowError):
             pass
     try:

@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Dock pane for advanced ASI camera controls (binning, resolution, image
 type, gamma, white balance, offset, flip, USB bandwidth, ...).
 
@@ -6,16 +16,20 @@ picks them up between frames) and persist across sessions. Every write is
 clamped to the connected camera's own reported control range, so cameras
 with narrower capability sets stay safe.
 """
+
+# Enthought library imports.
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Instance
 from traitsui.api import Handler
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from ..consts import PKG
 from .controller import AdvancedCameraController
 from .model import AdvancedCameraModel
 from .view import advanced_camera_view
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,7 +53,8 @@ class AdvancedCameraDockPane(TraitsDockPane):
 
     def create_contents(self, parent):
         self.ui = self.edit_traits(
-            kind="subpanel", parent=parent, handler=self.controller)
+            kind="subpanel", parent=parent, handler=self.controller
+        )
         return self.ui.control
 
     def destroy(self):

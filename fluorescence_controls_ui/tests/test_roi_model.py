@@ -1,13 +1,29 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Roi override resolution and AnalysisSession cache keys."""
+
+# Microdrop package imports.
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
-    AnalysisSession, Roi,
+    AnalysisSession,
+    Roi,
 )
 
 
 def _roi():
-    return Roi(name="ROI 1", kind="ellipse",
-               geometry=[50.0, 50.0, 10.0, 10.0, 0.0],
-               base_anchor=100.0)
+    return Roi(
+        name="ROI 1",
+        kind="ellipse",
+        geometry=[50.0, 50.0, 10.0, 10.0, 0.0],
+        base_anchor=100.0,
+    )
 
 
 def test_effective_geometry_is_base_without_overrides():

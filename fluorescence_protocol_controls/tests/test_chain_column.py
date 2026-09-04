@@ -1,14 +1,30 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the `fluorescence_chain` protocol column: the
 display formula, the #541 capture-cell lock (set_value + on_row_loaded),
 the once-per-session first-time dialog, the factory wiring, and the
 handler's on_post_protocol_end (moved verbatim from the deleted compound
 column)."""
+
+# Standard library imports.
 import json
 
+# Third-party imports.
 import pytest
 
+# Microdrop package imports.
 from fluorescence_controller.consts import (
-    ALL_LEDS_OFF, FLUORESCENCE_APPLIED, PROTOCOL_FLUORESCENCE_SESSION,
+    ALL_LEDS_OFF,
+    FLUORESCENCE_APPLIED,
+    PROTOCOL_FLUORESCENCE_SESSION,
 )
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
@@ -16,15 +32,18 @@ from fluorescence_protocol_controls.protocol_columns import (
     chain_column as column_module,
 )
 from fluorescence_protocol_controls.protocol_columns.chain_column import (
-    FluorescenceChainColumnView, FluorescenceChainHandler,
+    FluorescenceChainColumnView,
+    FluorescenceChainHandler,
     make_fluorescence_chain_column,
 )
-from microdrop_utils import dramatiq_pub_sub_helpers
 from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
+# Microdrop utils imports.
+from microdrop_utils import dramatiq_pub_sub_helpers
 
-ENTRY_KW = dict(wavelength="Blue (460 nm)", intensity=50, frequency=40000,
-                exposure_ms=10.0, gain=0)
+ENTRY_KW = dict(
+    wavelength="Blue (460 nm)", intensity=50, frequency=40000, exposure_ms=10.0, gain=0
+)
 
 
 def _entry(label, run=True):
@@ -47,6 +66,7 @@ def _reset_warned_once():
 
 # --- display -----------------------------------------------------------
 
+
 def test_display_empty_or_none_is_blank():
     view = FluorescenceChainColumnView()
     assert view.format_display(None, None) == ""
@@ -55,16 +75,21 @@ def test_display_empty_or_none_is_blank():
 
 def test_display_all_ticked_shows_count():
     view = FluorescenceChainColumnView()
-    value = [e.model_dump() for e in
-             [_entry("a"), _entry("b"), _entry("c")]]
+    value = [e.model_dump() for e in [_entry("a"), _entry("b"), _entry("c")]]
     assert view.format_display(value, None) == "3"
 
 
 def test_display_partial_ticked_shows_fraction():
     view = FluorescenceChainColumnView()
-    value = [e.model_dump() for e in
-             [_entry("a"), _entry("b", run=False),
-              _entry("c"), _entry("d", run=False)]]
+    value = [
+        e.model_dump()
+        for e in [
+            _entry("a"),
+            _entry("b", run=False),
+            _entry("c"),
+            _entry("d", run=False),
+        ]
+    ]
     assert view.format_display(value, None) == "2/4"
 
 
@@ -79,6 +104,7 @@ def test_view_is_read_only():
 
 
 # --- capture-cell locking (#541 consumer) -------------------------------
+
 
 def test_set_value_with_ticked_chain_locks_capture(row_type):
     Row, col = row_type
@@ -103,8 +129,7 @@ def test_set_value_with_single_ticked_entry_reason_is_singular(row_type):
 def test_set_value_all_unrun_unlocks_capture(row_type):
     Row, col = row_type
     row = Row()
-    value = [e.model_dump() for e in
-             [_entry("a", run=False), _entry("b", run=False)]]
+    value = [e.model_dump() for e in [_entry("a", run=False), _entry("b", run=False)]]
     col.model.set_value(row, value)
     assert row.is_column_locked("capture") is False
 
@@ -123,9 +148,12 @@ def test_on_row_loaded_rebuilds_lock_from_raw_setattr(row_type):
     Row, col = row_type
     row = Row()
     # Persistence sets cell values with a raw setattr — no set_value hook.
-    setattr(row, FLUORESCENCE_CHAIN_COLUMN_ID,
-            [_entry("a").model_dump(), _entry("b").model_dump()])
-    assert row.is_column_locked("capture") is False   # not yet rebuilt
+    setattr(
+        row,
+        FLUORESCENCE_CHAIN_COLUMN_ID,
+        [_entry("a").model_dump(), _entry("b").model_dump()],
+    )
+    assert row.is_column_locked("capture") is False  # not yet rebuilt
 
     col.model.on_row_loaded(row)
     assert row.is_column_locked("capture") is True
@@ -134,11 +162,13 @@ def test_on_row_loaded_rebuilds_lock_from_raw_setattr(row_type):
 
 # --- first-time capture-locked dialog (deferred, once per session) -----
 
+
 def test_warn_fires_only_when_row_already_had_capture(row_type, monkeypatch):
     Row, col = row_type
     calls = []
-    monkeypatch.setattr(column_module.QTimer, "singleShot",
-                        lambda ms, fn: calls.append((ms, fn)))
+    monkeypatch.setattr(
+        column_module.QTimer, "singleShot", lambda ms, fn: calls.append((ms, fn))
+    )
 
     row_no_capture = Row()
     col.model.set_value(row_no_capture, [_entry("a").model_dump()])
@@ -154,8 +184,9 @@ def test_warn_fires_only_when_row_already_had_capture(row_type, monkeypatch):
 def test_warn_fires_only_once_across_two_calls(row_type, monkeypatch):
     Row, col = row_type
     calls = []
-    monkeypatch.setattr(column_module.QTimer, "singleShot",
-                        lambda ms, fn: calls.append((ms, fn)))
+    monkeypatch.setattr(
+        column_module.QTimer, "singleShot", lambda ms, fn: calls.append((ms, fn))
+    )
 
     row1 = Row()
     row1.capture = True
@@ -170,6 +201,7 @@ def test_warn_fires_only_once_across_two_calls(row_type, monkeypatch):
 
 # --- factory wiring ------------------------------------------------------
 
+
 def test_factory_wires_chain_column():
     column = make_fluorescence_chain_column()
     assert column.model.col_id == FLUORESCENCE_CHAIN_COLUMN_ID
@@ -182,6 +214,7 @@ def test_factory_wires_chain_column():
 
 
 # --- handler: on_post_protocol_end (moved verbatim) ---------------------
+
 
 @pytest.fixture
 def published(monkeypatch):

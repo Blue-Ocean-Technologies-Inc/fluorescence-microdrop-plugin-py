@@ -1,18 +1,38 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Standard library imports.
 import json
 import time
 
-from traits.api import provides, HasTraits, Instance
+# Enthought library imports.
+from traits.api import HasTraits, Instance, provides
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from ..consts import FLUORESCENCE_APPLIED
-from ..interfaces.i_fluorescence_control_mixin_service import IFluorescenceControlMixinService
-from ..fluorescence_serial_proxy import FluorescenceSerialProxy
 from ..datamodels import (
-    ProtocolSetFluorescenceData, SetLedData, SetLedFrequencyData,
+    ProtocolSetFluorescenceData,
+    SetLedData,
+    SetLedFrequencyData,
+)
+from ..fluorescence_serial_proxy import FluorescenceSerialProxy
+from ..interfaces.i_fluorescence_control_mixin_service import (
+    IFluorescenceControlMixinService,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -74,8 +94,6 @@ class FluorescenceCommandSetterService(HasTraits):
                     self.proxy.send_command("led_off")
             time.sleep(data.settle_s)
         except Exception:
-            logger.exception(
-                "protocol_set_fluorescence failed; ack withheld")
+            logger.exception("protocol_set_fluorescence failed; ack withheld")
             return
-        publish_message(topic=FLUORESCENCE_APPLIED,
-                        message=str(int(data.light_on)))
+        publish_message(topic=FLUORESCENCE_APPLIED, message=str(int(data.light_on)))
