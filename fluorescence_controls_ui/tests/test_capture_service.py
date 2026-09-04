@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the burst capture service (issue #6, Task 6):
 the active-feed registry on `AsiCameraFeed`, the applied-ack Event,
 `burst_folder` naming, and `run_burst`'s per-entry apply/publish/wait/save
@@ -10,12 +20,15 @@ registry tests, and `run_burst`'s feed is a tiny stub carrying the two
 attributes `wait_for_frame_after` needs (`frame_seq`, `_last_raw`).
 """
 
+# Standard library imports.
 import sys
 import time
 
+# Third-party imports.
 import numpy as np
 import pytest
 
+# Microdrop package imports.
 import fluorescence_controls_ui
 from fluorescence_controller.consts import ALL_LEDS_OFF, LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import ChainEntry

@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Fluorescence image viewer dock pane (thin MVC shell).
 
 Displays 16-bit captures (the raw sensor frames the device viewer saves
@@ -12,19 +22,21 @@ This pane only assembles them, owns the Qt timers (the view-injected
 schedulers), and binds the persisted display-window preferences.
 """
 
+# Standard library imports.
 import threading
 from pathlib import Path
 
+# Third-party imports.
 from PySide6.QtCore import QTimer
 
+# Enthought library imports.
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Any, Instance, observe
 
-# Sanctioned cross-plugin channel: device_viewer.consts is the published
-# contract for locating and now NOTICING captures (same pattern as the
-# capture-layout constants imported by the controller).
+# Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME, media_capture_event_model
 
+# Local imports.
 from ..consts import DISCOVERY_POLL_INTERVAL_MS, PKG, SLIDESHOW_INTERVAL_MS
 from .analysis.ai_controller import AiRoiController
 from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
@@ -34,6 +46,7 @@ from .controller import FluorescenceImageViewerController
 from .model import FluorescenceImageViewerModel
 from .view import ImageViewerView
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

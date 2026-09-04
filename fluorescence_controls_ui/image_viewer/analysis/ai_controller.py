@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Controller for the AI (SAM) ROI tools: reacts to the pick/detect/track
 toolbuttons and canvas events, gates every launch on the model being
 downloaded, and drains the off-GUI job runner's results into the shared
@@ -9,12 +19,16 @@ gate below (``_ensure_model_ready``) deliberately imports
 ``download_ai_model`` from ``..sam_download``, a Qt view-layer module,
 because the blocking cancellable download progress dialog lives there."""
 
+# Standard library imports.
 import queue
 
+# Enthought library imports.
 from traits.api import Bool, Either, Float, HasTraits, Instance, Str, observe
 
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import information
 
+# Local imports.
 from ..discovery import capture_timestamp
 from ..model import FluorescenceImageViewerModel
 from ..sam_download import download_ai_model, model_is_cached
@@ -37,6 +51,7 @@ from .sam_jobs import (
     SamJobRunner,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

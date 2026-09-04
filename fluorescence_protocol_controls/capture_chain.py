@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """The capture-chain value contract: a step's (or the free-mode pane's)
 list of named LED/camera captures, stored on the row as a plain list of
 dicts and parsed back into typed `ChainEntry` objects.
@@ -8,6 +18,7 @@ that fail validation are skipped and logged; their valid siblings still
 load.
 """
 
+# Third-party imports.
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -16,6 +27,7 @@ from pydantic import (
     model_validator,
 )
 
+# Microdrop package imports.
 from fluorescence_controller.consts import (
     LED_DUTY_MAX,
     LED_DUTY_MIN,
@@ -26,6 +38,7 @@ from fluorescence_controller.consts import (
 from fluorescence_controls_ui.cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from fluorescence_controls_ui.consts import EXPOSURE_MS_MAX, EXPOSURE_MS_MIN
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

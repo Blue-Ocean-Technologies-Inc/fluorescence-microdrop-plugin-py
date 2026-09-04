@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Fluorescence capture-chain column — per-step list of named LED/camera
 captures (issue #6). Replaces the old br/fl compound column (the
 on/off checkbox + settings-snapshot pair, retired in v1.0.0): a plain
@@ -16,11 +26,14 @@ plugin's own camera feed. Priority 5 — one bucket EARLIER than
 capture/record/video (10), matching the old compound column's ordering.
 """
 
+# Standard library imports.
 import json
 
+# Enthought library imports.
 from pyface.qt.QtCore import QTimer
 from traits.api import Any, List, Str
 
+# Microdrop package imports.
 from fluorescence_controller.consts import (
     ALL_LEDS_OFF,
     FLUORESCENCE_APPLIED,
@@ -38,8 +51,10 @@ from pluggable_protocol_tree.models.column import (
 )
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from ..capture_chain import parse_chain, ticked
 from ..consts import (
     CAMERA_WARMUP_S,
@@ -49,6 +64,7 @@ from ..consts import (
     PHASE_START_SUFFIX,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

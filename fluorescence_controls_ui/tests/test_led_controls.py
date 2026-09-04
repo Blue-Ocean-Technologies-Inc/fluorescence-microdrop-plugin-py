@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the LED controls (frontend side).
 
 Reworked for the single param set (issue #6, no more br/fl/dual mode
@@ -15,14 +25,18 @@ Capture's lazy `capture_service` import (Task 6's module, which does not
 exist yet).
 """
 
+# Standard library imports.
 import json
 import sys
 import types
 
+# Third-party imports.
 import pytest
 
+# Enthought library imports.
 from apptools.preferences.api import Preferences
 
+# Microdrop package imports.
 import fluorescence_controls_ui.controller as controller_mod
 from fluorescence_controller.consts import (
     ALL_LEDS_OFF,

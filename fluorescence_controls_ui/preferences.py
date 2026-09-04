@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Fluorescence UI preferences.
 
 A small PreferencesHelper on the SAME "Peripheral Settings" node the other
@@ -5,15 +15,19 @@ peripheral plugins use (``microdrop.peripheral_settings``), holding only the
 fluorescence plugin's own traits.
 """
 
+# Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
 from traits.api import Bool, Directory, Float, Int, Str
 from traitsui.api import EnumEditor, Item, VGroup, View
 
+# Microdrop style imports.
 from microdrop_style.text_styles import preferences_group_style_sheet
 
+# Microdrop utils imports.
 from microdrop_utils.preferences_UI_helpers import create_item_label_group
 
+# Local imports.
 from .cameras.consts import (
     ASI_OFFSET_DEFAULT,
     ASI_USB_BANDWIDTH_DEFAULT,
@@ -36,6 +50,7 @@ from .consts import (
 from .image_viewer.analysis.sam_detect import AI_MODEL_OPTIONS, DEFAULT_AI_MODEL
 from .image_viewer.scale_bar import DEFAULT_UNIT
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

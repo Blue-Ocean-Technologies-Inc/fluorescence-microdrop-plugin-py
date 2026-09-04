@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 # fluorescence_controls_ui/image_viewer/analysis/roi_canvas_layer.py
 """Owns the ROI items on the image scene and turns the canvas view's
 forwarded mouse events into creation/edit/selection callbacks. Plain
@@ -5,8 +15,10 @@ wiring around Qt items, so it stays a plain class; it never touches the
 analysis model. The canvas editor points these callbacks at the model's
 canvas_* event traits and the controller reacts."""
 
+# Standard library imports.
 import math
 
+# Third-party imports.
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPainterPath, QPen, QTransform
 from PySide6.QtWidgets import (
@@ -15,6 +27,7 @@ from PySide6.QtWidgets import (
     QGraphicsRectItem,
 )
 
+# Local imports.
 from .consts import (
     AI_CANDIDATE_COLOR,
     AI_CANDIDATE_DISCARDED_OPACITY,

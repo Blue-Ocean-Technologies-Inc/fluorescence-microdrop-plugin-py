@@ -1,12 +1,24 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Qt-free ROI analysis state: the ROI definitions (shared base geometry
 plus forward drift-overrides), the intensity-stats cache, and batch
 progress. Mutated only on the GUI thread (button events and the dock
 pane's drain timer), so no Qt bridging is needed."""
 
+# Standard library imports.
 import re
 import uuid
 from pathlib import Path
 
+# Enthought library imports.
 from traits.api import (
     Bool,
     Button,
@@ -24,6 +36,7 @@ from traits.api import (
     observe,
 )
 
+# Local imports.
 from ..discovery import capture_timestamp
 from ..scale_bar import DEFAULT_UNIT, UNITS
 from .consts import (

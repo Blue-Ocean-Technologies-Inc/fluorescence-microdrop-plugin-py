@@ -1,15 +1,29 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Enthought library imports.
 from traits.api import List, Str, provides
 
+# Microdrop package imports.
 from peripheral_device_controller_base.services.peripheral_device_monitor_mixin_service import (  # noqa: E501 -- dotted module path can't be shortened
     PeripheralDeviceMonitorMixinService,
 )
 
+# Local imports.
 from ..consts import DEVICE_ID_FRAGMENT, DEVICE_NAME, FLUORESCENCE_HWID
 from ..fluorescence_serial_proxy import FluorescenceSerialProxy
 from ..interfaces.i_fluorescence_control_mixin_service import (
     IFluorescenceControlMixinService,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

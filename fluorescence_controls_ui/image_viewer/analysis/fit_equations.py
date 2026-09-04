@@ -1,11 +1,23 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Fit-equations popup: the equation being fitted, editable, above a
 table of every ROI's fitted parameters — one column per parameter of
 whatever model is in force. Typing an equation refits on the spot; one
 that is neither a built-in nor already saved can be added to the
 presets from here."""
 
+# Third-party imports.
 import numpy as np
 
+# Enthought library imports.
 from traits.api import (
     Bool,
     Button,
@@ -31,6 +43,7 @@ from traitsui.api import (
 )
 from traitsui.tabular_adapter import TabularAdapter
 
+# Local imports.
 from .curve_fit import CUSTOM_METHOD, fit_series, trimmed_note
 from .fit_expression import FitExpressionError, parse_expression
 from .fit_presets import (

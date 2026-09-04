@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the single-set camera exposure/gain controls.
 
 The controls pane is the ONLY editor (no device-viewer settings row): the
@@ -6,8 +16,10 @@ asi_camera_settings, which a running ASI feed applies to the camera live.
 Reworked for the single param set (issue #6, no more br/fl mode split).
 """
 
+# Enthought library imports.
 from apptools.preferences.api import Preferences
 
+# Microdrop package imports.
 from fluorescence_controls_ui.cameras.camera_settings import asi_camera_settings
 from fluorescence_controls_ui.controller import FluorescenceControlsController
 from fluorescence_controls_ui.model import FluorescenceStatusModel

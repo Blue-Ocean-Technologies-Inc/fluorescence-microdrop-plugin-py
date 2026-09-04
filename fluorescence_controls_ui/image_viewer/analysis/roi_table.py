@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Per-ROI table under the intensity plot: editable name (drives the
 plot legend and CSV columns), style editors (color, line, marker,
 size), and live stats for the image currently shown in the viewer —
@@ -9,6 +19,7 @@ on stats/current-image change — both scheduled onto the next event-loop
 turn so nothing mutates the table from inside the emitting Qt signal or
 traits notification."""
 
+# Third-party imports.
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
@@ -21,12 +32,14 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
 )
 
+# Microdrop style imports.
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
     ICON_VISIBILITY,
     ICON_VISIBILITY_OFF,
 )
 
+# Local imports.
 from ..scale_bar import area_unit, pixel_area
 from .consts import ROI_ALPHA_BOUNDS_PCT
 from .plot_series import stat_value

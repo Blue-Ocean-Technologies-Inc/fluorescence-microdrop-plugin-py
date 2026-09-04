@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the panel model rework: a single param set (no
 more mode/br_*/fl_* split) plus the chain-row state that backs the capture
 chain table (`chain_rows`, `free_chain`, `chain_selection`,
@@ -7,6 +17,7 @@ chain table (`chain_rows`, `free_chain`, `chain_selection`,
 it round-trips against Task 1's `ChainEntry` (`exposure` <-> `exposure_ms`).
 """
 
+# Microdrop package imports.
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_controls_ui.chain_model import FluorescenceChainRow
 from fluorescence_controls_ui.consts import PERSISTED_CONTROL_TRAITS

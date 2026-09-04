@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """User-typed fit equations: parse ``a + b*exp(-c*x)`` into the list of
 free parameters and a vectorized callable curve_fit can solve. Qt-free
 and session-free, like the rest of the fitting code.
@@ -8,8 +18,10 @@ regex, which is what lets an unusable equation come back as a sentence
 anything that is not arithmetic (attributes, subscripts, lambdas,
 calls to anything unlisted) from reaching the interpreter at all."""
 
+# Standard library imports.
 import ast
 
+# Third-party imports.
 import numpy as np
 from scipy.special import erf, expit
 

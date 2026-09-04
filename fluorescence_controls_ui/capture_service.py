@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Burst capture service: fires a capture chain's ticked entries against
 the shared fluorescence hardware and the active ASI feed, off the GUI
 thread. The controls pane's Run Capture button (`controller.run_capture`)
@@ -12,12 +22,15 @@ Two small synchronization primitives live here too:
     call sites.
 """
 
+# Standard library imports.
 import threading
 import time
 from pathlib import Path
 
+# Enthought library imports.
 from pyface.gui import GUI
 
+# Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME, RAW_CAPTURES_SUBDIR
 from fluorescence_controller.consts import ALL_LEDS_OFF
 from fluorescence_controller.datamodels import (
@@ -27,8 +40,10 @@ from fluorescence_protocol_controls.capture_chain import sanitize_label, ticked
 from fluorescence_protocol_controls.consts import LED_STABILIZATION_S
 from microdrop_application.helpers import get_current_experiment_directory
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
+# Local imports.
 from .cameras.asi_thread import (
     debayered_to_rgb,
     frame_to_qimage,
@@ -39,6 +54,7 @@ from .cameras.camera_settings import asi_camera_settings
 from .cameras.provider import current_feed
 from .consts import CAPTURE_TIMESTAMP_FORMAT
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

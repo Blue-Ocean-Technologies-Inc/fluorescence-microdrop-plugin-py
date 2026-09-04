@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Controller for the image viewer pane: turns toolbar events into model
 mutations, loads whatever ``current_path`` points at, keeps the dropdown /
 seek slider / path selection in sync, and rescans the browsed folder
@@ -10,19 +20,24 @@ Finished decodes land through ``drain_loaded()`` (the dock pane's drain
 timer) and a small LRU cache makes recently viewed frames instant.
 """
 
+# Standard library imports.
 import queue
 import threading
 from collections import OrderedDict
 from pathlib import Path
 
+# Third-party imports.
 import numpy as np
 
+# Enthought library imports.
 from pyface.api import OK, DirectoryDialog
 from traits.api import Any, Instance, Str, observe
 from traitsui.api import Controller
 
+# Microdrop package imports.
 from microdrop_application.preferences import MicrodropPreferences
 
+# Local imports.
 from ..consts import IMAGE_CACHE_FRAMES
 from .discovery import (
     current_captures_directory,
@@ -37,6 +52,7 @@ from .model import (
     FluorescenceImageViewerModel,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

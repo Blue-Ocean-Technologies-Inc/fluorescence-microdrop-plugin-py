@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Help-menu installer for the optional SAM (osam) ROI-detection stack.
 
 Runs ``pixi add --pypi osam`` (plus ``onnxruntime-directml`` on Windows, a
@@ -7,6 +17,7 @@ Mirrors ``image_viewer/sam_download.py``'s QThread + QProgressDialog
 pattern for consistency.
 """
 
+# Standard library imports.
 import importlib
 import os
 import signal
@@ -14,9 +25,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Third-party imports.
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QProgressDialog
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

@@ -1,3 +1,14 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Enthought library imports.
 from traits.api import (
     Bool,
     Button,
@@ -11,10 +22,13 @@ from traits.api import (
 )
 from traits.observation.api import parse
 
+# Microdrop package imports.
 from template_status_and_controls.base_model import BaseStatusModel
 
+# Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
+# Local imports.
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .chain_model import FluorescenceChainRow
 from .consts import (
@@ -36,6 +50,7 @@ from .consts import (
 )
 from .preferences import FluorescencePreferences
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

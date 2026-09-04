@@ -1,10 +1,22 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Saved fit equations: the built-ins plus whatever the user has added,
 and the JSON they are kept in. App-wide rather than per-experiment — an
 equation that had to be re-typed for every experiment would not be a
 preset. Qt-free."""
 
+# Standard library imports.
 import json
 
+# Local imports.
 from .curve_fit import CUSTOM_METHOD, FIT_LABELS, FIT_METHODS, FIT_TEMPLATES
 from .fit_expression import FitExpressionError, parse_expression
 

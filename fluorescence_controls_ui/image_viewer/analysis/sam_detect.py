@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """SAM droplet detection: osam session, point/grid segmentation, and
 candidate conversion. Qt-free (numpy/cv2 in-and-out), importable with or
 without the optional ``osam`` package — ``sam_available()`` reports which.
@@ -6,13 +16,16 @@ Ported from the standalone droplet_roi prototype (labelme-derived); see
 docs/superpowers/specs/2026-08-07-automatic-roi-identification-design.md.
 """
 
+# Standard library imports.
 import collections
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
+# Third-party imports.
 import cv2
 import numpy as np
 
+# Enthought library imports.
 from traits.api import (
     Array,
     Bool,
@@ -25,6 +38,7 @@ from traits.api import (
     Str,
 )
 
+# Local imports.
 from .consts import (
     AI_DETECT_GRID_TARGET_POINTS,
     AI_DETECT_MAX_MASK_AREA_FRACTION,
@@ -35,6 +49,7 @@ from .consts import (
 )
 from .roi_geometry import normalize
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Generate a synthetic experiment for testing the AI drift tracker
 against droplets that MOVE and CHANGE SHAPE over the series.
 
@@ -33,15 +43,18 @@ should follow the motion and shape changes, and dragging any frame's
 shape shows the capture-time override the tracker wrote.
 """
 
+# Standard library imports.
 import argparse
 import math
 import sys
 import time
 from pathlib import Path
 
+# Third-party imports.
 import cv2
 import numpy as np
 
+# Microdrop package imports.
 from device_viewer.consts import RAW_CAPTURES_SUBDIR
 
 FRAME_COUNT = 24

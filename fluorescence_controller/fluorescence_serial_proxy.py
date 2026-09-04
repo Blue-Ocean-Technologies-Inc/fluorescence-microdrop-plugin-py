@@ -1,14 +1,28 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Standard library imports.
 import json
 import threading
 import time
 
+# Third-party imports.
 import serial
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.hardware_device_monitoring_helpers import (
     parse_whoami_line,
 )
 
+# Local imports.
 from .consts import (
     BOARD_BAUDRATE,
     BOARD_ID,
@@ -21,6 +35,7 @@ from .consts import (
     TELEMETRY,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

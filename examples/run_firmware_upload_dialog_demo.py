@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Runnable demo: the firmware-upload dialog against a live backend.
 
 Run: pixi run python examples/run_firmware_upload_dialog_demo.py
@@ -12,10 +22,13 @@ same job, so the dialog code runs identically in both. To exercise the
 proxy-port path, publish START_DEVICE_MONITORING before uploading.
 """
 
+# Standard library imports.
 import sys
 
+# Third-party imports.
 from PySide6.QtWidgets import QApplication
 
+# Microdrop package imports.
 from fluorescence_controller.consts import (
     ACTOR_TOPIC_DICT,
     FIRMWARE_UPLOAD_FINISHED,
@@ -36,6 +49,7 @@ from fluorescence_controls_ui.firmware_upload.controller import (
 )
 from fluorescence_controls_ui.live_state import fluorescence_live_state
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_controller_base import (
     generate_class_method_dramatiq_listener_actor,
 )

@@ -1,20 +1,34 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Controller for the ROI analysis: reacts to the analysis toolbuttons
 and canvas events, keeps the per-experiment ROI config in sync, and
 orchestrates the cache-aware batch computation. All observers run on
 the GUI thread; the only off-thread work is inside RoiBatchRunner."""
 
+# Standard library imports.
 import math
 import queue
 import time
 from pathlib import Path
 
+# Enthought library imports.
 from pyface.api import NO, YES
 from traits.api import Any, Bool, Dict, Float, HasTraits, Instance, observe
 
+# Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME
 from fluorescence_protocol_controls.capture_chain import sanitize_label
 from microdrop_application.dialogs.pyface_wrapper import confirm
 
+# Local imports.
 from ...consts import CAPTURE_TIMESTAMP_FORMAT
 from ..discovery import UNGROUPED_BURST, capture_timestamp, detect_wavelength
 from ..model import FluorescenceImageViewerModel
@@ -54,6 +68,7 @@ from .roi_store import (
     write_intensity_csv,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

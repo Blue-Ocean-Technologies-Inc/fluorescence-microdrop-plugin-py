@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for `FluorescenceChainHandler.on_pre_step` and
 `on_post_step` (issue #6, Task 7): the per-entry burst execution loop —
 apply camera settings, publish the LED state, wait for the executor's
@@ -10,11 +20,14 @@ faked wholesale (it is imported lazily inside `_run_phase`, mirroring
 are recorded fakes.
 """
 
+# Standard library imports.
 import json
 import sys
 
+# Third-party imports.
 import pytest
 
+# Microdrop package imports.
 import fluorescence_controls_ui
 from fluorescence_controller.consts import (
     ALL_LEDS_OFF,
@@ -32,6 +45,7 @@ from fluorescence_protocol_controls.protocol_columns.chain_column import (
 )
 from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
+# Microdrop utils imports.
 from microdrop_utils import dramatiq_pub_sub_helpers
 
 ENTRY_KW = dict(

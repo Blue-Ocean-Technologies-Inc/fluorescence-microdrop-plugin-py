@@ -1,15 +1,29 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Enthought library imports.
 from envisage.api import ServiceOffer
 from traits.api import List
 
+# Microdrop package imports.
 from message_router.consts import ACTOR_TOPIC_ROUTES
 from peripheral_device_controller_base.plugin import PeripheralDeviceControllerPlugin
 
+# Local imports.
 from .consts import ACTOR_TOPIC_DICT, PKG, PKG_name
 from .fluorescence_controller_base import FluorescenceControllerBase
 from .interfaces.i_fluorescence_control_mixin_service import (
     IFluorescenceControlMixinService,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

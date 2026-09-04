@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Preview mockup of the ROI Intensities control panel, standalone.
 
 The tabbed layout chosen in review, over the real analysis model so
@@ -28,10 +38,12 @@ Run (from src/fluorescence-microdrop-plugin-py):
 a window.
 """
 
+# Standard library imports.
 import argparse
 import os
 import sys
 
+# Enthought library imports.
 from pyface.qt.QtWidgets import QApplication
 from traits.api import Bool, HasTraits
 from traitsui.api import (
@@ -47,6 +59,7 @@ from traitsui.api import (
     View,
 )
 
+# Microdrop package imports.
 from fluorescence_controls_ui.image_viewer.analysis.consts import (
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER_BOUNDS,
@@ -66,9 +79,11 @@ from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
     RoiAnalysisModel,
 )
 
+# Microdrop style imports.
 from microdrop_style.helpers import style_app
 from microdrop_style.icons.icons import ICON_FUNCTION, ICON_SAVE
 
+# Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
     IconButtonEditor,

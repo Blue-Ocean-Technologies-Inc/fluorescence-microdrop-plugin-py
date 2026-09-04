@@ -1,9 +1,20 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Qt-free HasTraits model for the image viewer pane: the browsed folder,
 its discovered images, the loaded pixel data, the display window, and the
 slideshow state. Mutated only on the GUI thread (button events, timers,
 the controller's loader), so no Qt bridging is needed.
 """
 
+# Enthought library imports.
 from traits.api import (
     Any,
     Bool,
@@ -21,8 +32,10 @@ from traits.api import (
 )
 from traits.observation.api import parse
 
+# Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
+# Local imports.
 from ..consts import (
     IMAGE_ZOOM_STEP_BOUNDS,
     IMAGE_ZOOM_STEP_DEFAULT,

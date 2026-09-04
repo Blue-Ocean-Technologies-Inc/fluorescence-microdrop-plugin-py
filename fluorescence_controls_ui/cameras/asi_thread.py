@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """ASI camera frame-grabber thread + display-conversion helpers.
 
 Port of the standalone app's ``ASIVideoThread``: open/init the camera on the
@@ -5,14 +15,17 @@ thread, loop single-frame captures, emit each frame as a numpy array. The
 display helpers are pure functions so they stay hardware-free testable.
 """
 
+# Standard library imports.
 import math
 import threading
 import time
 
+# Third-party imports.
 import numpy as np
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QImage
 
+# Local imports.
 from .consts import (
     ASI_EXPOSURE_MIN,
     ASI_GAIN_MIN,
@@ -38,6 +51,7 @@ from .zwoasi import (
     ASIError,
 )
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

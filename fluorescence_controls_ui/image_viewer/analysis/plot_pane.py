@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Dock pane plotting the ROI intensity series: the chosen stat vs
 elapsed time, one line per ROI — or, per the View dropdown, the fits'
 second-derivative curves or the per-ROI time-of-fastest-change bars.
@@ -6,6 +16,7 @@ series from the session (stats store + filters + plot stat) and
 coalesces notification bursts into single redraws. Lines gap where an
 image failed or isn't computed."""
 
+# Standard library imports.
 import os
 from pathlib import Path
 

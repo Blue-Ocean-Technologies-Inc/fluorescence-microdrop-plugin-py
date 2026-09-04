@@ -1,10 +1,22 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the capture-chain value contract: the
 `ChainEntry` model, tolerant parse/dump round trip, the ticked-rows
 filter, and the label sanitize/uniqueness helpers."""
 
+# Third-party imports.
 import pytest
 from pydantic import ValidationError
 
+# Microdrop package imports.
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import (
     ChainEntry,

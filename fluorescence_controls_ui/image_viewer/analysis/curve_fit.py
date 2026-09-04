@@ -1,19 +1,33 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Curve fitting for the ROI intensity series: pure math over
 (elapsed, value) sequences — Qt-free, session-free. Each method yields
 a FitResult carrying the equation text, R², a vectorized predictor,
 and the analytic second derivative (for the curvature extremum
 markers)."""
 
+# Standard library imports.
 import math
 import re
 import warnings
 
+# Third-party imports.
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.special import expit
 
+# Enthought library imports.
 from traits.api import Any, Bool, Dict, Float, HasTraits, Str
 
+# Local imports.
 from .fit_expression import FitExpressionError, parse_expression
 
 #: Selectable fit models, in dropdown order ("none" = fitting off,

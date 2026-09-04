@@ -1,20 +1,34 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Capture discovery for the image viewer: where the device viewer saves
 the raw (16-bit) sensor frames for the current experiment, and the ordered
 list of those files. Pure path logic so it stays hardware/Qt-free testable.
 """
 
+# Standard library imports.
 import calendar
 import re
 import time
 from pathlib import Path
 
+# Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME, RAW_CAPTURES_SUBDIR
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import sanitize_label
 from microdrop_application.helpers import get_current_experiment_directory
 
+# Local imports.
 from ..consts import CAPTURE_TIMESTAMP_FORMAT, IMAGE_PATTERNS
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

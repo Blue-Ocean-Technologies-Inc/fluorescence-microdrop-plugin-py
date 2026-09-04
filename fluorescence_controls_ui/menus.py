@@ -1,14 +1,28 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Standard library imports.
 import webbrowser
 
+# Enthought library imports.
 from pyface.action.api import Action
 from pyface.action.schema.schema import SGroup, SMenu
 from traits.api import Instance, Str
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_traits_helpers import DramatiqMessagePublishAction
 from microdrop_utils.firmware_upload_dialog.controller import (
     FirmwareUploadDialogController,
 )
 
+# Local imports.
 from .ai_install import install_ai_support
 from .consts import ASI_DRIVER_URL, START_DEVICE_MONITORING
 from .firmware_upload.controller import make_firmware_upload_controller

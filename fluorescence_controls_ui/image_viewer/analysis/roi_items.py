@@ -1,11 +1,23 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 # fluorescence_controls_ui/image_viewer/analysis/roi_items.py
 """The ROI shape items drawn on the image canvas. Each carries its
 angle as a Qt item rotation about its own centre, which keeps every
 grip position and resize computation in unrotated local coordinates,
 and reports its geometry back through the layer's edit callback."""
 
+# Standard library imports.
 import math
 
+# Third-party imports.
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QBrush, QPainterPath, QPolygonF
 from PySide6.QtWidgets import (
@@ -15,6 +27,7 @@ from PySide6.QtWidgets import (
     QGraphicsSimpleTextItem,
 )
 
+# Local imports.
 from .consts import MIN_ROI_SIZE_PX
 from .roi_geometry import centre_of, normalize
 from .roi_handles import (

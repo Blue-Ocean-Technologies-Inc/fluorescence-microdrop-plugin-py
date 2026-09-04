@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the capture-chain free-mode attach flow
 (issue #6): `_on_tree_row_selected` is driven directly with constructed
 `ProtocolTreeRowSelectedMessage` objects (the ferry from message_handler.py
@@ -10,8 +20,10 @@ module — the existing repo convention (see test_led_controls.py's
 `published` fixture).
 """
 
+# Standard library imports.
 import types
 
+# Microdrop package imports.
 import fluorescence_controls_ui.controller as controller_mod
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_controls_ui.chain_model import FluorescenceChainRow

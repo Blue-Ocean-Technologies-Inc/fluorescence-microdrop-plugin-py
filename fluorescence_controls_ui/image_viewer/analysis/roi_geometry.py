@@ -1,10 +1,22 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Canonical ROI geometry: what each kind's flat float list means, how
 the older shorter lists migrate onto it, and the polygons cv2 and Qt
 draw from it. Qt-free (numpy only) so the worker processes that compute
 statistics can import it."""
 
+# Third-party imports.
 import numpy as np
 
+# Local imports.
 from .consts import MIN_POLYGON_POINTS
 
 #: Values in every canonical geometry list:

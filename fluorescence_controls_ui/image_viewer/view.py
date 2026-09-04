@@ -1,8 +1,19 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """TraitsUI view for the image viewer pane: the toolbar bound to the model
 and the image canvas editor (zoom/pan QGraphicsView rendering the model's
 ``array`` through the display window, reporting the hovered pixel back).
 """
 
+# Third-party imports.
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
@@ -13,6 +24,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
+# Enthought library imports.
 from traits.api import Enum, Float, HasTraits
 from traitsui.api import (
     BasicEditorFactory,
@@ -29,6 +41,7 @@ from traitsui.api import (
 )
 from traitsui.qt.editor import Editor as QtEditor
 
+# Microdrop style imports.
 from microdrop_style.icons.icons import (
     ICON_ADJUST,
     ICON_CANCEL,
@@ -58,6 +71,7 @@ from microdrop_style.icons.icons import (
     ICON_TONALITY,
 )
 
+# Microdrop utils imports.
 from microdrop_utils.traitsui_qt_helpers import (
     DoubleSpinBoxEditor,
     HoverScrollEnumEditor,
@@ -66,6 +80,7 @@ from microdrop_utils.traitsui_qt_helpers import (
     IconToggleEditor,
 )
 
+# Local imports.
 from ..cameras.asi_thread import frame_to_qimage
 from ..consts import IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT
 from .analysis.consts import (

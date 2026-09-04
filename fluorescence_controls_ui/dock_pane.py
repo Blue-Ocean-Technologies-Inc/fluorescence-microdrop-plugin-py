@@ -1,6 +1,18 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Enthought library imports.
 from pyface.qt.QtCore import Qt
 from traits.api import observe
 
+# Microdrop package imports.
 from microdrop_application.dialogs.pyface_wrapper import information
 from template_status_and_controls.base_dock_pane import (
     BaseStatusDockPane,
@@ -8,17 +20,21 @@ from template_status_and_controls.base_dock_pane import (
     status_bar_icon_font,
 )
 
+# Microdrop style imports.
 from microdrop_style.icons.icons import ICON_EMOJI_OBJECTS
 
+# Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.pyside_helpers import ClickableLabel
 
+# Local imports.
 from .consts import PKG, START_DEVICE_MONITORING, PKG_name, listener_name
 from .controller import FluorescenceControlsController
 from .message_handler import FluorescenceMessageHandler
 from .model import FluorescenceStatusModel
 from .view import UnifiedView
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

@@ -1,11 +1,23 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Construction-only shape test for `UnifiedView` (issue #6, Plan-B Task 5):
 the mode selector + per-mode brightfield/fluorescence groups are gone,
 replaced by a single params section plus a capture-chain table. Pure
 traitsui object-graph walk — no Qt widget instantiation (that's Task 10).
 """
 
+# Enthought library imports.
 from traitsui.api import Group, Item, View
 
+# Microdrop package imports.
 from fluorescence_controls_ui.view import UnifiedView
 
 

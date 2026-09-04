@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """ctypes wrapper for the ZWO ASI camera SDK.
 
 Port of the standalone fluorescence app's ``zwoasi.py`` with two changes:
@@ -7,6 +17,7 @@ is imported lazily only for debayering color sensors (mono cameras never
 need it).
 """
 
+# Standard library imports.
 import os
 import platform
 import sys
@@ -24,8 +35,10 @@ from ctypes import (
 )
 from pathlib import Path
 
+# Third-party imports.
 import numpy as np
 
+# Logger import.
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)

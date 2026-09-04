@@ -1,12 +1,24 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Controller for the advanced camera controls pane: mirrors every model
 edit into the shared ASI camera settings, which the running feed forwards
 to the capture thread (applied between frames) — and copies the camera
 capabilities the feed reports back into the model, so the pane's
 dropdowns narrow to what the connected camera supports."""
 
+# Enthought library imports.
 from traits.api import observe
 from traitsui.api import Controller
 
+# Local imports.
 from ..cameras.camera_settings import (
     ADVANCED_CAMERA_TRAITS,
     CAMERA_CAPS_TRAITS,
