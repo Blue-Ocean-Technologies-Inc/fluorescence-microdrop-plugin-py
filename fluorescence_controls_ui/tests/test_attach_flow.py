@@ -90,7 +90,7 @@ def test_switching_between_attached_steps_no_dialog(monkeypatch):
     assert model.attached_step_id == "step-2"
 
 
-# --- deselection restores free mode ----------------------------------------------------
+# --- deselection restores free mode ---------------------------------------------------
 
 
 def test_deselection_restores_free_mode():
@@ -160,7 +160,7 @@ def test_group_selection_cancel_leaves_free_chain_intact(monkeypatch):
     assert model.attached_step_id == ""
 
 
-# --- step selection with a free-mode chain: four-way dialog ----------------------------
+# --- step selection with a free-mode chain: four-way dialog ---------------------------
 
 
 def test_step_selection_cancel_leaves_free_chain_unattached(monkeypatch):
@@ -349,7 +349,7 @@ def test_dialog_only_shown_when_free_mode_currently_active(monkeypatch):
     assert model.attached_step_id == "step-1"
 
 
-# --- F1: run-checkbox toggle persists ---------------------------------------------------
+# --- F1: run-checkbox toggle persists -------------------------------------------------
 
 
 def test_run_toggle_on_attached_step_pushes_set_cell(monkeypatch):
@@ -390,7 +390,7 @@ def test_run_toggle_in_free_mode_does_not_publish_set_cell(monkeypatch):
     assert model.free_chain[0].run is False
 
 
-# --- F2: mid-run attach dialog must not clear the free-mode chain -----------------------
+# --- F2: mid-run attach dialog must not clear the free-mode chain ---------------------
 
 
 def test_mid_run_selection_does_not_show_dialog_or_clear_free_chain(monkeypatch):
@@ -499,7 +499,7 @@ def test_handle_delete_key_only_acts_on_a_selection(monkeypatch):
     assert model.chain_rows == []
 
 
-# --- per-row auto modes ----------------------------------------------------------------
+# --- per-row auto modes ---------------------------------------------------------------
 
 
 def test_auto_flags_sync_panel_to_selected_row(monkeypatch):
@@ -736,7 +736,7 @@ def test_differing_echo_after_window_reloads(monkeypatch):
     assert model.chain_rows[0].intensity == 77
 
 
-# --- move up/down ----------------------------------------------------------------------
+# --- move up/down ---------------------------------------------------------------------
 
 
 def test_move_capture_swaps_and_relabels_by_position(monkeypatch):
@@ -761,7 +761,7 @@ def test_move_capture_swaps_and_relabels_by_position(monkeypatch):
 
 
 def test_move_capture_boundary_and_no_selection_are_noops(monkeypatch):
-    set_cell = _set_cell_recorder(monkeypatch)
+    _set_cell_recorder(monkeypatch)
     controller, model = _controller()
     a = FluorescenceChainRow(wavelength="Blue (460 nm)")
     model.chain_rows = [a]

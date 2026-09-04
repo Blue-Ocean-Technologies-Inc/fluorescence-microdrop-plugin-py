@@ -1,6 +1,6 @@
 from traits.api import List, Str, provides
 
-from peripheral_device_controller_base.services.peripheral_device_monitor_mixin_service import (
+from peripheral_device_controller_base.services.peripheral_device_monitor_mixin_service import (  # noqa: E501 -- dotted module path can't be shortened
     PeripheralDeviceMonitorMixinService,
 )
 

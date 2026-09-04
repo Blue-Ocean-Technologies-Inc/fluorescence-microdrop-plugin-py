@@ -144,7 +144,8 @@ class FluorescenceStatusModel(BaseStatusModel):
                 for key in PERSISTED_CONTROL_TRAITS
             }
         )
-        self._self_preference_change = False  # private trait to stop pull preference observer acting on self updates
+        # private trait to stop pull preference observer acting on self updates
+        self._self_preference_change = False
 
     # ------------------------------------------------------------------ #
     # Collapsible-section switches (view headers toggle these)             #
@@ -212,6 +213,7 @@ class FluorescenceStatusModel(BaseStatusModel):
     def _pull_preferences(self, event):
         if not self._self_preference_change:
             logger.debug(
-                f"Fluorescence Status Model: Syncing changed preferences values into model: {event}"
+                "Fluorescence Status Model: Syncing changed preferences "
+                f"values into model: {event}"
             )
             self.trait_set(**{event.name: event.new})

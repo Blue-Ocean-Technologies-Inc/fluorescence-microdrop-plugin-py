@@ -244,7 +244,7 @@ def test_add_capture_while_attached_pushes_set_cell(monkeypatch):
     assert calls[0]["value"][0]["label"] == model.chain_rows[0].label
 
 
-# --- panel <-> chain-row live binding ---------------------------------------------------
+# --- panel <-> chain-row live binding -------------------------------------------------
 
 
 def test_row_selection_loads_panel_and_drives_led(published):
@@ -298,7 +298,7 @@ def test_panel_edit_without_selection_does_not_touch_any_row():
     assert row.intensity == 10
 
 
-# --- Run Capture: lazy capture_service import --------------------------------------------
+# --- Run Capture: lazy capture_service import -----------------------------------------
 
 
 class _SyncThread:

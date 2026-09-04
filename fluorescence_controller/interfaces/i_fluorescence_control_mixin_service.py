@@ -1,6 +1,6 @@
 from traits.api import Instance
 
-from peripheral_device_controller_base.interfaces.i_peripheral_device_control_mixin_service import (
+from peripheral_device_controller_base.interfaces.i_peripheral_device_control_mixin_service import (  # noqa: E501 -- dotted module path can't be shortened
     IPeripheralDeviceControlMixinService,
 )
 

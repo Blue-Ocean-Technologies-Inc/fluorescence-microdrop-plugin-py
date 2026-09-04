@@ -74,7 +74,7 @@ def main():
     )
     backend = demo_backend_class()
 
-    listener_actor = generate_class_method_dramatiq_listener_actor(
+    generate_class_method_dramatiq_listener_actor(
         listener_name=DEMO_LISTENER_NAME, class_method=_on_backend_message
     )
 

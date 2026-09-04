@@ -1,6 +1,6 @@
 from traits.api import Instance, provides
 
-from peripheral_device_controller_base.services.peripheral_firmware_upload_service import (
+from peripheral_device_controller_base.services.peripheral_firmware_upload_service import (  # noqa: E501 -- dotted module path can't be shortened
     PeripheralFirmwareUploadService,
 )
 

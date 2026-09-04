@@ -10,7 +10,7 @@ import json
 import pytest
 
 import fluorescence_controller.fluorescence_serial_proxy as proxy_mod
-import peripheral_device_controller_base.services.peripheral_device_monitor_mixin_service as base_monitor_mod
+import peripheral_device_controller_base.services.peripheral_device_monitor_mixin_service as base_monitor_mod  # noqa: E501 -- dotted module path can't be shortened
 from fluorescence_controller.fluorescence_serial_proxy import (
     FluorescenceSerialProxy,
     parse_whoami_line,

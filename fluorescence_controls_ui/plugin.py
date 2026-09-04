@@ -12,11 +12,11 @@ from microdrop_utils.hardware_device_monitoring_helpers import (
     check_connected_ports_hwid,
 )
 
+from .consts import ACTOR_TOPIC_DICT, ASI_DRIVER_URL, PKG, PKG_name
+
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-from .consts import ACTOR_TOPIC_DICT, ASI_DRIVER_URL, PKG, PKG_name
 
 
 class FluorescenceControlsUiPlugin(BaseStatusPlugin):
@@ -150,7 +150,8 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
         # check if peripheral board connected
         if check_connected_ports_hwid(FLUORESCENCE_HWID):
             logger.critical(
-                "Fluorescence Board Maybe Connected: Requesting Fluorescence Board Search"
+                "Fluorescence Board Maybe Connected: Requesting Fluorescence "
+                "Board Search"
             )
             publish_message(message="", topic=START_DEVICE_MONITORING)
         else:

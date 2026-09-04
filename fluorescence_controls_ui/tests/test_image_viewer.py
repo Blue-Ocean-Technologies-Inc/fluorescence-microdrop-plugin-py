@@ -7,10 +7,18 @@ import numpy as np
 from PySide6.QtGui import QImage
 
 from fluorescence_controls_ui.cameras.asi_thread import raw_to_qimage
+from fluorescence_controls_ui.image_viewer import controller as viewer_controller_mod
 from fluorescence_controls_ui.image_viewer import discovery
+from fluorescence_controls_ui.image_viewer.controller import (
+    FluorescenceImageViewerController,
+)
 from fluorescence_controls_ui.image_viewer.display import (
     qimage_to_array,
     stretch_to_8bit,
+)
+from fluorescence_controls_ui.image_viewer.model import (
+    WAVELENGTH_FILTER_ALL,
+    FluorescenceImageViewerModel,
 )
 
 
@@ -229,16 +237,6 @@ def test_detect_wavelength_from_derived_labels():
 
 
 # --- burst/wavelength navigation (controller level, no Qt) -----------------
-
-
-from fluorescence_controls_ui.image_viewer import controller as viewer_controller_mod
-from fluorescence_controls_ui.image_viewer.controller import (
-    FluorescenceImageViewerController,
-)
-from fluorescence_controls_ui.image_viewer.model import (
-    WAVELENGTH_FILTER_ALL,
-    FluorescenceImageViewerModel,
-)
 
 
 def _viewer(monkeypatch, tmp_path):
