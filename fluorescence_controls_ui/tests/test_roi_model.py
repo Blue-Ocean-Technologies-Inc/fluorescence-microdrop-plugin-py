@@ -1,13 +1,18 @@
 """Roi override resolution and AnalysisSession cache keys."""
+
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
-    AnalysisSession, Roi,
+    AnalysisSession,
+    Roi,
 )
 
 
 def _roi():
-    return Roi(name="ROI 1", kind="ellipse",
-               geometry=[50.0, 50.0, 10.0, 10.0, 0.0],
-               base_anchor=100.0)
+    return Roi(
+        name="ROI 1",
+        kind="ellipse",
+        geometry=[50.0, 50.0, 10.0, 10.0, 0.0],
+        base_anchor=100.0,
+    )
 
 
 def test_effective_geometry_is_base_without_overrides():

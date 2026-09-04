@@ -37,6 +37,7 @@
 ```python
 # fluorescence_controls_ui/tests/test_capture_timestamp.py
 """capture_timestamp: filename UTC stamp preferred, mtime fallback."""
+
 import calendar
 import time
 
@@ -47,7 +48,8 @@ def test_timestamp_parsed_from_filename(tmp_path):
     path = tmp_path / "gfp_Green_540_nm_2_2026_07_20-17_46_24_raw.png"
     path.write_bytes(b"")
     expected = calendar.timegm(
-        time.strptime("2026_07_20-17_46_24", "%Y_%m_%d-%H_%M_%S"))
+        time.strptime("2026_07_20-17_46_24", "%Y_%m_%d-%H_%M_%S")
+    )
     assert capture_timestamp(path) == expected
 
 
@@ -89,8 +91,7 @@ In `image_viewer/discovery.py`, extend the imports (top of file) with `import ca
 
 ```python
 #: The utc_stamp() pattern as it appears inside capture filenames.
-CAPTURE_TIMESTAMP_PATTERN = re.compile(
-    r"\d{4}_\d{2}_\d{2}-\d{2}_\d{2}_\d{2}")
+CAPTURE_TIMESTAMP_PATTERN = re.compile(r"\d{4}_\d{2}_\d{2}-\d{2}_\d{2}_\d{2}")
 
 
 def capture_timestamp(path) -> float:
@@ -99,8 +100,9 @@ def capture_timestamp(path) -> float:
     names without a stamp (legacy captures); 0.0 when neither exists."""
     match = CAPTURE_TIMESTAMP_PATTERN.search(Path(path).name)
     if match:
-        return float(calendar.timegm(
-            time.strptime(match.group(0), CAPTURE_TIMESTAMP_FORMAT)))
+        return float(
+            calendar.timegm(time.strptime(match.group(0), CAPTURE_TIMESTAMP_FORMAT))
+        )
     try:
         return Path(path).stat().st_mtime
     except OSError:
@@ -135,18 +137,22 @@ git commit -m "feat(image-viewer): parse capture time from filenames" -m "Shared
 ```python
 # fluorescence_controls_ui/tests/test_burst_filter_all.py
 """The image-group filter's "All" choice mirrors the wavelength filter's."""
+
 from pathlib import Path
 
 from fluorescence_controls_ui.image_viewer.model import (
-    BURST_FILTER_ALL, FluorescenceImageViewerModel,
+    BURST_FILTER_ALL,
+    FluorescenceImageViewerModel,
 )
 
 
 def _model_with_two_bursts():
     model = FluorescenceImageViewerModel()
     model.bursts = [
-        ("burst_a", [Path("a/16bit_raw/img1_raw.png"),
-                     Path("a/16bit_raw/img2_raw.png")]),
+        (
+            "burst_a",
+            [Path("a/16bit_raw/img1_raw.png"), Path("a/16bit_raw/img2_raw.png")],
+        ),
         ("burst_b", [Path("b/16bit_raw/img3_raw.png")]),
     ]
     return model
@@ -164,7 +170,10 @@ def test_burst_names_empty_without_bursts():
 def test_burst_paths_all_flattens_groups_in_order():
     model = _model_with_two_bursts()
     assert [path.name for path in model.burst_paths(BURST_FILTER_ALL)] == [
-        "img1_raw.png", "img2_raw.png", "img3_raw.png"]
+        "img1_raw.png",
+        "img2_raw.png",
+        "img3_raw.png",
+    ]
 
 
 def test_position_text_spans_all_when_all_selected():
@@ -179,7 +188,7 @@ def test_position_text_spans_all_when_all_selected():
 def test_position_text_counts_prior_groups_for_specific_burst():
     model = _model_with_two_bursts()
     model.selected_burst = "burst_b"
-    model.burst_index = 2   # [All, burst_a, burst_b]
+    model.burst_index = 2  # [All, burst_a, burst_b]
     model.paths = model.burst_paths("burst_b")
     model.current_path = str(model.paths[0])
     assert model.position_text == "3/3"
@@ -238,9 +247,13 @@ Replace `burst_paths` (line 229-234):
 Replace `_get_position_text`'s `before` computation — the whole method becomes (note `selected_burst` joins the observe list on the `position_text` Property declaration, line 152-154):
 
 ```python
-    position_text = Property(
-        Str, observe=("bursts.items, burst_index, selected_burst, "
-                      "selected_wavelength, paths.items, current_path"))
+position_text = Property(
+    Str,
+    observe=(
+        "bursts.items, burst_index, selected_burst, "
+        "selected_wavelength, paths.items, current_path"
+    ),
+)
 ```
 
 ```python
@@ -270,32 +283,33 @@ Replace `_get_position_text`'s `before` computation — the whole method becomes
 In `controller.py`, add `BURST_FILTER_ALL` to the existing `.model` import (line 21). Replace `_step_to_adjacent_group` (line 159-169) — with "All" selected the visible list already spans everything, so wrap within it; index arithmetic maps the 1-offset (All at 0) onto the real group list:
 
 ```python
-    def _step_to_adjacent_group(self, direction, show):
-        """Move to the next/previous image group (wrapping) and show its
-        first/last image. With the "All" choice (or a single group) the
-        visible list already spans everything: wrap within it."""
-        if (self.model.selected_burst == BURST_FILTER_ALL
-                or len(self.model.bursts) <= 1):
-            paths = self.model.paths
-            self.model.current_path = str(paths[0] if direction > 0
-                                          else paths[-1])
-            return
-        group_index = (self.model.burst_index - 1 + direction) \
-            % len(self.model.bursts)
-        self._jump_to_burst(group_index + 1, show)
+def _step_to_adjacent_group(self, direction, show):
+    """Move to the next/previous image group (wrapping) and show its
+    first/last image. With the "All" choice (or a single group) the
+    visible list already spans everything: wrap within it."""
+    if self.model.selected_burst == BURST_FILTER_ALL or len(self.model.bursts) <= 1:
+        paths = self.model.paths
+        self.model.current_path = str(paths[0] if direction > 0 else paths[-1])
+        return
+    group_index = (self.model.burst_index - 1 + direction) % len(self.model.bursts)
+    self._jump_to_burst(group_index + 1, show)
 ```
 
 In `rescan()` (line 276-322), extend `following_newest` so a user parked on "All" at the newest image also rides along, and keep them on "All" — replace the `following_newest` assignment and the tail `if following_newest:` branch:
 
 ```python
-        on_all = self.model.selected_burst == BURST_FILTER_ALL
-        following_newest = (
-            not self.model.current_path or not self.model.paths
-            or (on_all
-                and self.model.current_path == str(self.model.paths[-1]))
-            or (not on_all and self.model.burst_names
-                and self.model.selected_burst == self.model.burst_names[-1]
-                and self.model.current_path == str(self.model.paths[-1])))
+on_all = self.model.selected_burst == BURST_FILTER_ALL
+following_newest = (
+    not self.model.current_path
+    or not self.model.paths
+    or (on_all and self.model.current_path == str(self.model.paths[-1]))
+    or (
+        not on_all
+        and self.model.burst_names
+        and self.model.selected_burst == self.model.burst_names[-1]
+        and self.model.current_path == str(self.model.paths[-1])
+    )
+)
 ```
 
 ```python
@@ -349,14 +363,17 @@ git commit -m "feat(image-viewer): add All choice to image-group filter" -m "Mir
 ```python
 # fluorescence_controls_ui/tests/test_roi_model.py
 """Roi override resolution and RoiAnalysisModel cache keys."""
+
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
-    Roi, RoiAnalysisModel,
+    Roi,
+    RoiAnalysisModel,
 )
 
 
 def _roi():
-    return Roi(name="ROI 1", kind="circle", geometry=[50.0, 50.0, 10.0],
-               base_anchor=100.0)
+    return Roi(
+        name="ROI 1", kind="circle", geometry=[50.0, 50.0, 10.0], base_anchor=100.0
+    )
 
 
 def test_effective_geometry_is_base_without_overrides():
@@ -464,11 +481,21 @@ MIN_ROI_SIZE_PX = 3.0
 plus forward drift-overrides), the intensity-stats cache, batch progress,
 and the plot-ready series. Mutated only on the GUI thread (button events
 and the dock pane's drain timer), so no Qt bridging is needed."""
+
 import uuid
 from pathlib import Path
 
 from traits.api import (
-    Bool, Button, Dict, Enum, Event, Float, HasTraits, Instance, Int, List,
+    Bool,
+    Button,
+    Dict,
+    Enum,
+    Event,
+    Float,
+    HasTraits,
+    Instance,
+    Int,
+    List,
     Str,
 )
 
@@ -509,8 +536,7 @@ class Roi(HasTraits):
         """The geometry in force for an image captured at
         ``capture_time``: the override with the greatest anchor at or
         before it, else the base geometry."""
-        anchors = [anchor for anchor in self.overrides
-                   if anchor <= capture_time]
+        anchors = [anchor for anchor in self.overrides if anchor <= capture_time]
         if anchors:
             return list(self.overrides[max(anchors)])
         return list(self.geometry)
@@ -573,8 +599,8 @@ class RoiAnalysisModel(HasTraits):
     reset_cache_button = Button()
 
     #: View -> controller channels fired by the canvas ROI layer.
-    canvas_roi_created = Event()   # (kind, geometry)
-    canvas_roi_edited = Event()    # (roi_id, geometry)
+    canvas_roi_created = Event()  # (kind, geometry)
+    canvas_roi_edited = Event()  # (roi_id, geometry)
 
     def roi_by_id(self, roi_id):
         for roi in self.rois:
@@ -592,16 +618,22 @@ class RoiAnalysisModel(HasTraits):
             mtime = Path(path).stat().st_mtime
         except OSError:
             mtime = 0.0
-        return (str(path), mtime, roi.roi_id, roi.kind,
-                tuple(roi.effective_geometry(capture_timestamp(path))))
+        return (
+            str(path),
+            mtime,
+            roi.roi_id,
+            roi.kind,
+            tuple(roi.effective_geometry(capture_timestamp(path))),
+        )
 
     def effective_for(self, path):
         """[(roi_id, name, kind, geometry), ...] in force for ``path`` —
         what the canvas draws and the batch computes for that image."""
         capture_time = capture_timestamp(path)
-        return [(roi.roi_id, roi.name, roi.kind,
-                 roi.effective_geometry(capture_time))
-                for roi in self.rois]
+        return [
+            (roi.roi_id, roi.name, roi.kind, roi.effective_geometry(capture_time))
+            for roi in self.rois
+        ]
 
 
 #: The single analysis state shared by the viewer pane and the plot pane
@@ -618,11 +650,12 @@ from .analysis.roi_model import RoiAnalysisModel, roi_analysis_model
 and add to `FluorescenceImageViewerModel` (near the `preferences` trait):
 
 ```python
-    #: ROI intensity-analysis state (shared with the plot pane).
-    roi_analysis = Instance(RoiAnalysisModel)
+#: ROI intensity-analysis state (shared with the plot pane).
+roi_analysis = Instance(RoiAnalysisModel)
 
-    def _roi_analysis_default(self):
-        return roi_analysis_model
+
+def _roi_analysis_default(self):
+    return roi_analysis_model
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -653,40 +686,40 @@ git commit -m "feat(image-viewer): add ROI analysis model layer" -m "Roi (base g
 ```python
 # fluorescence_controls_ui/tests/test_roi_compute.py
 """ROI mask/stats math against synthetic arrays."""
+
 import math
 
 import cv2
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_compute import (
-    compute_image_stats, masked_stats, roi_masks,
+    compute_image_stats,
+    masked_stats,
+    roi_masks,
 )
 
 
 def test_box_interior_stats_on_uniform_patch():
     array = np.zeros((40, 40), dtype=np.uint16)
     array[10:20, 10:20] = 1000
-    interior, _outline = roi_masks((40, 40), "box",
-                                   [10.0, 10.0, 9.0, 9.0])
+    interior, _outline = roi_masks((40, 40), "box", [10.0, 10.0, 9.0, 9.0])
     stats = masked_stats(array, interior)
     assert stats["mean"] == 1000.0
     assert stats["std"] == 0.0
     assert stats["min"] == stats["max"] == 1000.0
-    assert stats["count"] == 100.0   # cv2.rectangle corners are inclusive
+    assert stats["count"] == 100.0  # cv2.rectangle corners are inclusive
 
 
 def test_circle_mask_is_filled_disk():
-    interior, outline = roi_masks((100, 100), "circle",
-                                  [50.0, 50.0, 10.0])
+    interior, outline = roi_masks((100, 100), "circle", [50.0, 50.0, 10.0])
     area = np.count_nonzero(interior)
-    assert abs(area - math.pi * 10 ** 2) / area < 0.15
+    assert abs(area - math.pi * 10**2) / area < 0.15
     assert 0 < np.count_nonzero(outline) < area
 
 
 def test_roi_outside_image_yields_nan_stats():
     array = np.zeros((20, 20), dtype=np.uint16)
-    interior, _outline = roi_masks((20, 20), "circle",
-                                   [500.0, 500.0, 5.0])
+    interior, _outline = roi_masks((20, 20), "circle", [500.0, 500.0, 5.0])
     stats = masked_stats(array, interior)
     assert stats["count"] == 0.0
     assert math.isnan(stats["mean"])
@@ -697,8 +730,7 @@ def test_compute_image_stats_reads_16bit_png(tmp_path):
     array[5:15, 5:15] = 2000
     path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
     cv2.imwrite(str(path), array)
-    result = compute_image_stats(str(path), {
-        "roi1": ("box", (5.0, 5.0, 9.0, 9.0))})
+    result = compute_image_stats(str(path), {"roi1": ("box", (5.0, 5.0, 9.0, 9.0))})
     assert result["error"] is None
     assert result["stats"]["roi1"]["mean"] == 2000.0
     assert "outline_mean" in result["stats"]["roi1"]
@@ -708,8 +740,7 @@ def test_compute_image_stats_reads_16bit_png(tmp_path):
 def test_compute_image_stats_reports_unreadable_file(tmp_path):
     path = tmp_path / "broken_raw.png"
     path.write_bytes(b"not a png")
-    result = compute_image_stats(str(path), {
-        "roi1": ("circle", (5.0, 5.0, 2.0))})
+    result = compute_image_stats(str(path), {"roi1": ("circle", (5.0, 5.0, 2.0))})
     assert result["error"] is not None
     assert result["stats"] == {}
 ```
@@ -727,6 +758,7 @@ Expected: FAIL — `ModuleNotFoundError: ...roi_compute`
 worker processes): interior + outline-ring masks for circle/box ROIs and
 the summary stats of the masked pixels. Ported from the standalone
 fluorescence app's ROIManager (image_tools.py)."""
+
 import os
 
 import cv2
@@ -782,12 +814,10 @@ def compute_image_stats(image_path, effective_rois):
     in force for THIS image. Returns {"path", "mtime", "stats":
     {roi_id: {mean..., outline_mean...}}, "error"}; a load failure fills
     "error" and leaves "stats" empty (the caller counts it as failed)."""
-    result = {"path": str(image_path), "mtime": 0.0, "stats": {},
-              "error": None}
+    result = {"path": str(image_path), "mtime": 0.0, "stats": {}, "error": None}
     try:
         result["mtime"] = os.path.getmtime(image_path)
-        array = cv2.imread(str(image_path),
-                           cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
+        array = cv2.imread(str(image_path), cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
         if array is None:
             raise ValueError("unreadable image")
         for roi_id, (kind, geometry) in effective_rois.items():
@@ -830,6 +860,7 @@ git commit -m "feat(image-viewer): add pure ROI stats compute layer" -m "Interio
 ```python
 # fluorescence_controls_ui/tests/test_roi_batch.py
 """Batch runner end-to-end on tiny synthetic images (real process pool)."""
+
 import queue
 import time
 
@@ -837,7 +868,10 @@ import cv2
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_batch import (
-    BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
+    BATCH_FINISHED,
+    BATCH_RESULT,
+    INSTANT_RESULT,
+    RoiBatchRunner,
 )
 
 
@@ -869,10 +903,11 @@ def test_batch_computes_all_images_and_finishes(tmp_path):
     runner = RoiBatchRunner()
     runner.start([(path, rois) for path in paths])
     messages = _drain_until(runner.results, BATCH_FINISHED)
-    payloads = [payload for kind, payload in messages
-                if kind == BATCH_RESULT]
-    assert sorted(payload["stats"]["r1"]["mean"]
-                  for payload in payloads) == [100.0, 200.0]
+    payloads = [payload for kind, payload in messages if kind == BATCH_RESULT]
+    assert sorted(payload["stats"]["r1"]["mean"] for payload in payloads) == [
+        100.0,
+        200.0,
+    ]
 
 
 def test_compute_single_reports_on_queue(tmp_path):
@@ -900,11 +935,14 @@ streams results back through a thread-safe queue that the dock pane's
 drain timer empties on the GUI thread. One batch at a time — start()
 cancels any running one and swaps in a fresh queue, so a superseded
 batch's stragglers die with the old queue."""
+
 import os
 import queue
 import threading
 from concurrent.futures import (
-    ProcessPoolExecutor, ThreadPoolExecutor, as_completed,
+    ProcessPoolExecutor,
+    ThreadPoolExecutor,
+    as_completed,
 )
 
 from traits.api import Any, HasTraits
@@ -950,8 +988,8 @@ class RoiBatchRunner(HasTraits):
         self._cancel = threading.Event()
         cancel, results = self._cancel, self.results
         self._thread = threading.Thread(
-            target=self._run, args=(list(work_items), cancel, results),
-            daemon=True)
+            target=self._run, args=(list(work_items), cancel, results), daemon=True
+        )
         self._thread.start()
 
     def cancel(self):
@@ -963,8 +1001,10 @@ class RoiBatchRunner(HasTraits):
         results = self.results
         thread = threading.Thread(
             target=lambda: results.put(
-                (INSTANT_RESULT, compute_image_stats(path, effective_rois))),
-            daemon=True)
+                (INSTANT_RESULT, compute_image_stats(path, effective_rois))
+            ),
+            daemon=True,
+        )
         thread.start()
 
     @staticmethod
@@ -972,12 +1012,15 @@ class RoiBatchRunner(HasTraits):
         try:
             executor = ProcessPoolExecutor(max_workers=_pool_workers())
         except Exception as error:
-            logger.warning(f"Process pool unavailable, falling back to "
-                           f"threads: {error}")
+            logger.warning(
+                f"Process pool unavailable, falling back to threads: {error}"
+            )
             executor = ThreadPoolExecutor(max_workers=_pool_workers())
         with executor:
-            futures = [executor.submit(compute_image_stats, path, rois)
-                       for path, rois in work_items]
+            futures = [
+                executor.submit(compute_image_stats, path, rois)
+                for path, rois in work_items
+            ]
             for future in as_completed(futures):
                 if cancel.is_set():
                     for pending in futures:
@@ -1021,17 +1064,21 @@ git commit -m "feat(image-viewer): add ROI batch compute runner" -m "Daemon orch
 ```python
 # fluorescence_controls_ui/tests/test_roi_store.py
 """ROI config JSON round-trip and intensity-CSV layout."""
+
 import csv
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import Roi
 from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
-    load_roi_config, save_roi_config, write_intensity_csv,
+    load_roi_config,
+    save_roi_config,
+    write_intensity_csv,
 )
 
 
 def test_roi_config_round_trip(tmp_path):
-    roi = Roi(name="ROI 1", kind="circle", geometry=[50.0, 50.0, 10.0],
-              base_anchor=100.0)
+    roi = Roi(
+        name="ROI 1", kind="circle", geometry=[50.0, 50.0, 10.0], base_anchor=100.0
+    )
     roi.apply_edit(200.0, [60.0, 60.0, 12.0])
     save_roi_config(tmp_path, [roi])
     loaded = load_roi_config(tmp_path)
@@ -1052,25 +1099,51 @@ def test_load_missing_or_corrupt_config_is_empty(tmp_path):
 
 def test_write_intensity_csv_layout(tmp_path):
     roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
-    rows = [{
-        "filename": "img_raw.png", "time_utc": "2026_07_20-17_46_24",
-        "elapsed_sec": 0.0, "group": "burst_a", "wavelength": "Green 540 nm",
-        "stats": {roi.roi_id: {"mean": 10.0, "std": 1.0, "median": 10.0,
-                               "min": 8.0, "max": 12.0, "count": 25.0,
-                               "outline_mean": 9.0, "outline_std": 1.0,
-                               "outline_median": 9.0, "outline_min": 8.0,
-                               "outline_max": 10.0, "outline_count": 16.0}},
-    }, {
-        "filename": "img2_raw.png", "time_utc": "2026_07_20-17_46_25",
-        "elapsed_sec": 1.0, "group": "burst_a", "wavelength": "Green 540 nm",
-        "stats": {},   # not computed: blank cells
-    }]
+    rows = [
+        {
+            "filename": "img_raw.png",
+            "time_utc": "2026_07_20-17_46_24",
+            "elapsed_sec": 0.0,
+            "group": "burst_a",
+            "wavelength": "Green 540 nm",
+            "stats": {
+                roi.roi_id: {
+                    "mean": 10.0,
+                    "std": 1.0,
+                    "median": 10.0,
+                    "min": 8.0,
+                    "max": 12.0,
+                    "count": 25.0,
+                    "outline_mean": 9.0,
+                    "outline_std": 1.0,
+                    "outline_median": 9.0,
+                    "outline_min": 8.0,
+                    "outline_max": 10.0,
+                    "outline_count": 16.0,
+                }
+            },
+        },
+        {
+            "filename": "img2_raw.png",
+            "time_utc": "2026_07_20-17_46_25",
+            "elapsed_sec": 1.0,
+            "group": "burst_a",
+            "wavelength": "Green 540 nm",
+            "stats": {},  # not computed: blank cells
+        },
+    ]
     csv_path = tmp_path / "out.csv"
     write_intensity_csv(csv_path, rows, [roi])
     with open(csv_path, newline="") as handle:
         records = list(csv.reader(handle))
-    assert records[0][:6] == ["index", "time_utc", "elapsed_sec",
-                              "filename", "group", "wavelength"]
+    assert records[0][:6] == [
+        "index",
+        "time_utc",
+        "elapsed_sec",
+        "filename",
+        "group",
+        "wavelength",
+    ]
     assert "ROI 1_mean" in records[0]
     assert "ROI 1_outline_count" in records[0]
     mean_column = records[0].index("ROI 1_mean")
@@ -1090,14 +1163,14 @@ Expected: FAIL — `ModuleNotFoundError: ...roi_store`
 """Persistence for the ROI analysis: the per-experiment roi_config.json
 (bases + overrides, auto-saved on change and auto-loaded per experiment)
 and the intensity CSV export. Qt-free, pure file IO."""
+
 import csv
 import json
 from pathlib import Path
 
 from logger.logger_service import get_logger
 
-from .consts import ANALYSIS_DIR_NAME, OUTLINE_STATS_PREFIX, \
-    ROI_CONFIG_FILENAME
+from .consts import ANALYSIS_DIR_NAME, OUTLINE_STATS_PREFIX, ROI_CONFIG_FILENAME
 from .roi_compute import STAT_NAMES
 from .roi_model import Roi
 
@@ -1112,36 +1185,45 @@ def analysis_directory(experiment_directory) -> Path:
 
 
 def save_roi_config(experiment_directory, rois):
-    payload = [{
-        "roi_id": roi.roi_id,
-        "name": roi.name,
-        "kind": roi.kind,
-        "geometry": list(roi.geometry),
-        "base_anchor": roi.base_anchor,
-        "overrides": {repr(anchor): list(geometry)
-                      for anchor, geometry in roi.overrides.items()},
-    } for roi in rois]
+    payload = [
+        {
+            "roi_id": roi.roi_id,
+            "name": roi.name,
+            "kind": roi.kind,
+            "geometry": list(roi.geometry),
+            "base_anchor": roi.base_anchor,
+            "overrides": {
+                repr(anchor): list(geometry)
+                for anchor, geometry in roi.overrides.items()
+            },
+        }
+        for roi in rois
+    ]
     path = analysis_directory(experiment_directory) / ROI_CONFIG_FILENAME
     path.write_text(json.dumps(payload, indent=2))
 
 
 def load_roi_config(experiment_directory) -> list:
     """The experiment's saved ROIs, [] when absent or unreadable."""
-    path = (Path(experiment_directory) / ANALYSIS_DIR_NAME
-            / ROI_CONFIG_FILENAME)
+    path = Path(experiment_directory) / ANALYSIS_DIR_NAME / ROI_CONFIG_FILENAME
     if not path.is_file():
         return []
     try:
         payload = json.loads(path.read_text())
         return [
-            Roi(roi_id=entry["roi_id"], name=entry["name"],
+            Roi(
+                roi_id=entry["roi_id"],
+                name=entry["name"],
                 kind=entry["kind"],
                 geometry=[float(value) for value in entry["geometry"]],
                 base_anchor=float(entry["base_anchor"]),
                 overrides={
                     float(anchor): [float(value) for value in geometry]
-                    for anchor, geometry in entry["overrides"].items()})
-            for entry in payload]
+                    for anchor, geometry in entry["overrides"].items()
+                },
+            )
+            for entry in payload
+        ]
     except Exception as error:
         logger.warning(f"Could not load ROI config {path}: {error}")
         return []
@@ -1149,27 +1231,32 @@ def load_roi_config(experiment_directory) -> list:
 
 #: Per-ROI CSV columns, in order: interior stats then outline stats.
 CSV_STAT_COLUMNS = tuple(STAT_NAMES) + tuple(
-    OUTLINE_STATS_PREFIX + name for name in STAT_NAMES)
+    OUTLINE_STATS_PREFIX + name for name in STAT_NAMES
+)
 
 
 def write_intensity_csv(csv_path, rows, rois):
     """One row per image, blank cells where an (image, ROI) pair has no
     computed stats. ``rows``: [{"filename", "time_utc", "elapsed_sec",
     "group", "wavelength", "stats": {roi_id: stats_dict}}, ...]."""
-    header = ["index", "time_utc", "elapsed_sec", "filename", "group",
-              "wavelength"]
+    header = ["index", "time_utc", "elapsed_sec", "filename", "group", "wavelength"]
     for roi in rois:
         header += [f"{roi.name}_{stat}" for stat in CSV_STAT_COLUMNS]
     with open(csv_path, "w", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(header)
         for index, row in enumerate(rows):
-            record = [index, row["time_utc"], row["elapsed_sec"],
-                      row["filename"], row["group"], row["wavelength"]]
+            record = [
+                index,
+                row["time_utc"],
+                row["elapsed_sec"],
+                row["filename"],
+                row["group"],
+                row["wavelength"],
+            ]
             for roi in rois:
                 stats = row["stats"].get(roi.roi_id, {})
-                record += [stats.get(stat, "")
-                           for stat in CSV_STAT_COLUMNS]
+                record += [stats.get(stat, "") for stat in CSV_STAT_COLUMNS]
             writer.writerow(record)
 ```
 
@@ -1202,10 +1289,10 @@ git commit -m "feat(image-viewer): persist ROI config and intensity CSV" -m "roi
 In `microdrop_style/icons/icons.py`, after the `ICON_ARCHIVE` line (line 51):
 
 ```python
-ICON_CIRCLE          = "circle"       # draw circular ROI
-ICON_RECTANGLE       = "rectangle"    # draw rectangular ROI
-ICON_SHOW_CHART      = "show_chart"   # calculate & plot intensities
-ICON_DELETE_SWEEP    = "delete_sweep" # clear all ROIs
+ICON_CIRCLE = "circle"  # draw circular ROI
+ICON_RECTANGLE = "rectangle"  # draw rectangular ROI
+ICON_SHOW_CHART = "show_chart"  # calculate & plot intensities
+ICON_DELETE_SWEEP = "delete_sweep"  # clear all ROIs
 ```
 
 - [ ] **Step 2: Implement roi_items.py**
@@ -1218,12 +1305,15 @@ RoiCanvasLayer that owns them on the image scene and turns the canvas's
 forwarded mouse events into creation/edit callbacks. The layer never
 touches the model — the canvas editor wires its callbacks to the
 analysis model's canvas_* event traits and the controller reacts."""
+
 import math
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPen
 from PySide6.QtWidgets import (
-    QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsSimpleTextItem,
+    QGraphicsEllipseItem,
+    QGraphicsRectItem,
+    QGraphicsSimpleTextItem,
 )
 
 from .consts import MIN_ROI_SIZE_PX
@@ -1240,12 +1330,10 @@ class _ResizeHandle(QGraphicsRectItem):
 
     def __init__(self, parent):
         half = HANDLE_SIZE_PX / 2
-        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX,
-                         parent)
+        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX, parent)
         self.setBrush(HANDLE_BRUSH)
         self.setPen(QPen(Qt.PenStyle.NoPen))
-        self.setFlag(
-            self.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.setFlag(self.GraphicsItemFlag.ItemIgnoresTransformations)
         self.setCursor(Qt.CursorShape.SizeFDiagCursor)
         self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
 
@@ -1271,8 +1359,7 @@ class _RoiItemBase:
         self.setPen(ROI_PEN)
         self._label = QGraphicsSimpleTextItem(name, self)
         self._label.setBrush(QBrush(ROI_PEN.color()))
-        self._label.setFlag(
-            self._label.GraphicsItemFlag.ItemIgnoresTransformations)
+        self._label.setFlag(self._label.GraphicsItemFlag.ItemIgnoresTransformations)
         self._handle = _ResizeHandle(self)
 
     def set_editable(self, editable):
@@ -1308,8 +1395,7 @@ class CircleRoiItem(_RoiItemBase, QGraphicsEllipseItem):
     def set_geometry(self, geometry):
         center_x, center_y, radius = geometry
         self.setPos(0, 0)
-        self.setRect(center_x - radius, center_y - radius,
-                     2 * radius, 2 * radius)
+        self.setRect(center_x - radius, center_y - radius, 2 * radius, 2 * radius)
         self._place_attachments()
 
     def geometry(self):
@@ -1319,17 +1405,16 @@ class CircleRoiItem(_RoiItemBase, QGraphicsEllipseItem):
     def resize_to(self, scene_point):
         point = self.mapFromScene(scene_point)
         center = self.rect().center()
-        radius = max(math.hypot(point.x() - center.x(),
-                                point.y() - center.y()), MIN_ROI_SIZE_PX)
-        self.setRect(center.x() - radius, center.y() - radius,
-                     2 * radius, 2 * radius)
+        radius = max(
+            math.hypot(point.x() - center.x(), point.y() - center.y()), MIN_ROI_SIZE_PX
+        )
+        self.setRect(center.x() - radius, center.y() - radius, 2 * radius, 2 * radius)
         self._place_attachments()
 
     def _place_attachments(self):
         rect = self.rect()
         offset = rect.width() / 2 * math.sqrt(0.5)
-        self._handle.setPos(rect.center().x() + offset,
-                            rect.center().y() + offset)
+        self._handle.setPos(rect.center().x() + offset, rect.center().y() + offset)
         self._label.setPos(rect.left(), rect.top() - 2)
 
 
@@ -1349,8 +1434,12 @@ class BoxRoiItem(_RoiItemBase, QGraphicsRectItem):
 
     def geometry(self):
         rect = self.rect()
-        return [rect.x() + self.pos().x(), rect.y() + self.pos().y(),
-                rect.width(), rect.height()]
+        return [
+            rect.x() + self.pos().x(),
+            rect.y() + self.pos().y(),
+            rect.width(),
+            rect.height(),
+        ]
 
     def resize_to(self, scene_point):
         point = self.mapFromScene(scene_point)
@@ -1374,8 +1463,8 @@ class RoiCanvasLayer:
 
     def __init__(self, scene):
         self._scene = scene
-        self._items = {}          # roi_id -> item
-        self._draft = None        # item being rubber-band drawn
+        self._items = {}  # roi_id -> item
+        self._draft = None  # item being rubber-band drawn
         self._draft_kind = ""
         self._press_point = None
         self.mode = "pan"
@@ -1392,8 +1481,9 @@ class RoiCanvasLayer:
     def sync(self, effective, selected_roi_id):
         """Match the items to ``effective`` ([(roi_id, name, kind,
         geometry), ...] for the SHOWN image) — create, update, drop."""
-        wanted = {roi_id: (name, kind, geometry)
-                  for roi_id, name, kind, geometry in effective}
+        wanted = {
+            roi_id: (name, kind, geometry) for roi_id, name, kind, geometry in effective
+        }
         for roi_id in list(self._items):
             if roi_id not in wanted:
                 self._scene.removeItem(self._items.pop(roi_id))
@@ -1404,8 +1494,7 @@ class RoiCanvasLayer:
                 self._scene.removeItem(self._items.pop(roi_id))
                 item = None
             if item is None:
-                item = item_class(roi_id, name, geometry,
-                                  self.on_roi_edited)
+                item = item_class(roi_id, name, geometry, self.on_roi_edited)
                 item.set_editable(self.mode == "edit")
                 self._scene.addItem(item)
                 self._items[roi_id] = item
@@ -1428,8 +1517,7 @@ class RoiCanvasLayer:
         if self.mode not in ("draw_circle", "draw_box"):
             return False
         self._press_point = scene_point
-        self._draft_kind = ("circle" if self.mode == "draw_circle"
-                            else "box")
+        self._draft_kind = "circle" if self.mode == "draw_circle" else "box"
         if self._draft_kind == "circle":
             self._draft = QGraphicsEllipseItem()
         else:
@@ -1444,8 +1532,9 @@ class RoiCanvasLayer:
         geometry = self._drag_geometry(scene_point)
         if self._draft_kind == "circle":
             center_x, center_y, radius = geometry
-            self._draft.setRect(center_x - radius, center_y - radius,
-                                2 * radius, 2 * radius)
+            self._draft.setRect(
+                center_x - radius, center_y - radius, 2 * radius, 2 * radius
+            )
         else:
             self._draft.setRect(*geometry)
         return True
@@ -1456,8 +1545,11 @@ class RoiCanvasLayer:
         geometry = self._drag_geometry(scene_point)
         self._scene.removeItem(self._draft)
         self._draft = None
-        size = geometry[2] if self._draft_kind == "circle" else min(
-            geometry[2], geometry[3])
+        size = (
+            geometry[2]
+            if self._draft_kind == "circle"
+            else min(geometry[2], geometry[3])
+        )
         if size >= MIN_ROI_SIZE_PX:
             self.on_roi_created(self._draft_kind, geometry)
         return True
@@ -1467,13 +1559,18 @@ class RoiCanvasLayer:
         center / box corner."""
         press = self._press_point
         if self._draft_kind == "circle":
-            radius = math.hypot(scene_point.x() - press.x(),
-                                scene_point.y() - press.y())
+            radius = math.hypot(
+                scene_point.x() - press.x(), scene_point.y() - press.y()
+            )
             return [press.x(), press.y(), radius]
         x = min(press.x(), scene_point.x())
         y = min(press.y(), scene_point.y())
-        return [x, y, abs(scene_point.x() - press.x()),
-                abs(scene_point.y() - press.y())]
+        return [
+            x,
+            y,
+            abs(scene_point.x() - press.x()),
+            abs(scene_point.y() - press.y()),
+        ]
 
     def _selection_changed(self):
         for roi_id, item in self._items.items():
@@ -1492,94 +1589,106 @@ Add imports: `from .analysis.roi_items import RoiCanvasLayer`.
 `_ImageView.__init__` gains a `roi_layer` parameter (stored as `self._roi_layer`), and the three mouse handlers forward first:
 
 ```python
-    def __init__(self, scene, on_hover, roi_layer):
-        super().__init__(scene)
-        self._on_hover = on_hover
-        self._roi_layer = roi_layer
-        ...  # rest unchanged
+def __init__(self, scene, on_hover, roi_layer):
+    super().__init__(scene)
+    self._on_hover = on_hover
+    self._roi_layer = roi_layer
+    ...  # rest unchanged
 
-    def mousePressEvent(self, event):
-        point = self.mapToScene(event.position().toPoint())
-        if self._roi_layer.mouse_press(point):
-            event.accept()
-            return
-        super().mousePressEvent(event)
 
-    def mouseMoveEvent(self, event):
-        point = self.mapToScene(event.position().toPoint())
-        self._on_hover(int(point.x()), int(point.y()))
-        if self._roi_layer.mouse_move(point):
-            event.accept()
-            return
-        super().mouseMoveEvent(event)
+def mousePressEvent(self, event):
+    point = self.mapToScene(event.position().toPoint())
+    if self._roi_layer.mouse_press(point):
+        event.accept()
+        return
+    super().mousePressEvent(event)
 
-    def mouseReleaseEvent(self, event):
-        point = self.mapToScene(event.position().toPoint())
-        if self._roi_layer.mouse_release(point):
-            event.accept()
-            return
-        super().mouseReleaseEvent(event)
+
+def mouseMoveEvent(self, event):
+    point = self.mapToScene(event.position().toPoint())
+    self._on_hover(int(point.x()), int(point.y()))
+    if self._roi_layer.mouse_move(point):
+        event.accept()
+        return
+    super().mouseMoveEvent(event)
+
+
+def mouseReleaseEvent(self, event):
+    point = self.mapToScene(event.position().toPoint())
+    if self._roi_layer.mouse_release(point):
+        event.accept()
+        return
+    super().mouseReleaseEvent(event)
 ```
 
 `_ImageCanvasEditor.init` creates the layer, wires callbacks to the analysis model, and observes analysis state (`self.object` is the viewer model):
 
 ```python
-    def init(self, parent):
-        self._scene = QGraphicsScene()
-        self._pixmap_item = QGraphicsPixmapItem()
-        self._scene.addItem(self._pixmap_item)
-        self._roi_layer = RoiCanvasLayer(self._scene)
-        analysis = self.object.roi_analysis
-        self._roi_layer.on_roi_created = (
-            lambda kind, geometry:
-            analysis.trait_set(canvas_roi_created=(kind, geometry)))
-        self._roi_layer.on_roi_edited = (
-            lambda roi_id, geometry:
-            analysis.trait_set(canvas_roi_edited=(roi_id, geometry)))
-        self._roi_layer.on_roi_selected = (
-            lambda roi_id: analysis.trait_set(selected_roi_id=roi_id))
-        self.control = _ImageView(self._scene, self._on_hover,
-                                  self._roi_layer)
-        self.object.observe(self._on_window_changed,
-                            "auto_contrast, window_min, window_max")
-        self.object.observe(self._on_fit_request, "fit_request")
-        self.object.observe(
-            self._on_roi_state_changed,
-            "current_path, roi_analysis:rois.items, "
-            "roi_analysis:rois:items:geometry, "
-            "roi_analysis:rois:items:overrides:items, "
-            "roi_analysis:selected_roi_id")
-        self.object.observe(self._on_interaction_mode_changed,
-                            "roi_analysis:interaction_mode")
+def init(self, parent):
+    self._scene = QGraphicsScene()
+    self._pixmap_item = QGraphicsPixmapItem()
+    self._scene.addItem(self._pixmap_item)
+    self._roi_layer = RoiCanvasLayer(self._scene)
+    analysis = self.object.roi_analysis
+    self._roi_layer.on_roi_created = lambda kind, geometry: analysis.trait_set(
+        canvas_roi_created=(kind, geometry)
+    )
+    self._roi_layer.on_roi_edited = lambda roi_id, geometry: analysis.trait_set(
+        canvas_roi_edited=(roi_id, geometry)
+    )
+    self._roi_layer.on_roi_selected = lambda roi_id: analysis.trait_set(
+        selected_roi_id=roi_id
+    )
+    self.control = _ImageView(self._scene, self._on_hover, self._roi_layer)
+    self.object.observe(
+        self._on_window_changed, "auto_contrast, window_min, window_max"
+    )
+    self.object.observe(self._on_fit_request, "fit_request")
+    self.object.observe(
+        self._on_roi_state_changed,
+        "current_path, roi_analysis:rois.items, "
+        "roi_analysis:rois:items:geometry, "
+        "roi_analysis:rois:items:overrides:items, "
+        "roi_analysis:selected_roi_id",
+    )
+    self.object.observe(
+        self._on_interaction_mode_changed, "roi_analysis:interaction_mode"
+    )
 ```
 
 with matching removals in `dispose()` (same patterns, `remove=True`), and the two new handlers + a sync call at the end of `update_editor`:
 
 ```python
-    def update_editor(self):
-        # A new image arrived in `array`: redraw and refit.
-        self._redraw()
-        self.control.fit()
-        self._sync_roi_layer()
+def update_editor(self):
+    # A new image arrived in `array`: redraw and refit.
+    self._redraw()
+    self.control.fit()
+    self._sync_roi_layer()
 
-    def _on_roi_state_changed(self, event):
-        self._sync_roi_layer()
 
-    def _sync_roi_layer(self):
-        model = self.object
-        if not model.current_path or model.array is None:
-            self._roi_layer.clear_items()
-            return
-        self._roi_layer.sync(
-            model.roi_analysis.effective_for(model.current_path),
-            model.roi_analysis.selected_roi_id)
+def _on_roi_state_changed(self, event):
+    self._sync_roi_layer()
 
-    def _on_interaction_mode_changed(self, event):
-        mode = event.new
-        self._roi_layer.set_mode(mode)
-        self.control.setDragMode(
-            self.control.DragMode.ScrollHandDrag if mode == "pan"
-            else self.control.DragMode.NoDrag)
+
+def _sync_roi_layer(self):
+    model = self.object
+    if not model.current_path or model.array is None:
+        self._roi_layer.clear_items()
+        return
+    self._roi_layer.sync(
+        model.roi_analysis.effective_for(model.current_path),
+        model.roi_analysis.selected_roi_id,
+    )
+
+
+def _on_interaction_mode_changed(self, event):
+    mode = event.new
+    self._roi_layer.set_mode(mode)
+    self.control.setDragMode(
+        self.control.DragMode.ScrollHandDrag
+        if mode == "pan"
+        else self.control.DragMode.NoDrag
+    )
 ```
 
 - [ ] **Step 4: Import smoke check**
@@ -1619,6 +1728,7 @@ and canvas events, keeps the per-experiment ROI config in sync,
 orchestrates the cache-aware batch computation, and rebuilds the plot
 series as results drain in. All observers run on the GUI thread; the
 only off-thread work is inside RoiBatchRunner."""
+
 import math
 import queue
 import time
@@ -1635,15 +1745,19 @@ from fluorescence_protocol_controls.capture_chain import sanitize_label
 
 from ...capture_service import utc_stamp
 from ...consts import CAPTURE_TIMESTAMP_FORMAT
-from ..discovery import UNGROUPED_BURST, capture_timestamp, \
-    detect_wavelength
+from ..discovery import UNGROUPED_BURST, capture_timestamp, detect_wavelength
 from ..model import FluorescenceImageViewerModel
 from .roi_batch import (
-    BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
+    BATCH_FINISHED,
+    BATCH_RESULT,
+    INSTANT_RESULT,
+    RoiBatchRunner,
 )
 from .roi_model import Roi, RoiAnalysisModel
 from .roi_store import (
-    analysis_directory, load_roi_config, save_roi_config,
+    analysis_directory,
+    load_roi_config,
+    save_roi_config,
     write_intensity_csv,
 )
 
@@ -1682,8 +1796,7 @@ class RoiAnalysisController(HasTraits):
 
     @observe("analysis_model:edit_mode")
     def _toggle_edit_mode(self, event):
-        self.analysis_model.interaction_mode = ("edit" if event.new
-                                                else "pan")
+        self.analysis_model.interaction_mode = "edit" if event.new else "pan"
 
     def _rest_mode(self):
         return "edit" if self.analysis_model.edit_mode else "pan"
@@ -1696,9 +1809,12 @@ class RoiAnalysisController(HasTraits):
         kind, geometry = event.new
         current = self.viewer_model.current_path
         anchor = capture_timestamp(current) if current else 0.0
-        roi = Roi(name=self.analysis_model.next_roi_name(), kind=kind,
-                  geometry=[float(value) for value in geometry],
-                  base_anchor=anchor)
+        roi = Roi(
+            name=self.analysis_model.next_roi_name(),
+            kind=kind,
+            geometry=[float(value) for value in geometry],
+            base_anchor=anchor,
+        )
         self.analysis_model.rois.append(roi)
         self.analysis_model.interaction_mode = self._rest_mode()
         self._save_config()
@@ -1712,8 +1828,7 @@ class RoiAnalysisController(HasTraits):
         current = self.viewer_model.current_path
         if roi is None or not current:
             return
-        roi.apply_edit(capture_timestamp(current),
-                       [float(value) for value in geometry])
+        roi.apply_edit(capture_timestamp(current), [float(value) for value in geometry])
         self._save_config()
         self._instant_stats(roi)
         self._restart_batch_if_running()
@@ -1723,11 +1838,11 @@ class RoiAnalysisController(HasTraits):
     # ------------------------------------------------------------------ #
     @observe("analysis_model:delete_roi_button")
     def _delete_selected_roi(self, event):
-        roi = self.analysis_model.roi_by_id(
-            self.analysis_model.selected_roi_id)
+        roi = self.analysis_model.roi_by_id(self.analysis_model.selected_roi_id)
         if roi is None:
             self.analysis_model.roi_info_text = (
-                "Select an ROI first (edit mode) to delete it")
+                "Select an ROI first (edit mode) to delete it"
+            )
             return
         self.analysis_model.rois.remove(roi)
         self.analysis_model.selected_roi_id = ""
@@ -1739,8 +1854,7 @@ class RoiAnalysisController(HasTraits):
     def _clear_rois(self, event):
         if not self.analysis_model.rois:
             return
-        if confirm(message="Remove ALL ROIs (and their drift "
-                           "overrides)?") != YES:
+        if confirm(message="Remove ALL ROIs (and their drift overrides)?") != YES:
             return
         self.runner.cancel()
         self.analysis_model.rois = []
@@ -1754,8 +1868,10 @@ class RoiAnalysisController(HasTraits):
     def _reset_cache(self, event):
         result = confirm(
             message="Reset the calculated ROI intensities?",
-            cancel=True, yes_label="Cache only",
-            no_label="Cache + drift overrides")
+            cancel=True,
+            yes_label="Cache only",
+            no_label="Cache + drift overrides",
+        )
         if result not in (YES, NO):
             return
         self.runner.cancel()
@@ -1787,8 +1903,10 @@ class RoiAnalysisController(HasTraits):
             return
         self._write_export()
 
-    @observe("viewer_model:paths.items, viewer_model:selected_wavelength,"
-             " viewer_model:selected_burst")
+    @observe(
+        "viewer_model:paths.items, viewer_model:selected_wavelength,"
+        " viewer_model:selected_burst"
+    )
     def _on_filter_changed(self, event):
         """The filtered series changed mid-batch: restart on the new
         snapshot (the work list is a snapshot by design)."""
@@ -1804,8 +1922,7 @@ class RoiAnalysisController(HasTraits):
             for roi in self.analysis_model.rois:
                 key = self.analysis_model.cache_key(path, roi)
                 if key not in self.analysis_model.cache:
-                    missing[roi.roi_id] = (roi.kind,
-                                           tuple(key[4]))
+                    missing[roi.roi_id] = (roi.kind, tuple(key[4]))
                     self._dispatched_keys[(str(path), roi.roi_id)] = key
             if missing:
                 work.append((str(path), missing))
@@ -1848,8 +1965,9 @@ class RoiAnalysisController(HasTraits):
                 self.analysis_model.batch_done += 1
                 if payload["error"]:
                     self.analysis_model.batch_failed += 1
-                    logger.warning(f"ROI stats failed for "
-                                   f"{payload['path']}: {payload['error']}")
+                    logger.warning(
+                        f"ROI stats failed for {payload['path']}: {payload['error']}"
+                    )
                 self._update_progress_text()
             elif kind == INSTANT_RESULT:
                 self._absorb(payload)
@@ -1870,12 +1988,11 @@ class RoiAnalysisController(HasTraits):
 
     def _update_progress_text(self, finished=False):
         model = self.analysis_model
-        failed = f", {model.batch_failed} failed" if model.batch_failed \
-            else ""
+        failed = f", {model.batch_failed} failed" if model.batch_failed else ""
         state = "done" if finished else "calculating"
         model.progress_text = (
-            f"ROI stats {model.batch_done}/{model.batch_total} "
-            f"{state}{failed}")
+            f"ROI stats {model.batch_done}/{model.batch_total} {state}{failed}"
+        )
 
     def _instant_stats(self, roi):
         """Kick off the instant single-image compute for ``roi`` on the
@@ -1888,12 +2005,11 @@ class RoiAnalysisController(HasTraits):
         self._instant_roi = roi
         cached = self.analysis_model.cache.get(key)
         if cached is not None:
-            self._show_instant({"path": current,
-                                "stats": {roi.roi_id: cached},
-                                "error": None})
+            self._show_instant(
+                {"path": current, "stats": {roi.roi_id: cached}, "error": None}
+            )
             return
-        self.runner.compute_single(current,
-                                   {roi.roi_id: (roi.kind, tuple(key[4]))})
+        self.runner.compute_single(current, {roi.roi_id: (roi.kind, tuple(key[4]))})
 
     def _show_instant(self, payload):
         roi = self._instant_roi
@@ -1902,12 +2018,14 @@ class RoiAnalysisController(HasTraits):
         stats = payload["stats"].get(roi.roi_id)
         if stats is None or payload.get("error"):
             self.analysis_model.roi_info_text = (
-                f"{roi.name}: no stats ({payload.get('error') or 'empty'})")
+                f"{roi.name}: no stats ({payload.get('error') or 'empty'})"
+            )
             return
         self.analysis_model.roi_info_text = (
             f"{roi.name}: mean {stats['mean']:.1f}  "
             f"std {stats['std']:.1f}  min {stats['min']:.0f}  "
-            f"max {stats['max']:.0f}  n {int(stats['count'])}")
+            f"max {stats['max']:.0f}  n {int(stats['count'])}"
+        )
 
     # ------------------------------------------------------------------ #
     # Plot series                                                          #
@@ -1943,8 +2061,7 @@ class RoiAnalysisController(HasTraits):
         if not browsed:
             return None
         folder = Path(browsed)
-        return folder.parent if folder.name == CAPTURES_DIR_NAME \
-            else folder
+        return folder.parent if folder.name == CAPTURES_DIR_NAME else folder
 
     def _save_config(self):
         directory = self._experiment_directory()
@@ -1966,8 +2083,9 @@ class RoiAnalysisController(HasTraits):
         self.analysis_model.selected_roi_id = ""
         self.analysis_model.cache = {}
         directory = self._experiment_directory()
-        self.analysis_model.rois = (load_roi_config(directory)
-                                    if directory is not None else [])
+        self.analysis_model.rois = (
+            load_roi_config(directory) if directory is not None else []
+        )
         self._rebuild_plot_series()
 
     def _write_export(self):
@@ -1987,19 +2105,24 @@ class RoiAnalysisController(HasTraits):
                 stats = model.cache.get(model.cache_key(path, roi))
                 if stats is not None:
                     stats_by_roi[roi.roi_id] = stats
-            rows.append({
-                "filename": Path(path).name,
-                "time_utc": time.strftime(CAPTURE_TIMESTAMP_FORMAT,
-                                          time.gmtime(capture_time)),
-                "elapsed_sec": capture_time - start_time,
-                "group": self._group_of(path),
-                "wavelength": detect_wavelength(path),
-                "stats": stats_by_roi,
-            })
-        name = (f"roi_intensities_"
-                f"{sanitize_label(self.viewer_model.selected_burst)}_"
-                f"{sanitize_label(self.viewer_model.selected_wavelength)}_"
-                f"{utc_stamp()}.csv")
+            rows.append(
+                {
+                    "filename": Path(path).name,
+                    "time_utc": time.strftime(
+                        CAPTURE_TIMESTAMP_FORMAT, time.gmtime(capture_time)
+                    ),
+                    "elapsed_sec": capture_time - start_time,
+                    "group": self._group_of(path),
+                    "wavelength": detect_wavelength(path),
+                    "stats": stats_by_roi,
+                }
+            )
+        name = (
+            f"roi_intensities_"
+            f"{sanitize_label(self.viewer_model.selected_burst)}_"
+            f"{sanitize_label(self.viewer_model.selected_wavelength)}_"
+            f"{utc_stamp()}.csv"
+        )
         csv_path = analysis_directory(directory) / name
         try:
             write_intensity_csv(csv_path, rows, model.rois)
@@ -2038,19 +2161,18 @@ add traits to `FluorescenceImageViewerDockPane`:
 in `traits_init`, after the controller is built:
 
 ```python
-        self.analysis_controller = RoiAnalysisController(
-            viewer_model=self.model,
-            analysis_model=self.model.roi_analysis)
+self.analysis_controller = RoiAnalysisController(
+    viewer_model=self.model, analysis_model=self.model.roi_analysis
+)
 ```
 
 in `create_contents`, next to the other timers:
 
 ```python
-        self._drain_timer = QTimer(control)
-        self._drain_timer.setInterval(ANALYSIS_RESULT_DRAIN_INTERVAL_MS)
-        self._drain_timer.timeout.connect(
-            self.analysis_controller.drain_results)
-        self._drain_timer.start()
+self._drain_timer = QTimer(control)
+self._drain_timer.setInterval(ANALYSIS_RESULT_DRAIN_INTERVAL_MS)
+self._drain_timer.timeout.connect(self.analysis_controller.drain_results)
+self._drain_timer.start()
 ```
 
 - [ ] **Step 3: Import smoke check**
@@ -2091,45 +2213,65 @@ In `view.py`, extend the `microdrop_style.icons.icons` import with `ICON_CIRCLE,
 # ROI's instant stats and the batch progress.
 analysis_group = VGroup(
     HGroup(
-        UItem("object.roi_analysis.draw_circle_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_CIRCLE,
-                  tooltip="Draw a circular ROI (click-drag on the image)")),
-        UItem("object.roi_analysis.draw_box_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_RECTANGLE,
-                  tooltip="Draw a rectangular ROI (click-drag on the "
-                          "image)")),
-        UItem("object.roi_analysis.edit_mode",
-              editor=IconToggleEditor(
-                  on_glyph=ICON_EDIT, off_glyph=ICON_EDIT,
-                  tooltip="Edit ROIs: drag to move, grip to resize, "
-                          "click to select. Editing on a later image "
-                          "adds a drift override from there on")),
-        UItem("object.roi_analysis.delete_roi_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_DELETE,
-                  tooltip="Delete the selected ROI")),
-        UItem("object.roi_analysis.clear_rois_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_DELETE_SWEEP,
-                  tooltip="Remove all ROIs")),
-        UItem("object.roi_analysis.calculate_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_SHOW_CHART,
-                  tooltip="Calculate ROI intensities across the "
-                          "filtered images and plot them")),
-        UItem("object.roi_analysis.export_csv_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_SAVE,
-                  tooltip="Export the intensities to the experiment's "
-                          "analysis folder (calculates first if "
-                          "needed)")),
-        UItem("object.roi_analysis.reset_cache_button",
-              editor=IconButtonEditor(
-                  glyph=ICON_RESET_WRENCH,
-                  tooltip="Reset calculated intensities (optionally "
-                          "also the drift overrides)")),
+        UItem(
+            "object.roi_analysis.draw_circle_button",
+            editor=IconButtonEditor(
+                glyph=ICON_CIRCLE,
+                tooltip="Draw a circular ROI (click-drag on the image)",
+            ),
+        ),
+        UItem(
+            "object.roi_analysis.draw_box_button",
+            editor=IconButtonEditor(
+                glyph=ICON_RECTANGLE,
+                tooltip="Draw a rectangular ROI (click-drag on the image)",
+            ),
+        ),
+        UItem(
+            "object.roi_analysis.edit_mode",
+            editor=IconToggleEditor(
+                on_glyph=ICON_EDIT,
+                off_glyph=ICON_EDIT,
+                tooltip="Edit ROIs: drag to move, grip to resize, "
+                "click to select. Editing on a later image "
+                "adds a drift override from there on",
+            ),
+        ),
+        UItem(
+            "object.roi_analysis.delete_roi_button",
+            editor=IconButtonEditor(
+                glyph=ICON_DELETE, tooltip="Delete the selected ROI"
+            ),
+        ),
+        UItem(
+            "object.roi_analysis.clear_rois_button",
+            editor=IconButtonEditor(glyph=ICON_DELETE_SWEEP, tooltip="Remove all ROIs"),
+        ),
+        UItem(
+            "object.roi_analysis.calculate_button",
+            editor=IconButtonEditor(
+                glyph=ICON_SHOW_CHART,
+                tooltip="Calculate ROI intensities across the "
+                "filtered images and plot them",
+            ),
+        ),
+        UItem(
+            "object.roi_analysis.export_csv_button",
+            editor=IconButtonEditor(
+                glyph=ICON_SAVE,
+                tooltip="Export the intensities to the experiment's "
+                "analysis folder (calculates first if "
+                "needed)",
+            ),
+        ),
+        UItem(
+            "object.roi_analysis.reset_cache_button",
+            editor=IconButtonEditor(
+                glyph=ICON_RESET_WRENCH,
+                tooltip="Reset calculated intensities (optionally "
+                "also the drift overrides)",
+            ),
+        ),
     ),
     UItem("object.roi_analysis.roi_info_text", style="readonly"),
     UItem("object.roi_analysis.progress_text", style="readonly"),
@@ -2141,8 +2283,8 @@ analysis_group = VGroup(
 and in `ImageViewerView`, between the contrast section and the canvas:
 
 ```python
-        _collapse_header("show_analysis", "Analysis"),
-        analysis_group,
+(_collapse_header("show_analysis", "Analysis"),)
+(analysis_group,)
 ```
 
 - [ ] **Step 3: Import smoke check**
@@ -2177,13 +2319,16 @@ git commit -m "feat(image-viewer): add ROI analysis toolbutton row" -m "Collapsi
 elapsed time, one line per ROI, streaming in as the batch computes
 (poll-timer canvas over the shared analysis model — the temperature
 canvas pattern). Lines gap where an image failed or isn't computed."""
+
 import os
 
 os.environ.setdefault("QT_API", "pyside6")
 import matplotlib
+
 matplotlib.use("QtAgg")
 from matplotlib.backends.backend_qtagg import (
-    FigureCanvasQTAgg, NavigationToolbar2QT,
+    FigureCanvasQTAgg,
+    NavigationToolbar2QT,
 )
 from matplotlib.figure import Figure
 
@@ -2232,8 +2377,7 @@ class RoiPlotCanvas(FigureCanvasQTAgg):
                 self._lines.pop(roi_id).remove()
         for roi_id, (name, elapsed, means) in series.items():
             if roi_id not in self._lines:
-                (self._lines[roi_id],) = self._axes.plot(
-                    [], [], marker=".", label=name)
+                (self._lines[roi_id],) = self._axes.plot([], [], marker=".", label=name)
             line = self._lines[roi_id]
             line.set_data(elapsed, means)
             line.set_label(name)
@@ -2262,7 +2406,8 @@ class FluorescenceRoiPlotDockPane(DockPane):
         layout.addWidget(progress)
         timer = QTimer(widget)
         timer.timeout.connect(
-            lambda: progress.setText(roi_analysis_model.progress_text))
+            lambda: progress.setText(roi_analysis_model.progress_text)
+        )
         timer.start(ROI_PLOT_REFRESH_INTERVAL_MS)
         return widget
 ```
@@ -2272,16 +2417,20 @@ class FluorescenceRoiPlotDockPane(DockPane):
 In `plugin.py`, `_get_extra_dock_pane_classes` becomes:
 
 ```python
-    def _get_extra_dock_pane_classes(self) -> list:
-        # Extra dock panes: 16-bit-aware viewer for captured images, ROI
-        # intensity plot, and advanced ASI capture settings.
-        from .advanced_camera.dock_pane import AdvancedCameraDockPane
-        from .image_viewer.analysis.plot_pane import (
-            FluorescenceRoiPlotDockPane,
-        )
-        from .image_viewer.dock_pane import FluorescenceImageViewerDockPane
-        return [FluorescenceImageViewerDockPane,
-                FluorescenceRoiPlotDockPane, AdvancedCameraDockPane]
+def _get_extra_dock_pane_classes(self) -> list:
+    # Extra dock panes: 16-bit-aware viewer for captured images, ROI
+    # intensity plot, and advanced ASI capture settings.
+    from .advanced_camera.dock_pane import AdvancedCameraDockPane
+    from .image_viewer.analysis.plot_pane import (
+        FluorescenceRoiPlotDockPane,
+    )
+    from .image_viewer.dock_pane import FluorescenceImageViewerDockPane
+
+    return [
+        FluorescenceImageViewerDockPane,
+        FluorescenceRoiPlotDockPane,
+        AdvancedCameraDockPane,
+    ]
 ```
 
 - [ ] **Step 3: Import smoke check**

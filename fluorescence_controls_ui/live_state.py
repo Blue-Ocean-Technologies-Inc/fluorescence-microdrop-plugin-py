@@ -9,6 +9,7 @@ This singleton also carries the pane <-> protocol-tree live-tracking state
 (device-viewer semantics): the GUI-thread event through which a tree row
 selection reaches the controller's free-mode capture-chain attach flow.
 """
+
 from traits.api import Bool, Event, HasTraits, Str
 
 

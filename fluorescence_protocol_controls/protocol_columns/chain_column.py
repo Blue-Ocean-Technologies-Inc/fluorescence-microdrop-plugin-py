@@ -15,32 +15,41 @@ wait for the backend's applied-and-settled ack, grab a frame from the
 plugin's own camera feed. Priority 5 — one bucket EARLIER than
 capture/record/video (10), matching the old compound column's ordering.
 """
+
 import json
 
+from pyface.qt.QtCore import QTimer
 from traits.api import Any, List, Str
 
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from logger.logger_service import get_logger
-from microdrop_application.dialogs import pyface_wrapper
-from pyface.qt.QtCore import QTimer
-
 from fluorescence_controller.consts import (
-    ALL_LEDS_OFF, FLUORESCENCE_APPLIED, PROTOCOL_FLUORESCENCE_SESSION,
+    ALL_LEDS_OFF,
+    FLUORESCENCE_APPLIED,
+    PROTOCOL_FLUORESCENCE_SESSION,
     PROTOCOL_STEP_FLUORESCENCE,
 )
 from fluorescence_controller.datamodels import (
     protocol_set_fluorescence_publisher,
 )
+from microdrop_application.dialogs import pyface_wrapper
 from pluggable_protocol_tree.models.column import (
-    BaseColumnHandler, BaseColumnModel, Column,
+    BaseColumnHandler,
+    BaseColumnModel,
+    Column,
 )
 from pluggable_protocol_tree.views.columns.base import BaseColumnView
 
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
 from ..capture_chain import parse_chain, ticked
 from ..consts import (
-    CAMERA_WARMUP_S, FLUORESCENCE_CHAIN_COLUMN_ID, LED_STABILIZATION_S,
-    PHASE_START_SUFFIX, PHASE_END_SUFFIX,
+    CAMERA_WARMUP_S,
+    FLUORESCENCE_CHAIN_COLUMN_ID,
+    LED_STABILIZATION_S,
+    PHASE_END_SUFFIX,
+    PHASE_START_SUFFIX,
 )
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -60,12 +69,15 @@ def _warn_capture_locked_once():
     if _capture_locked_warned:
         return
     _capture_locked_warned = True
-    QTimer.singleShot(0, lambda: pyface_wrapper.information(
-        None,
-        "This step's screen-capture is disabled while its Fluorescence "
-        "chain owns this step's imaging.",
-        title="Capture Disabled",
-    ))
+    QTimer.singleShot(
+        0,
+        lambda: pyface_wrapper.information(
+            None,
+            "This step's screen-capture is disabled while its Fluorescence "
+            "chain owns this step's imaging.",
+            title="Capture Disabled",
+        ),
+    )
 
 
 class FluorescenceChainColumnModel(BaseColumnModel):
@@ -89,10 +101,13 @@ class FluorescenceChainColumnModel(BaseColumnModel):
         entries = ticked(parse_chain(getattr(row, self.col_id, None)))
         if entries:
             had_capture = bool(getattr(row, "capture", False))
-            row.lock_column("capture", owner="fluorescence",
-                            reason=f"Fluorescence chain ({len(entries)} "
-                                   f"capture{'s' if len(entries) != 1 else ''}) "
-                                   f"owns this step's imaging")
+            row.lock_column(
+                "capture",
+                owner="fluorescence",
+                reason=f"Fluorescence chain ({len(entries)} "
+                f"capture{'s' if len(entries) != 1 else ''}) "
+                f"owns this step's imaging",
+            )
             if had_capture:
                 _warn_capture_locked_once()
         else:
@@ -116,7 +131,7 @@ class FluorescenceChainColumnView(BaseColumnView):
         return str(n) if t == n else f"{t}/{n}"
 
     def create_editor(self, parent, context):
-        return None   # display-only; the pane owns authoring the chain
+        return None  # display-only; the pane owns authoring the chain
 
 
 class FluorescenceChainHandler(BaseColumnHandler):
@@ -127,6 +142,7 @@ class FluorescenceChainHandler(BaseColumnHandler):
     `capture_start` / `capture_end` and may fire in both. See the old
     FluorescenceStepHandler (fluorescence_column.py, deleted) for the
     ack-wait rationale this mirrors."""
+
     priority = 5
     wait_for_topics = [FLUORESCENCE_APPLIED]
     default_ack_time_s = 5.0
@@ -140,21 +156,24 @@ class FluorescenceChainHandler(BaseColumnHandler):
         sits idle heating up. Preview runs touch no hardware."""
         if getattr(ctx, "preview_mode", False):
             return
-        publish_message(topic=PROTOCOL_FLUORESCENCE_SESSION,
-                        message=json.dumps({"active": True}))
+        publish_message(
+            topic=PROTOCOL_FLUORESCENCE_SESSION, message=json.dumps({"active": True})
+        )
         ctx.add_pre_protocol_wait(CAMERA_WARMUP_S)
 
     def on_pre_step(self, row, ctx):
         """Step-start phase: fire the ticked entries with
         `capture_start=True` (every legacy entry — the field defaults on)."""
-        self._run_phase(row, ctx, lambda e: e.capture_start,
-                        folder_suffix=PHASE_START_SUFFIX)
+        self._run_phase(
+            row, ctx, lambda e: e.capture_start, folder_suffix=PHASE_START_SUFFIX
+        )
 
     def on_post_step(self, row, ctx):
         """Step-end phase: fire the ticked entries with
         `capture_end=True`. An entry may fire in both phases."""
-        self._run_phase(row, ctx, lambda e: e.capture_end,
-                        folder_suffix=PHASE_END_SUFFIX)
+        self._run_phase(
+            row, ctx, lambda e: e.capture_end, folder_suffix=PHASE_END_SUFFIX
+        )
 
     def _run_phase(self, row, ctx, phase_filter, folder_suffix=""):
         """Fire this step's ticked entries passing ``phase_filter``, in
@@ -176,9 +195,13 @@ class FluorescenceChainHandler(BaseColumnHandler):
         tests."""
         if getattr(ctx.protocol, "preview_mode", False):
             return
-        entries = [e for e in ticked(parse_chain(
-            getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID, None)))
-            if phase_filter(e)]
+        entries = [
+            e
+            for e in ticked(
+                parse_chain(getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID, None))
+            )
+            if phase_filter(e)
+        ]
         if not entries:
             return
 
@@ -186,14 +209,19 @@ class FluorescenceChainHandler(BaseColumnHandler):
 
         chain_cell = getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID, None) or []
         folder = capture_service.burst_folder(
-            step_desc=row.name + folder_suffix, dotted_id=row.dotted_path())
+            step_desc=row.name + folder_suffix, dotted_id=row.dotted_path()
+        )
         try:
             for entry in entries:
                 self._broadcast_firing(row, chain_cell, entry)
                 capture_service.apply_camera_settings(entry)
                 protocol_set_fluorescence_publisher.publish(
-                    light_on=True, led=entry.led_index, duty=entry.intensity,
-                    frequency=entry.frequency, settle_s=LED_STABILIZATION_S)
+                    light_on=True,
+                    led=entry.led_index,
+                    duty=entry.intensity,
+                    frequency=entry.frequency,
+                    settle_s=LED_STABILIZATION_S,
+                )
                 ctx.wait_for(FLUORESCENCE_APPLIED, timeout=self.ack_time_s)
                 capture_service.save_entry_capture(entry, folder)
         finally:
@@ -212,12 +240,15 @@ class FluorescenceChainHandler(BaseColumnHandler):
         row while the run has the pane's own publishes suppressed."""
         publish_message(
             topic=PROTOCOL_STEP_FLUORESCENCE,
-            message=json.dumps({
-                "step_uuid": row.uuid,
-                "chain": chain_cell,
-                "firing_label": entry.label,
-                "light_on": True,
-            }))
+            message=json.dumps(
+                {
+                    "step_uuid": row.uuid,
+                    "chain": chain_cell,
+                    "firing_label": entry.label,
+                    "light_on": True,
+                }
+            ),
+        )
 
     @staticmethod
     def _broadcast_burst_done(row, chain_cell):
@@ -226,12 +257,15 @@ class FluorescenceChainHandler(BaseColumnHandler):
         thrash — only the highlight clears."""
         publish_message(
             topic=PROTOCOL_STEP_FLUORESCENCE,
-            message=json.dumps({
-                "step_uuid": row.uuid,
-                "chain": chain_cell,
-                "firing_label": "",
-                "light_on": False,
-            }))
+            message=json.dumps(
+                {
+                    "step_uuid": row.uuid,
+                    "chain": chain_cell,
+                    "firing_label": "",
+                    "light_on": False,
+                }
+            ),
+        )
 
     def on_post_protocol_end(self, ctx):
         """Lights out at the end of every run — unconditional, because the
@@ -246,15 +280,17 @@ class FluorescenceChainHandler(BaseColumnHandler):
         # End the capture session: the pane closes the camera it opened and
         # drops its live run mirror (light off, no row highlighted) so the
         # camera + LEDs don't sit idle heating up.
-        publish_message(topic=PROTOCOL_FLUORESCENCE_SESSION,
-                        message=json.dumps({"active": False}))
+        publish_message(
+            topic=PROTOCOL_FLUORESCENCE_SESSION, message=json.dumps({"active": False})
+        )
 
 
 def make_fluorescence_chain_column():
     """Factory — a fresh fluorescence capture-chain column."""
     return Column(
         model=FluorescenceChainColumnModel(
-            col_id=FLUORESCENCE_CHAIN_COLUMN_ID, col_name="Fluorescence"),
+            col_id=FLUORESCENCE_CHAIN_COLUMN_ID, col_name="Fluorescence"
+        ),
         view=FluorescenceChainColumnView(),
         handler=FluorescenceChainHandler(),
     )

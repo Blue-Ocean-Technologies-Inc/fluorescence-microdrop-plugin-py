@@ -80,6 +80,7 @@ TabularEditor (read-only), matplotlib artists.
 a FitResult carrying the equation text, R², a vectorized predictor,
 and the analytic second derivative (for the curvature extremum
 markers)."""
+
 import math
 
 import numpy as np
@@ -90,9 +91,13 @@ from traits.api import Any, Dict, Float, HasTraits, Str
 FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential")
 
 #: Human labels (fit dropdown + equations table).
-FIT_LABELS = {"none": "No fit", "linear": "Linear",
-              "poly2": "Quadratic", "poly3": "Cubic",
-              "exponential": "Exponential"}
+FIT_LABELS = {
+    "none": "No fit",
+    "linear": "Linear",
+    "poly2": "Quadratic",
+    "poly3": "Cubic",
+    "exponential": "Exponential",
+}
 
 #: Fewest finite points each model can be solved on.
 _MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4}
@@ -119,16 +124,16 @@ def _signed(value):
 def _poly_equation(coeffs):
     parts = []
     for power, coeff in zip(range(len(coeffs) - 1, -1, -1), coeffs):
-        variable = ("" if power == 0
-                    else "·t" if power == 1 else f"·t^{power}")
-        parts.append(f"{coeff:.3g}{variable}" if not parts
-                     else f"{_signed(coeff)}{variable}")
+        variable = "" if power == 0 else "·t" if power == 1 else f"·t^{power}"
+        parts.append(
+            f"{coeff:.3g}{variable}" if not parts else f"{_signed(coeff)}{variable}"
+        )
     return "y = " + "".join(parts)
 
 
 def _r_squared(values, fitted):
     residual = values - fitted
-    ss_res = float(np.sum(residual ** 2))
+    ss_res = float(np.sum(residual**2))
     ss_tot = float(np.sum((values - np.mean(values)) ** 2))
     if ss_tot == 0.0:
         return 1.0 if ss_res < 1e-12 else 0.0
@@ -138,15 +143,19 @@ def _r_squared(values, fitted):
 def _fit_polynomial(elapsed, values, degree):
     coeffs = np.polyfit(elapsed, values, degree)
     d2_coeffs = np.polyder(coeffs, 2)
-    if not len(d2_coeffs):          # degree 1: d² is identically zero
+    if not len(d2_coeffs):  # degree 1: d² is identically zero
         d2_coeffs = np.array([0.0])
     return FitResult(
-        params={f"c{power}": float(coeff) for power, coeff
-                in zip(range(degree, -1, -1), coeffs)},
+        params={
+            f"c{power}": float(coeff)
+            for power, coeff in zip(range(degree, -1, -1), coeffs)
+        },
         equation=_poly_equation(coeffs),
         predict=lambda t, coeffs=coeffs: np.polyval(coeffs, t),
         second_derivative=lambda t, d2_coeffs=d2_coeffs: np.polyval(
-            d2_coeffs, np.asarray(t, dtype=float)))
+            d2_coeffs, np.asarray(t, dtype=float)
+        ),
+    )
 
 
 def _exponential(t, amplitude, rate, offset):
@@ -159,19 +168,24 @@ def _fit_exponential(elapsed, values):
     amplitude0 = float(values[0] - offset0)
     if abs(amplitude0) < 1e-12:
         amplitude0 = float(np.ptp(values)) or 1.0
-    params, _ = curve_fit(_exponential, elapsed, values,
-                          p0=(amplitude0, -1.0 / t_span, offset0),
-                          maxfev=10000)
+    params, _ = curve_fit(
+        _exponential,
+        elapsed,
+        values,
+        p0=(amplitude0, -1.0 / t_span, offset0),
+        maxfev=10000,
+    )
     amplitude, rate, offset = (float(value) for value in params)
-    if not all(math.isfinite(value)
-               for value in (amplitude, rate, offset)):
+    if not all(math.isfinite(value) for value in (amplitude, rate, offset)):
         return None
     return FitResult(
         params={"amplitude": amplitude, "rate": rate, "offset": offset},
         equation=f"y = {amplitude:.3g}·e^({rate:.3g}·t){_signed(offset)}",
         predict=lambda t: _exponential(t, amplitude, rate, offset),
-        second_derivative=lambda t: amplitude * rate * rate * np.exp(
-            rate * np.asarray(t, dtype=float)))
+        second_derivative=lambda t: (
+            amplitude * rate * rate * np.exp(rate * np.asarray(t, dtype=float))
+        ),
+    )
 
 
 def fit_series(elapsed, values, method):
@@ -191,8 +205,8 @@ def fit_series(elapsed, values, method):
             result = _fit_exponential(elapsed, values)
         else:
             result = _fit_polynomial(
-                elapsed, values,
-                {"linear": 1, "poly2": 2, "poly3": 3}[method])
+                elapsed, values, {"linear": 1, "poly2": 2, "poly3": 3}[method]
+            )
     except Exception:
         return None
     if result is None:
@@ -209,7 +223,7 @@ def second_derivative_extrema(fit, t_start, t_end):
     no meaningful extremum, draw nothing rather than mislead."""
     grid = np.linspace(float(t_start), float(t_end), 512)
     d2 = np.asarray(fit.second_derivative(grid), dtype=float)
-    if d2.shape != grid.shape:      # scalar-returning closure
+    if d2.shape != grid.shape:  # scalar-returning closure
         d2 = np.full_like(grid, float(d2))
     if not np.all(np.isfinite(d2)):
         return {}
@@ -217,8 +231,10 @@ def second_derivative_extrema(fit, t_start, t_end):
         return {}
     t_max = float(grid[int(np.argmax(d2))])
     t_min = float(grid[int(np.argmin(d2))])
-    return {"max": (t_max, float(fit.predict(t_max))),
-            "min": (t_min, float(fit.predict(t_min)))}
+    return {
+        "max": (t_max, float(fit.predict(t_max))),
+        "min": (t_min, float(fit.predict(t_min))),
+    }
 ```
 
 - [ ] **Step 2: Write `test_curve_fit.py`** — synthetic-data tests:
@@ -333,64 +349,96 @@ def test_figure_fit_settings_round_trip(tmp_path):
 - [ ] **Step 3:** Add the two drawing methods to `RoiPlotCanvas`:
 
 ```python
-    def _draw_fits(self, series, figure_settings):
-        equation_lines = []
-        for roi_id, (name, elapsed, values) in series.items():
-            roi = self._model.session.roi_by_id(roi_id)
-            if roi is None:
-                continue
-            fit = fit_series(elapsed, values, figure_settings.fit_method)
-            if fit is None:
-                continue
-            finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))]
-            dense = np.linspace(finite_t.min(), finite_t.max(), 200)
-            (overlay,) = self._axes.plot(
-                dense, fit.predict(dense), linestyle="--", alpha=0.8,
-                color=roi.style.color, label="_nolegend_")
-            self._fit_artists.append(overlay)
-            equation_lines.append(
-                (roi.style.color,
-                 f"{name}: {fit.equation} (R²={fit.r_squared:.3f})"))
-            self._draw_extrema(fit, finite_t.min(), finite_t.max(),
-                               roi, figure_settings)
-        if figure_settings.show_fit_equations:
-            for index, (color, text) in enumerate(equation_lines):
-                self._fit_artists.append(self._axes.text(
-                    0.02, 0.97 - 0.06 * index, text,
-                    transform=self._axes.transAxes, va="top",
-                    fontsize="x-small", color=color))
+def _draw_fits(self, series, figure_settings):
+    equation_lines = []
+    for roi_id, (name, elapsed, values) in series.items():
+        roi = self._model.session.roi_by_id(roi_id)
+        if roi is None:
+            continue
+        fit = fit_series(elapsed, values, figure_settings.fit_method)
+        if fit is None:
+            continue
+        finite_t = np.asarray(elapsed, dtype=float)[
+            np.isfinite(np.asarray(values, dtype=float))
+        ]
+        dense = np.linspace(finite_t.min(), finite_t.max(), 200)
+        (overlay,) = self._axes.plot(
+            dense,
+            fit.predict(dense),
+            linestyle="--",
+            alpha=0.8,
+            color=roi.style.color,
+            label="_nolegend_",
+        )
+        self._fit_artists.append(overlay)
+        equation_lines.append(
+            (roi.style.color, f"{name}: {fit.equation} (R²={fit.r_squared:.3f})")
+        )
+        self._draw_extrema(fit, finite_t.min(), finite_t.max(), roi, figure_settings)
+    if figure_settings.show_fit_equations:
+        for index, (color, text) in enumerate(equation_lines):
+            self._fit_artists.append(
+                self._axes.text(
+                    0.02,
+                    0.97 - 0.06 * index,
+                    text,
+                    transform=self._axes.transAxes,
+                    va="top",
+                    fontsize="x-small",
+                    color=color,
+                )
+            )
 
-    def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings):
-        wanted = [key for key, enabled in
-                  (("max", figure_settings.show_second_derivative_max),
-                   ("min", figure_settings.show_second_derivative_min))
-                  if enabled]
-        if not wanted:
-            return
-        extrema = second_derivative_extrema(fit, t_start, t_end)
-        for key in wanted:
-            if key not in extrema:
-                continue
-            t_star, y_star = extrema[key]
-            (point,) = self._axes.plot(
-                [t_star], [y_star], marker="o", linestyle="",
-                color=roi.style.color, markeredgecolor="black",
-                label="_nolegend_")
-            self._fit_artists.append(point)
-            if figure_settings.second_derivative_vline:
-                self._fit_artists.append(self._axes.axvline(
-                    t_star, color=roi.style.color, linestyle=":",
-                    alpha=0.6))
-            if figure_settings.second_derivative_hline:
-                self._fit_artists.append(self._axes.axhline(
-                    y_star, color=roi.style.color, linestyle=":",
-                    alpha=0.6))
-            if figure_settings.second_derivative_coords:
-                self._fit_artists.append(self._axes.annotate(
-                    f"({t_star:.3g}, {y_star:.3g})", (t_star, y_star),
-                    textcoords="offset points", xytext=(6, 6),
-                    fontsize="x-small", color=roi.style.color))
+
+def _draw_extrema(self, fit, t_start, t_end, roi, figure_settings):
+    wanted = [
+        key
+        for key, enabled in (
+            ("max", figure_settings.show_second_derivative_max),
+            ("min", figure_settings.show_second_derivative_min),
+        )
+        if enabled
+    ]
+    if not wanted:
+        return
+    extrema = second_derivative_extrema(fit, t_start, t_end)
+    for key in wanted:
+        if key not in extrema:
+            continue
+        t_star, y_star = extrema[key]
+        (point,) = self._axes.plot(
+            [t_star],
+            [y_star],
+            marker="o",
+            linestyle="",
+            color=roi.style.color,
+            markeredgecolor="black",
+            label="_nolegend_",
+        )
+        self._fit_artists.append(point)
+        if figure_settings.second_derivative_vline:
+            self._fit_artists.append(
+                self._axes.axvline(
+                    t_star, color=roi.style.color, linestyle=":", alpha=0.6
+                )
+            )
+        if figure_settings.second_derivative_hline:
+            self._fit_artists.append(
+                self._axes.axhline(
+                    y_star, color=roi.style.color, linestyle=":", alpha=0.6
+                )
+            )
+        if figure_settings.second_derivative_coords:
+            self._fit_artists.append(
+                self._axes.annotate(
+                    f"({t_star:.3g}, {y_star:.3g})",
+                    (t_star, y_star),
+                    textcoords="offset points",
+                    xytext=(6, 6),
+                    fontsize="x-small",
+                    color=roi.style.color,
+                )
+            )
 ```
 
   Note `_draw_fits` runs only for series that survived `fit_series`'s
@@ -430,6 +478,7 @@ def test_figure_fit_settings_round_trip(tmp_path):
 equation for the session's current fit method over the filtered
 images. Rows are recomputed when the popup is opened or its button
 re-clicked — not live."""
+
 from traits.api import HasTraits, List, Str
 from traitsui.api import Item, TabularEditor, View
 from traitsui.tabular_adapter import TabularAdapter
@@ -448,8 +497,12 @@ class FitEquationRow(HasTraits):
 
 
 class _FitEquationAdapter(TabularAdapter):
-    columns = [("ROI", "roi_name"), ("Method", "method_label"),
-               ("Equation", "equation"), ("R²", "r_squared_text")]
+    columns = [
+        ("ROI", "roi_name"),
+        ("Method", "method_label"),
+        ("Equation", "equation"),
+        ("R²", "r_squared_text"),
+    ]
     can_edit = False
 
 
@@ -459,10 +512,16 @@ class FitEquationsTable(HasTraits):
     rows = List(FitEquationRow)
 
     traits_view = View(
-        Item("rows", show_label=False,
-             editor=TabularEditor(adapter=_FitEquationAdapter(),
-                                  editable=False)),
-        title="Fit equations", width=560, height=280, resizable=True)
+        Item(
+            "rows",
+            show_label=False,
+            editor=TabularEditor(adapter=_FitEquationAdapter(), editable=False),
+        ),
+        title="Fit equations",
+        width=560,
+        height=280,
+        resizable=True,
+    )
 
 
 def fit_equation_rows(session, filtered_paths):
@@ -472,16 +531,23 @@ def fit_equation_rows(session, filtered_paths):
     method = session.figure.fit_method
     rows = []
     for roi_id, (name, elapsed, values) in derive_series(
-            session, filtered_paths).items():
+        session, filtered_paths
+    ).items():
         fit = fit_series(elapsed, values, method)
-        rows.append(FitEquationRow(
-            roi_name=name,
-            method_label=FIT_LABELS[method],
-            equation=(fit.equation if fit is not None
-                      else "no fit selected" if method == "none"
-                      else "fit failed"),
-            r_squared_text=(f"{fit.r_squared:.4f}"
-                            if fit is not None else "")))
+        rows.append(
+            FitEquationRow(
+                roi_name=name,
+                method_label=FIT_LABELS[method],
+                equation=(
+                    fit.equation
+                    if fit is not None
+                    else "no fit selected"
+                    if method == "none"
+                    else "fit failed"
+                ),
+                r_squared_text=(f"{fit.r_squared:.4f}" if fit is not None else ""),
+            )
+        )
     return rows
 ```
 
@@ -491,50 +557,76 @@ def fit_equation_rows(session, filtered_paths):
   `from .fit_equations import FitEquationsTable, fit_equation_rows`):
 
 ```python
-        HGroup(
-            Item("figure.fit_method", label="Fit",
-                 editor=EnumEditor(values=list(FIT_METHODS),
-                                   format_func=FIT_LABELS.get)),
-            Item("figure.show_legend", label="Legend"),
-            Item("figure.show_fit_equations", label="Equations on figure",
-                 enabled_when="figure.fit_method != 'none'"),
-            UItem("model.fit_equations_button", editor=IconButtonEditor(
+(
+    HGroup(
+        Item(
+            "figure.fit_method",
+            label="Fit",
+            editor=EnumEditor(values=list(FIT_METHODS), format_func=FIT_LABELS.get),
+        ),
+        Item("figure.show_legend", label="Legend"),
+        Item(
+            "figure.show_fit_equations",
+            label="Equations on figure",
+            enabled_when="figure.fit_method != 'none'",
+        ),
+        UItem(
+            "model.fit_equations_button",
+            editor=IconButtonEditor(
                 glyph=ICON_FUNCTION,
-                tooltip="Show the fitted equation for every ROI in a "
-                        "table")),
+                tooltip="Show the fitted equation for every ROI in a table",
+            ),
         ),
-        HGroup(
-            Item("figure.show_second_derivative_max", label="d² max",
-                 enabled_when="figure.fit_method != 'none'"),
-            Item("figure.show_second_derivative_min", label="d² min",
-                 enabled_when="figure.fit_method != 'none'"),
-            Item("figure.second_derivative_vline", label="V-line",
-                 enabled_when="figure.show_second_derivative_max or "
-                              "figure.show_second_derivative_min"),
-            Item("figure.second_derivative_hline", label="H-line",
-                 enabled_when="figure.show_second_derivative_max or "
-                              "figure.show_second_derivative_min"),
-            Item("figure.second_derivative_coords", label="Coords",
-                 enabled_when="figure.show_second_derivative_max or "
-                              "figure.show_second_derivative_min"),
+    ),
+)
+(
+    HGroup(
+        Item(
+            "figure.show_second_derivative_max",
+            label="d² max",
+            enabled_when="figure.fit_method != 'none'",
         ),
+        Item(
+            "figure.show_second_derivative_min",
+            label="d² min",
+            enabled_when="figure.fit_method != 'none'",
+        ),
+        Item(
+            "figure.second_derivative_vline",
+            label="V-line",
+            enabled_when="figure.show_second_derivative_max or "
+            "figure.show_second_derivative_min",
+        ),
+        Item(
+            "figure.second_derivative_hline",
+            label="H-line",
+            enabled_when="figure.show_second_derivative_max or "
+            "figure.show_second_derivative_min",
+        ),
+        Item(
+            "figure.second_derivative_coords",
+            label="Coords",
+            enabled_when="figure.show_second_derivative_max or "
+            "figure.show_second_derivative_min",
+        ),
+    ),
+)
 ```
 
 - [ ] **Step 4:** Pane wiring: `_equations_ui = Any()` trait; in
   `create_contents` observe `"fit_equations_button"`; handler + destroy:
 
 ```python
-    def _on_fit_equations(self, event):
-        rows = fit_equation_rows(roi_analysis_model.session,
-                                 roi_analysis_model.filtered_paths)
-        if (self._equations_ui is not None
-                and self._equations_ui.control is not None):
-            self._equations_ui.info.object.rows = rows
-            self._equations_ui.control.raise_()
-            self._equations_ui.control.activateWindow()
-            return
-        self._equations_ui = FitEquationsTable(rows=rows).edit_traits(
-            kind="live")
+def _on_fit_equations(self, event):
+    rows = fit_equation_rows(
+        roi_analysis_model.session, roi_analysis_model.filtered_paths
+    )
+    if self._equations_ui is not None and self._equations_ui.control is not None:
+        self._equations_ui.info.object.rows = rows
+        self._equations_ui.control.raise_()
+        self._equations_ui.control.activateWindow()
+        return
+    self._equations_ui = FitEquationsTable(rows=rows).edit_traits(kind="live")
 ```
 
   In `destroy()` (inside the `self.control is not None` guard): remove

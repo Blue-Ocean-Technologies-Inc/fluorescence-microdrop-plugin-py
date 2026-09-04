@@ -58,28 +58,33 @@
 - **Capture-cell locking (the #541 consumer):** model overrides
 
 ```python
-    def set_value(self, row, value):
-        super().set_value(row, value)
-        self._sync_capture_lock(row)
+def set_value(self, row, value):
+    super().set_value(row, value)
+    self._sync_capture_lock(row)
 
-    def on_row_loaded(self, row):
-        # persistence sets cell values with setattr; rebuild the
-        # runtime-derived lock from the loaded chain (issue #541 —
-        # locks are never persisted).
-        self._sync_capture_lock(row)
 
-    def _sync_capture_lock(self, row):
-        entries = ticked(parse_chain(getattr(row, self.col_id, None)))
-        if entries:
-            had_capture = bool(getattr(row, "capture", False))
-            row.lock_column("capture", owner="fluorescence",
-                            reason=f"Fluorescence chain ({len(entries)} "
-                                   f"capture{'s' if len(entries) != 1 else ''}) "
-                                   f"owns this step's imaging")
-            if had_capture:
-                _warn_capture_locked_once()
-        else:
-            row.unlock_column("capture", owner="fluorescence")
+def on_row_loaded(self, row):
+    # persistence sets cell values with setattr; rebuild the
+    # runtime-derived lock from the loaded chain (issue #541 —
+    # locks are never persisted).
+    self._sync_capture_lock(row)
+
+
+def _sync_capture_lock(self, row):
+    entries = ticked(parse_chain(getattr(row, self.col_id, None)))
+    if entries:
+        had_capture = bool(getattr(row, "capture", False))
+        row.lock_column(
+            "capture",
+            owner="fluorescence",
+            reason=f"Fluorescence chain ({len(entries)} "
+            f"capture{'s' if len(entries) != 1 else ''}) "
+            f"owns this step's imaging",
+        )
+        if had_capture:
+            _warn_capture_locked_once()
+    else:
+        row.unlock_column("capture", owner="fluorescence")
 ```
 
   with `_warn_capture_locked_once()` a module function: once per session (module-level bool), defer the modal out of the current handler with `QTimer.singleShot(0, ...)` (TraitsUI/commit-handler crash trap) showing `pyface_wrapper.information(...)` explaining the step's screen-capture is disabled while the chain owns imaging.
@@ -133,49 +138,55 @@
 - **Row selection message flow** (`message_handler.py` already receives `PROTOCOL_TREE_ROW_SELECTED`): parse with `ProtocolTreeRowSelectedMessage.deserialize`; ferry to the GUI thread via a new `live_state.tree_row_selected = Event()` carrying the parsed message (same pattern as the existing events). Controller observer `_on_tree_row_selected(event)`:
 
 ```python
-    free = list(self.model.free_chain) if self.model.attached_step_id == "" \
-        else []
-    msg = event.new
-    if msg.step_id:
-        if free:
-            n = len(free)
-            choice = choose(
-                None,
-                f"The free-mode chain holds {n} capture"
-                f"{'s' if n != 1 else ''}. Attach to the selected step?",
-                title="Attach Capture Chain",
-                choices=["Append", "Replace", "New step"])
-            if choice is None:
-                return                       # chain stays unattached
-            if choice == "New step":
-                protocol_tree_add_step_publisher.publish(
-                    after_step_id=msg.step_id,
-                    cells={FLUORESCENCE_CHAIN_COLUMN_ID:
-                           dump_chain([r.to_entry_dict() for r in free])},
-                    name="Step (capture chain)")
-                self._clear_free_chain()
-                return                       # pane returns to empty free mode
-            existing = parse_chain(msg.cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
-            if choice == "Append":
-                merged = existing + self._suffixed(free, existing)
-            else:                            # Replace
-                merged = [r.to_entry(...) for r in free]
-            self._attach_to_step(msg.step_id, merged)   # sets model state + set_cell publish
+free = list(self.model.free_chain) if self.model.attached_step_id == "" else []
+msg = event.new
+if msg.step_id:
+    if free:
+        n = len(free)
+        choice = choose(
+            None,
+            f"The free-mode chain holds {n} capture"
+            f"{'s' if n != 1 else ''}. Attach to the selected step?",
+            title="Attach Capture Chain",
+            choices=["Append", "Replace", "New step"],
+        )
+        if choice is None:
+            return  # chain stays unattached
+        if choice == "New step":
+            protocol_tree_add_step_publisher.publish(
+                after_step_id=msg.step_id,
+                cells={
+                    FLUORESCENCE_CHAIN_COLUMN_ID: dump_chain(
+                        [r.to_entry_dict() for r in free]
+                    )
+                },
+                name="Step (capture chain)",
+            )
+            self._clear_free_chain()
+            return  # pane returns to empty free mode
+        existing = parse_chain(msg.cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
+        if choice == "Append":
+            merged = existing + self._suffixed(free, existing)
+        else:  # Replace
+            merged = [r.to_entry(...) for r in free]
+        self._attach_to_step(msg.step_id, merged)  # sets model state + set_cell publish
+        self._clear_free_chain()
+        return
+    self._load_step_chain(msg.step_id, msg.cells)  # plain selection
+elif msg.group_id:
+    if free:
+        choice = choose(
+            None, ..., title="Attach Capture Chain", choices=["New step"]
+        )  # group: only New step
+        if choice == "New step":
+            protocol_tree_add_step_publisher.publish(
+                group_id=msg.group_id, cells={...}, name="Step (capture chain)"
+            )
             self._clear_free_chain()
             return
-        self._load_step_chain(msg.step_id, msg.cells)   # plain selection
-    elif msg.group_id:
-        if free:
-            choice = choose(None, ..., title="Attach Capture Chain",
-                            choices=["New step"])       # group: only New step
-            if choice == "New step":
-                protocol_tree_add_step_publisher.publish(
-                    group_id=msg.group_id, cells={...}, name="Step (capture chain)")
-                self._clear_free_chain()
-                return
-        self._enter_free_mode()
-    else:
-        self._enter_free_mode()
+    self._enter_free_mode()
+else:
+    self._enter_free_mode()
 ```
 
   (`_enter_free_mode` restores `free_chain` into `chain_rows` and clears `attached_step_id`; `_load_step_chain` stashes nothing — free chain was empty. Attach dialogs run in a Traits `dispatch="ui"` observer, NOT inside a table commit — safe to be modal directly.) **Documented deviation:** after "New step" the pane returns to the empty free-mode chain instead of auto-switching to the not-yet-known new step's uuid; the user's next click on it loads the chain. Note this in the PR body.
@@ -254,10 +265,12 @@
 **Interfaces:** `current_captures_directory()` replaces `current_raw_captures_directory()` — returns `<exp>/captures` (same try/except shape). `discover_captures(directory)` goes recursive and raw-only:
 
 ```python
-    paths = {path
-             for pattern in IMAGE_PATTERNS
-             for path in Path(directory).rglob(pattern)
-             if path.parent.name == RAW_CAPTURES_SUBDIR}
+paths = {
+    path
+    for pattern in IMAGE_PATTERNS
+    for path in Path(directory).rglob(pattern)
+    if path.parent.name == RAW_CAPTURES_SUBDIR
+}
 ```
 
 (sorted key unchanged). Old flat layout (`captures/16bit_raw/x.png`) still matches — parent name is the filter, not depth. Update every caller of the renamed function.

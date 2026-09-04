@@ -3,21 +3,42 @@ table of every ROI's fitted parameters — one column per parameter of
 whatever model is in force. Typing an equation refits on the spot; one
 that is neither a built-in nor already saved can be added to the
 presets from here."""
+
 import numpy as np
+
 from traits.api import (
-    Bool, Button, Float, HasTraits, Instance, Int, List, Str, observe,
+    Bool,
+    Button,
+    Float,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Str,
+    observe,
 )
 from traitsui.api import (
-    EnumEditor, Handler, HGroup, HSplit, Item, Label, TabularEditor, UItem,
-    VGroup, View,
+    EnumEditor,
+    Handler,
+    HGroup,
+    HSplit,
+    Item,
+    Label,
+    TabularEditor,
+    UItem,
+    VGroup,
+    View,
 )
 from traitsui.tabular_adapter import TabularAdapter
 
 from .curve_fit import CUSTOM_METHOD, fit_series, trimmed_note
 from .fit_expression import FitExpressionError, parse_expression
 from .fit_presets import (
-    add_preset, expression_for, fit_arguments, method_label,
+    add_preset,
+    expression_for,
+    fit_arguments,
     method_for_expression,
+    method_label,
 )
 from .plot_series import derive_series
 
@@ -85,25 +106,29 @@ def fit_rows(session, filtered_paths, presets):
     method, expression = fit_arguments(session.figure, presets)
     parameters, rows = [], []
     for roi_id, (name, elapsed, values) in derive_series(
-            session, filtered_paths).items():
-        fit = fit_series(elapsed, values, method,
-                         session.figure.trim_poor_fit, expression,
-                         session.figure.initial_guesses)
+        session, filtered_paths
+    ).items():
+        fit = fit_series(
+            elapsed,
+            values,
+            method,
+            session.figure.trim_poor_fit,
+            expression,
+            session.figure.initial_guesses,
+        )
         row = FitEquationRow(roi_name=name)
         if fit is None:
-            row.note = ("no fit selected" if method == "none"
-                        else "fit failed")
+            row.note = "no fit selected" if method == "none" else "fit failed"
         else:
             if not parameters:
                 parameters = list(fit.params)
-            row.values = [f"{value:.4g}"
-                          for value in fit.params.values()]
+            row.values = [f"{value:.4g}" for value in fit.params.values()]
             row.r_squared_text = f"{fit.r_squared:.4f}"
             row.auto_seeded = fit.auto_seeded
             finite_t = np.asarray(elapsed, dtype=float)[
-                np.isfinite(np.asarray(values, dtype=float))]
-            row.fit_range_text = trimmed_note(
-                fit, finite_t.max()).strip(" ()")
+                np.isfinite(np.asarray(values, dtype=float))
+            ]
+            row.fit_range_text = trimmed_note(fit, finite_t.max()).strip(" ()")
         rows.append(row)
     return parameters, rows
 
@@ -137,8 +162,9 @@ class _FitEquationsHandler(Handler):
     repaint in full."""
 
     def init(self, info):
-        controls = [editor.control for editor in
-                    (info.rows, info.guesses) if editor is not None]
+        controls = [
+            editor.control for editor in (info.rows, info.guesses) if editor is not None
+        ]
         for control in controls:
             # Opaque, so a repaint clears what it draws over instead of
             # letting the previous frame show through the new text.
@@ -152,10 +178,13 @@ class PresetName(HasTraits):
 
     name = Str()
 
-    traits_view = View(Item("name", label="Preset name"),
-                       title="Save fit equation",
-                       buttons=["OK", "Cancel"],
-                       kind="livemodal", width=280)
+    traits_view = View(
+        Item("name", label="Preset name"),
+        title="Save fit equation",
+        buttons=["OK", "Cancel"],
+        kind="livemodal",
+        width=280,
+    )
 
 
 class FitEquationsTable(HasTraits):
@@ -204,48 +233,70 @@ class FitEquationsTable(HasTraits):
         # value, and this popup's columns change with the fit.
         return View(
             HGroup(
-                Item("object.session.figure.fit_method", label="Fit",
-                     editor=EnumEditor(
-                         name="object.model.fit_method_choices",
-                         format_func=self._method_label)),
-                UItem("add_preset_button",
-                      enabled_when="can_add_preset",
-                      tooltip="Save this equation as a preset you can "
-                              "pick from the Fit list"),
+                Item(
+                    "object.session.figure.fit_method",
+                    label="Fit",
+                    editor=EnumEditor(
+                        name="object.model.fit_method_choices",
+                        format_func=self._method_label,
+                    ),
+                ),
+                UItem(
+                    "add_preset_button",
+                    enabled_when="can_add_preset",
+                    tooltip="Save this equation as a preset you can "
+                    "pick from the Fit list",
+                ),
             ),
             HGroup(
                 Label("F(x) = "),
-                UItem("expression", springy=True,
-                      tooltip="Any equation in x — every other symbol "
-                              "is a fitted parameter, e.g. "
-                              "a + b*exp(-c*x)"),
+                UItem(
+                    "expression",
+                    springy=True,
+                    tooltip="Any equation in x — every other symbol "
+                    "is a fitted parameter, e.g. "
+                    "a + b*exp(-c*x)",
+                ),
             ),
-            UItem("error", style="readonly",
-                  visible_when="error != ''"),
+            UItem("error", style="readonly", visible_when="error != ''"),
             HSplit(
                 VGroup(
                     HGroup(
-                        UItem("seed_from_fit_button",
-                              enabled_when="len(guesses) > 0",
-                              tooltip="Fill the starting values with "
-                                      "what the fit just found, to "
-                                      "nudge from there"),
-                        UItem("clear_guesses_button",
-                              tooltip="Clear them and let the fit "
-                                      "choose its own starting values"),
+                        UItem(
+                            "seed_from_fit_button",
+                            enabled_when="len(guesses) > 0",
+                            tooltip="Fill the starting values with "
+                            "what the fit just found, to "
+                            "nudge from there",
+                        ),
+                        UItem(
+                            "clear_guesses_button",
+                            tooltip="Clear them and let the fit "
+                            "choose its own starting values",
+                        ),
                     ),
-                    UItem("guesses",
-                          editor=TabularEditor(adapter=_GuessAdapter(),
-                                               editable=True,
-                                               auto_update=True)),
-                    label="Start values", show_border=True),
-                UItem("rows",
-                      editor=TabularEditor(adapter=self.adapter,
-                                           editable=False,
-                                           stretch_last_section=False)),
+                    UItem(
+                        "guesses",
+                        editor=TabularEditor(
+                            adapter=_GuessAdapter(), editable=True, auto_update=True
+                        ),
+                    ),
+                    label="Start values",
+                    show_border=True,
+                ),
+                UItem(
+                    "rows",
+                    editor=TabularEditor(
+                        adapter=self.adapter, editable=False, stretch_last_section=False
+                    ),
+                ),
             ),
-            title="Fit equations", width=760, height=340,
-            resizable=True, handler=_FitEquationsHandler())
+            title="Fit equations",
+            width=760,
+            height=340,
+            resizable=True,
+            handler=_FitEquationsHandler(),
+        )
 
     def _method_label(self, key):
         return method_label(key, self.model.fit_presets)
@@ -268,8 +319,10 @@ class FitEquationsTable(HasTraits):
         self._syncing = True
         try:
             self.expression = expression_for(
-                self.session.figure.fit_method, self.model.fit_presets,
-                self.session.figure.custom_expression)
+                self.session.figure.fit_method,
+                self.model.fit_presets,
+                self.session.figure.custom_expression,
+            )
             self.error = ""
         finally:
             self._syncing = False
@@ -295,17 +348,20 @@ class FitEquationsTable(HasTraits):
             figure = self.session.figure
             figure.custom_expression = self.expression
             figure.fit_method = (
-                method_for_expression(self.expression,
-                                      self.model.fit_presets)
-                or CUSTOM_METHOD)
+                method_for_expression(self.expression, self.model.fit_presets)
+                or CUSTOM_METHOD
+            )
         finally:
             self._syncing = False
         self.refresh()
 
     def _update_can_add(self):
         text = self.expression.strip()
-        self.can_add_preset = bool(text) and not method_for_expression(
-            text, self.model.fit_presets) and _parses(text)
+        self.can_add_preset = (
+            bool(text)
+            and not method_for_expression(text, self.model.fit_presets)
+            and _parses(text)
+        )
 
     @observe("add_preset_button")
     def _add_preset(self, event):
@@ -314,7 +370,8 @@ class FitEquationsTable(HasTraits):
             return
         name = entry.name.strip()
         self.model.fit_presets = add_preset(
-            list(self.model.fit_presets), name, self.expression.strip())
+            list(self.model.fit_presets), name, self.expression.strip()
+        )
         self._syncing = True
         try:
             self.session.figure.fit_method = f"preset:{name}"
@@ -333,8 +390,8 @@ class FitEquationsTable(HasTraits):
         if self._syncing:
             return
         self.session.figure.initial_guesses = {
-            row.name: row.value() for row in self.guesses
-            if row.value() is not None}
+            row.name: row.value() for row in self.guesses if row.value() is not None
+        }
         self.refresh()
 
     @observe("seed_from_fit_button")
@@ -370,21 +427,23 @@ class FitEquationsTable(HasTraits):
         offer, every ROI being fitted with the same model."""
         for row in self.rows:
             if row.values:
-                return {name: float(value) for name, value
-                        in zip(self._parameters, row.values)}
+                return {
+                    name: float(value)
+                    for name, value in zip(self._parameters, row.values)
+                }
         return {}
 
     # ------------------------------------------------------------------ #
     def refresh(self):
         """Refit every ROI and rebuild the table around the parameters
         the fit reports."""
-        parameters, rows = fit_rows(self.session, self.filtered_paths,
-                                    self.model.fit_presets)
+        parameters, rows = fit_rows(
+            self.session, self.filtered_paths, self.model.fit_presets
+        )
         show_range = any(row.fit_range_text for row in rows)
         self.adapter.parameter_count = len(parameters)
         columns = [("ROI", "roi_name")]
-        columns += [(name, f"p{index}")
-                    for index, name in enumerate(parameters)]
+        columns += [(name, f"p{index}") for index, name in enumerate(parameters)]
         columns.append(("R²", "r_squared"))
         if show_range:
             columns.append(("Fitted to", "fit_range"))
@@ -398,9 +457,12 @@ class FitEquationsTable(HasTraits):
         self._sync_guess_rows(parameters)
         # Reached only with an equation that parsed, so the field is
         # free to report on the fit instead.
-        self.error = ("Those starting values did not converge — fitted "
-                      "from automatic ones instead"
-                      if any(row.auto_seeded for row in rows) else "")
+        self.error = (
+            "Those starting values did not converge — fitted "
+            "from automatic ones instead"
+            if any(row.auto_seeded for row in rows)
+            else ""
+        )
 
     def _repaint_tables(self):
         """Repaint both tables outright after a refit.
@@ -427,11 +489,13 @@ class FitEquationsTable(HasTraits):
         self._syncing = True
         try:
             self.guesses = [
-                GuessRow(name=name,
-                         text=typed.get(name)
-                         or (f"{stored[name]:.6g}" if name in stored
-                             else ""))
-                for name in parameters]
+                GuessRow(
+                    name=name,
+                    text=typed.get(name)
+                    or (f"{stored[name]:.6g}" if name in stored else ""),
+                )
+                for name in parameters
+            ]
         finally:
             self._syncing = False
 

@@ -1,18 +1,23 @@
 import json
 import time
 
-from traits.api import provides, HasTraits, Instance
+from traits.api import HasTraits, Instance, provides
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 from ..consts import FLUORESCENCE_APPLIED
-from ..interfaces.i_fluorescence_control_mixin_service import IFluorescenceControlMixinService
-from ..fluorescence_serial_proxy import FluorescenceSerialProxy
 from ..datamodels import (
-    ProtocolSetFluorescenceData, SetLedData, SetLedFrequencyData,
+    ProtocolSetFluorescenceData,
+    SetLedData,
+    SetLedFrequencyData,
+)
+from ..fluorescence_serial_proxy import FluorescenceSerialProxy
+from ..interfaces.i_fluorescence_control_mixin_service import (
+    IFluorescenceControlMixinService,
 )
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -74,8 +79,6 @@ class FluorescenceCommandSetterService(HasTraits):
                     self.proxy.send_command("led_off")
             time.sleep(data.settle_s)
         except Exception:
-            logger.exception(
-                "protocol_set_fluorescence failed; ack withheld")
+            logger.exception("protocol_set_fluorescence failed; ack withheld")
             return
-        publish_message(topic=FLUORESCENCE_APPLIED,
-                        message=str(int(data.light_on)))
+        publish_message(topic=FLUORESCENCE_APPLIED, message=str(int(data.light_on)))

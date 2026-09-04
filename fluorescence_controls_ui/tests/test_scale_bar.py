@@ -1,7 +1,12 @@
 """Unit tests for the Qt-free scale-bar maths."""
+
 from fluorescence_controls_ui.image_viewer.scale_bar import (
-    DEFAULT_UNIT, area_unit, format_length, metres_per_pixel,
-    nice_scale, pixel_area,
+    DEFAULT_UNIT,
+    area_unit,
+    format_length,
+    metres_per_pixel,
+    nice_scale,
+    pixel_area,
 )
 
 

@@ -1,26 +1,37 @@
 """Hardware-free tests for the capture-chain value contract: the
 `ChainEntry` model, tolerant parse/dump round trip, the ticked-rows
 filter, and the label sanitize/uniqueness helpers."""
+
 import pytest
 from pydantic import ValidationError
 
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import (
-    ChainEntry, dump_chain, parse_chain, sanitize_label, ticked,
+    ChainEntry,
     chain_label,
+    dump_chain,
+    parse_chain,
+    sanitize_label,
+    ticked,
 )
 
 
 def _entry(**overrides):
     values = dict(
-        label="GFP", wavelength=LED_WAVELENGTHS[0], intensity=50,
-        frequency=1000, exposure_ms=10.0, gain=100, run=True,
+        label="GFP",
+        wavelength=LED_WAVELENGTHS[0],
+        intensity=50,
+        frequency=1000,
+        exposure_ms=10.0,
+        gain=100,
+        run=True,
     )
     values.update(overrides)
     return ChainEntry(**values)
 
 
 # --- ChainEntry ---------------------------------------------------------
+
 
 def test_led_index_matches_led_wavelengths_index():
     for wavelength in LED_WAVELENGTHS:
@@ -34,6 +45,7 @@ def test_out_of_bounds_field_raises_validation_error():
 
 
 # --- parse_chain / dump_chain round trip --------------------------------
+
 
 def test_round_trip_parse_dump():
     entries = [_entry(label="GFP"), _entry(label="mCherry", run=False)]
@@ -59,13 +71,18 @@ def test_parse_chain_skips_invalid_entries_keeps_valid_siblings():
 
 # --- ticked --------------------------------------------------------------
 
+
 def test_ticked_filters_to_run_true():
-    entries = [_entry(label="A", run=True), _entry(label="B", run=False),
-               _entry(label="C", run=True)]
+    entries = [
+        _entry(label="A", run=True),
+        _entry(label="B", run=False),
+        _entry(label="C", run=True),
+    ]
     assert [e.label for e in ticked(entries)] == ["A", "C"]
 
 
 # --- sanitize_label --------------------------------------------------------
+
 
 def test_sanitize_label_strips_and_replaces_spaces():
     assert sanitize_label("GFP #1 (a)") == "GFP_1_a"
@@ -76,6 +93,7 @@ def test_sanitize_label_empty_result_falls_back_to_capture():
 
 
 # --- chain_label -----------------------------------------------------------
+
 
 def test_chain_label_without_tag_is_wavelength_index():
     assert chain_label("", "Green (540 nm)", 2) == "Green_540_nm_2"
@@ -92,13 +110,21 @@ def test_chain_label_sanitizes_the_tag():
 def test_chains_saved_before_auto_flags_load_with_auto_off():
     """Back-compat: pre-auto chain dicts (no auto_* keys) parse with the
     flags defaulted off."""
-    old = {"label": "GFP", "wavelength": LED_WAVELENGTHS[2], "intensity": 50,
-           "frequency": 40000, "exposure_ms": 10.0, "gain": 0, "run": True}
+    old = {
+        "label": "GFP",
+        "wavelength": LED_WAVELENGTHS[2],
+        "intensity": 50,
+        "frequency": 40000,
+        "exposure_ms": 10.0,
+        "gain": 0,
+        "run": True,
+    }
     [entry] = parse_chain([old])
     assert entry.auto_exposure is False and entry.auto_gain is False
 
 
 # --- capture_start / capture_end phase fields ---------------------------
+
 
 def test_phase_fields_default_to_step_start_only():
     entry = _entry()
@@ -115,12 +141,15 @@ def test_legacy_dict_without_phase_keys_parses_to_step_start_only():
 
 
 def test_phase_fields_round_trip():
-    entries = [_entry(label="both", capture_start=True, capture_end=True),
-               _entry(label="end_only", capture_start=False,
-                      capture_end=True)]
+    entries = [
+        _entry(label="both", capture_start=True, capture_end=True),
+        _entry(label="end_only", capture_start=False, capture_end=True),
+    ]
     restored = parse_chain(dump_chain(entries))
-    assert [(e.capture_start, e.capture_end) for e in restored] \
-        == [(True, True), (False, True)]
+    assert [(e.capture_start, e.capture_end) for e in restored] == [
+        (True, True),
+        (False, True),
+    ]
 
 
 def test_both_phases_false_is_coerced_to_step_start():

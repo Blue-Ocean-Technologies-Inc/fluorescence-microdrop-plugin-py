@@ -8,11 +8,10 @@ Sanctioned exception to the analysis package's Qt-free rule: the model
 gate below (``_ensure_model_ready``) deliberately imports
 ``download_ai_model`` from ``..sam_download``, a Qt view-layer module,
 because the blocking cancellable download progress dialog lives there."""
+
 import queue
 
 from traits.api import Bool, Either, Float, HasTraits, Instance, Str, observe
-
-from logger.logger_service import get_logger
 
 from microdrop_application.dialogs.pyface_wrapper import information
 
@@ -22,13 +21,23 @@ from ..sam_download import download_ai_model, model_is_cached
 from .roi_geometry import centre_of
 from .roi_model import RoiAnalysisModel
 from .sam_detect import (
-    DEFAULT_AI_MODEL, SamRefiner, gpu_encoder_available, sam_available,
+    DEFAULT_AI_MODEL,
+    SamRefiner,
+    gpu_encoder_available,
+    sam_available,
     set_gpu_encoder_enabled,
 )
 from .sam_jobs import (
-    AI_FAILED, DETECT_PROGRESS, DETECT_RESULT, PICK_RESULT, SamJobRunner,
-    TRACK_FINISHED, TRACK_FRAME,
+    AI_FAILED,
+    DETECT_PROGRESS,
+    DETECT_RESULT,
+    PICK_RESULT,
+    TRACK_FINISHED,
+    TRACK_FRAME,
+    SamJobRunner,
 )
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -71,8 +80,7 @@ class AiRoiController(HasTraits):
             return
         self.analysis_model.ai_available = sam_available()
         self._last_ai_model = self.viewer_model.preferences.fluorescence_ai_model
-        set_gpu_encoder_enabled(
-            self.viewer_model.preferences.fluorescence_ai_use_gpu)
+        set_gpu_encoder_enabled(self.viewer_model.preferences.fluorescence_ai_use_gpu)
 
     # ------------------------------------------------------------------ #
     # Model gate + refiner lifecycle                                       #
@@ -112,7 +120,8 @@ class AiRoiController(HasTraits):
             return
         self._reverting_model = True
         self.viewer_model.preferences.fluorescence_ai_model = (
-            self._last_ai_model or DEFAULT_AI_MODEL)
+            self._last_ai_model or DEFAULT_AI_MODEL
+        )
         self._reverting_model = False
 
     @observe("viewer_model:preferences:fluorescence_ai_use_gpu")
@@ -124,13 +133,14 @@ class AiRoiController(HasTraits):
         if event.new and sam_available() and not gpu_encoder_available():
             information(
                 message="GPU encoding is not available: the installed "
-                        "onnxruntime has no DirectML provider (the "
-                        "CPU-only build is present).\n\n"
-                        "To enable it, install the GPU build with\n"
-                        "    pixi add --pypi onnxruntime-directml\n"
-                        "(or re-run Help > Install AI ROI Support) and "
-                        "restart MicroDrop. Until then the encoder "
-                        "keeps running on the CPU.")
+                "onnxruntime has no DirectML provider (the "
+                "CPU-only build is present).\n\n"
+                "To enable it, install the GPU build with\n"
+                "    pixi add --pypi onnxruntime-directml\n"
+                "(or re-run Help > Install AI ROI Support) and "
+                "restart MicroDrop. Until then the encoder "
+                "keeps running on the CPU."
+            )
 
     # ------------------------------------------------------------------ #
     # Interaction mode (pick tool)                                         #
@@ -144,9 +154,9 @@ class AiRoiController(HasTraits):
         the same idiom RoiAnalysisController._arm uses for the draw
         tools, replicated locally to keep the controllers decoupled."""
         model = self.analysis_model
-        model.interaction_mode = (self._rest_mode()
-                                  if model.interaction_mode == "ai_pick"
-                                  else "ai_pick")
+        model.interaction_mode = (
+            self._rest_mode() if model.interaction_mode == "ai_pick" else "ai_pick"
+        )
 
     # ------------------------------------------------------------------ #
     # Launchers                                                            #
@@ -178,8 +188,9 @@ class AiRoiController(HasTraits):
         self.analysis_model.ai_candidates = []
         refiner = self._refiner_for_current_model()
         self.analysis_model.progress_text = "AI detecting…"
-        self.runner.detect_all(refiner, str(current), self.viewer_model.array,
-                               capture_timestamp(current))
+        self.runner.detect_all(
+            refiner, str(current), self.viewer_model.array, capture_timestamp(current)
+        )
 
     @observe("analysis_model:ai_track_button")
     def _on_track(self, event):
@@ -194,16 +205,19 @@ class AiRoiController(HasTraits):
         if current not in strings:
             self.analysis_model.progress_text = "No later frames to track"
             return
-        later = [path for path in paths[strings.index(current) + 1:]
-                 if not self.session.is_excluded(path)]
+        later = [
+            path
+            for path in paths[strings.index(current) + 1 :]
+            if not self.session.is_excluded(path)
+        ]
         if not later:
             self.analysis_model.progress_text = "No later frames to track"
             return
         frames = [(str(path), capture_timestamp(path)) for path in later]
         start_geometries = {
             roi_id: centre_of(kind, geometry)
-            for roi_id, _name, kind, geometry
-            in self.session.effective_for(current)}
+            for roi_id, _name, kind, geometry in self.session.effective_for(current)
+        }
         if not start_geometries:
             self.analysis_model.progress_text = "No ROIs to track"
             return
@@ -213,10 +227,12 @@ class AiRoiController(HasTraits):
         # Say something immediately: the first frame's encode takes
         # seconds, and until it finishes no TRACK_FRAME arrives.
         self.analysis_model.progress_text = (
-            f"Drift check starting ({len(frames)} frames)…")
+            f"Drift check starting ({len(frames)} frames)…"
+        )
         self.analysis_model.ai_track_running = True
-        self.runner.track(refiner, frames, start_geometries,
-                          self.analysis_model.ai_drift_interval)
+        self.runner.track(
+            refiner, frames, start_geometries, self.analysis_model.ai_drift_interval
+        )
 
     # ------------------------------------------------------------------ #
     # Candidate review                                                     #
@@ -231,12 +247,14 @@ class AiRoiController(HasTraits):
     @observe("analysis_model:ai_accept_button")
     def _on_accept(self, event):
         model = self.analysis_model
-        pairs = [candidate.geometry_for(model.ai_output_kind)
-                 for candidate in model.ai_candidates
-                 if not candidate.discarded
-                 and candidate.passes(model.ai_significance,
-                                      model.ai_min_size,
-                                      model.ai_max_size)]
+        pairs = [
+            candidate.geometry_for(model.ai_output_kind)
+            for candidate in model.ai_candidates
+            if not candidate.discarded
+            and candidate.passes(
+                model.ai_significance, model.ai_min_size, model.ai_max_size
+            )
+        ]
         if pairs:
             model.ai_rois_accepted = (pairs, self._detect_anchor)
         model.ai_candidates = []
@@ -245,17 +263,24 @@ class AiRoiController(HasTraits):
     def _on_clear(self, event):
         self.analysis_model.ai_candidates = []
 
-    @observe("analysis_model:ai_candidates.items, analysis_model:ai_candidates, "
-             "analysis_model:ai_significance, analysis_model:ai_min_size, "
-             "analysis_model:ai_max_size, "
-             "analysis_model:ai_candidates:items:discarded")
+    @observe(
+        "analysis_model:ai_candidates.items, analysis_model:ai_candidates, "
+        "analysis_model:ai_significance, analysis_model:ai_min_size, "
+        "analysis_model:ai_max_size, "
+        "analysis_model:ai_candidates:items:discarded"
+    )
     def _update_accept_count(self, event):
         model = self.analysis_model
-        model.ai_accept_count = len([
-            candidate for candidate in model.ai_candidates
-            if not candidate.discarded
-            and candidate.passes(model.ai_significance, model.ai_min_size,
-                                 model.ai_max_size)])
+        model.ai_accept_count = len(
+            [
+                candidate
+                for candidate in model.ai_candidates
+                if not candidate.discarded
+                and candidate.passes(
+                    model.ai_significance, model.ai_min_size, model.ai_max_size
+                )
+            ]
+        )
 
     # ------------------------------------------------------------------ #
     # Draining the job runner                                              #
@@ -289,27 +314,31 @@ class AiRoiController(HasTraits):
             image_id = payload["image_id"]
             anchor = capture_timestamp(image_id) if image_id else 0.0
             model.ai_rois_accepted = (
-                [candidate.geometry_for(model.ai_output_kind)], anchor)
+                [candidate.geometry_for(model.ai_output_kind)],
+                anchor,
+            )
             model.progress_text = "AI ROI added"
         elif kind == DETECT_PROGRESS:
-            model.progress_text = (
-                f"AI detect {payload['done']}/{payload['total']}")
+            model.progress_text = f"AI detect {payload['done']}/{payload['total']}"
         elif kind == DETECT_RESULT:
             self._detect_anchor = payload["capture_time"]
             model.ai_candidates = payload["candidates"]
             model.progress_text = (
-                f"{len(payload['candidates'])} candidates — filter, "
-                f"then Accept")
+                f"{len(payload['candidates'])} candidates — filter, then Accept"
+            )
         elif kind == TRACK_FRAME:
             model.ai_track_done = payload["done"]
             model.ai_track_total = payload["total"]
             model.progress_text = (
-                f"Drift check {payload['done']}/{payload['total']} frames")
+                f"Drift check {payload['done']}/{payload['total']} frames"
+            )
             for roi_id, candidate in payload["candidates"].items():
                 if candidate is not None:
                     model.ai_roi_tracked = (
-                        roi_id, payload["capture_time"],
-                        candidate.geometry_for(model.ai_output_kind)[1])
+                        roi_id,
+                        payload["capture_time"],
+                        candidate.geometry_for(model.ai_output_kind)[1],
+                    )
         elif kind == TRACK_FINISHED:
             model.ai_track_running = False
             # frames_done counts segmented frames actually processed (every
@@ -318,12 +347,11 @@ class AiRoiController(HasTraits):
             # -- the two aren't the same unit, so "m/n" always read like an
             # early stop when interval > 1. Report only the honest count.
             model.progress_text = (
-                f"Drift tracking done ({payload['frames_done']} "
-                f"frames checked)")
+                f"Drift tracking done ({payload['frames_done']} frames checked)"
+            )
         elif kind == AI_FAILED:
             # Already logged (with more detail) by the runner itself.
-            model.progress_text = (
-                f"AI {payload['stage']} failed: {payload['error']}")
+            model.progress_text = f"AI {payload['stage']} failed: {payload['error']}"
             if model.interaction_mode == "ai_pick":
                 # Disarm the pick tool: a failed pick left it armed, so the
                 # next canvas click would just relaunch into the same

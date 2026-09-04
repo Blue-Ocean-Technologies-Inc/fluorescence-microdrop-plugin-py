@@ -34,10 +34,14 @@
 
 ```python
 """Unit tests for the canonical ROI geometry helpers."""
+
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_geometry import (
-    box_polygon, capsule_polygon, centre_of, normalize,
+    box_polygon,
+    capsule_polygon,
+    centre_of,
+    normalize,
 )
 
 
@@ -73,12 +77,11 @@ def test_box_polygon_rotates_clockwise_in_image_coordinates():
 
 def test_capsule_polygon_area_matches_the_analytic_value():
     half_length, radius = 20.0, 6.0
-    polygon = capsule_polygon([50.0, 50.0, half_length, radius, 0.0],
-                              samples=256)
+    polygon = capsule_polygon([50.0, 50.0, half_length, radius, 0.0], samples=256)
     x, y = polygon[:, 0], polygon[:, 1]
     # Shoelace formula over the closed outline.
     area = 0.5 * abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
-    expected = np.pi * radius ** 2 + 4.0 * radius * half_length
+    expected = np.pi * radius**2 + 4.0 * radius * half_length
     assert abs(area - expected) / expected < 0.01
 
 
@@ -101,6 +104,7 @@ Expected: collection error — `ModuleNotFoundError: ... roi_geometry`.
 the older shorter lists migrate onto it, and the polygons cv2 and Qt
 draw from it. Qt-free (numpy only) so the worker processes that compute
 statistics can import it."""
+
 import numpy as np
 
 #: Values in every canonical geometry list:
@@ -152,8 +156,7 @@ def box_polygon(geometry):
     """The box's four rotated corners, clockwise from its top-left."""
     _, values = normalize("box", geometry)
     x, y, width, height, angle = values
-    corners = [(x, y), (x + width, y),
-               (x + width, y + height), (x, y + height)]
+    corners = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
     return _rotated(corners, centre_of("box", values), angle)
 
 
@@ -163,10 +166,12 @@ def capsule_polygon(geometry, samples=32):
     _, values = normalize("capsule", geometry)
     centre_x, centre_y, half_length, radius, angle = values
     sweep = np.linspace(-np.pi / 2.0, np.pi / 2.0, samples)
-    right = np.column_stack([half_length + radius * np.cos(sweep),
-                             radius * np.sin(sweep)])
-    left = np.column_stack([-half_length - radius * np.cos(sweep),
-                            -radius * np.sin(sweep)])
+    right = np.column_stack(
+        [half_length + radius * np.cos(sweep), radius * np.sin(sweep)]
+    )
+    left = np.column_stack(
+        [-half_length - radius * np.cos(sweep), -radius * np.sin(sweep)]
+    )
     points = np.vstack([right, left]) + (centre_x, centre_y)
     return _rotated(points, (centre_x, centre_y), angle)
 ```
@@ -199,17 +204,16 @@ git commit -m "feat(analysis): add canonical ROI geometry with an angle"
 
 ```python
 def test_ellipse_mask_area_matches_pi_rx_ry():
-    interior, _outline = roi_masks((200, 200), "ellipse",
-                                   (100.0, 100.0, 40.0, 10.0, 0.0))
+    interior, _outline = roi_masks(
+        (200, 200), "ellipse", (100.0, 100.0, 40.0, 10.0, 0.0)
+    )
     expected = math.pi * 40.0 * 10.0
     assert abs(np.count_nonzero(interior) - expected) / expected < 0.05
 
 
 def test_rotated_ellipse_swaps_its_extent():
-    flat, _ = roi_masks((200, 200), "ellipse",
-                        (100.0, 100.0, 40.0, 10.0, 0.0))
-    turned, _ = roi_masks((200, 200), "ellipse",
-                          (100.0, 100.0, 40.0, 10.0, 90.0))
+    flat, _ = roi_masks((200, 200), "ellipse", (100.0, 100.0, 40.0, 10.0, 0.0))
+    turned, _ = roi_masks((200, 200), "ellipse", (100.0, 100.0, 40.0, 10.0, 90.0))
     rows_flat, columns_flat = np.nonzero(flat)
     rows_turned, columns_turned = np.nonzero(turned)
     assert np.ptp(columns_flat) > np.ptp(rows_flat)
@@ -218,32 +222,32 @@ def test_rotated_ellipse_swaps_its_extent():
 
 
 def test_rotated_box_covers_its_diagonal_corners():
-    interior, _outline = roi_masks((200, 200), "box",
-                                   (80.0, 90.0, 40.0, 20.0, 45.0))
+    interior, _outline = roi_masks((200, 200), "box", (80.0, 90.0, 40.0, 20.0, 45.0))
     # Centre stays inside; the axis-aligned corner leaves the shape.
     assert interior[100, 100] == 255
     assert interior[90, 80] == 0
 
 
 def test_capsule_mask_area_matches_the_analytic_value():
-    interior, _outline = roi_masks((200, 200), "capsule",
-                                   (100.0, 100.0, 30.0, 8.0, 0.0))
-    expected = math.pi * 8.0 ** 2 + 4.0 * 8.0 * 30.0
+    interior, _outline = roi_masks(
+        (200, 200), "capsule", (100.0, 100.0, 30.0, 8.0, 0.0)
+    )
+    expected = math.pi * 8.0**2 + 4.0 * 8.0 * 30.0
     assert abs(np.count_nonzero(interior) - expected) / expected < 0.05
 
 
 def test_capsule_outline_stays_inside_its_bounding_box():
-    _interior, outline = roi_masks((200, 200), "capsule",
-                                   (100.0, 100.0, 30.0, 8.0, 0.0))
+    _interior, outline = roi_masks(
+        (200, 200), "capsule", (100.0, 100.0, 30.0, 8.0, 0.0)
+    )
     rows, columns = np.nonzero(outline)
     assert columns.min() >= 100 - 38 - 2 and columns.max() <= 100 + 38 + 2
     assert rows.min() >= 100 - 8 - 2 and rows.max() <= 100 + 8 + 2
 
 
 def test_legacy_circle_geometry_still_masks():
-    interior, _outline = roi_masks((100, 100), "circle",
-                                   (50.0, 50.0, 10.0))
-    expected = math.pi * 10.0 ** 2
+    interior, _outline = roi_masks((100, 100), "circle", (50.0, 50.0, 10.0))
+    expected = math.pi * 10.0**2
     assert abs(np.count_nonzero(interior) - expected) / expected < 0.05
 ```
 
@@ -270,11 +274,9 @@ def roi_masks(shape, kind, geometry, perimeter_px=OUTLINE_PERIMETER_PX):
         centre = (int(round(centre_x)), int(round(centre_y)))
         axes = (int(round(radius_x)), int(round(radius_y)))
         cv2.ellipse(interior, centre, axes, angle, 0, 360, 255, -1)
-        cv2.ellipse(outline, centre, axes, angle, 0, 360, 255,
-                    perimeter_px)
+        cv2.ellipse(outline, centre, axes, angle, 0, 360, 255, perimeter_px)
     else:
-        polygon = (box_polygon(geometry) if kind == "box"
-                   else capsule_polygon(geometry))
+        polygon = box_polygon(geometry) if kind == "box" else capsule_polygon(geometry)
         points = np.round(polygon).astype(np.int32)
         cv2.fillPoly(interior, [points], 255)
         cv2.polylines(outline, [points], True, 255, perimeter_px)
@@ -318,14 +320,26 @@ git commit -m "feat(analysis): mask rotated ellipses, boxes and capsules"
 def test_legacy_circle_config_loads_as_a_migrated_ellipse(tmp_path):
     analysis = tmp_path / "analysis"
     analysis.mkdir()
-    (analysis / "roi_config.json").write_text(json.dumps({
-        "version": 2, "plot_stat": "mean", "figure": {},
-        "rois": [{
-            "roi_id": "abcd1234", "name": "ROI 1", "kind": "circle",
-            "geometry": [50.0, 60.0, 10.0], "base_anchor": 0.0,
-            "overrides": {"120.0": [52.0, 61.0, 11.0]}, "style": {},
-        }],
-    }))
+    (analysis / "roi_config.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "plot_stat": "mean",
+                "figure": {},
+                "rois": [
+                    {
+                        "roi_id": "abcd1234",
+                        "name": "ROI 1",
+                        "kind": "circle",
+                        "geometry": [50.0, 60.0, 10.0],
+                        "base_anchor": 0.0,
+                        "overrides": {"120.0": [52.0, 61.0, 11.0]},
+                        "style": {},
+                    }
+                ],
+            }
+        )
+    )
 
     (roi,) = load_session(tmp_path).rois
     assert roi.kind == "ellipse"
@@ -338,20 +352,43 @@ def test_legacy_stats_keys_migrate_with_their_roi(tmp_path):
     # still resolve against the migrated ROI's cache key.
     analysis = tmp_path / "analysis"
     analysis.mkdir()
-    (analysis / "roi_stats.json").write_text(json.dumps({
-        "version": 1, "entries": [{
-            "path": str(tmp_path / "a_raw.png"), "mtime": 123.5,
-            "roi_id": "abcd1234", "kind": "circle",
-            "geometry": [50.0, 60.0, 10.0], "stats": {"mean": 7.0},
-        }],
-    }))
-    session = AnalysisSession(directory=str(tmp_path), rois=[
-        Roi(roi_id="abcd1234", name="ROI 1", kind="ellipse",
-            geometry=[50.0, 60.0, 10.0, 10.0, 0.0])])
+    (analysis / "roi_stats.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "entries": [
+                    {
+                        "path": str(tmp_path / "a_raw.png"),
+                        "mtime": 123.5,
+                        "roi_id": "abcd1234",
+                        "kind": "circle",
+                        "geometry": [50.0, 60.0, 10.0],
+                        "stats": {"mean": 7.0},
+                    }
+                ],
+            }
+        )
+    )
+    session = AnalysisSession(
+        directory=str(tmp_path),
+        rois=[
+            Roi(
+                roi_id="abcd1234",
+                name="ROI 1",
+                kind="ellipse",
+                geometry=[50.0, 60.0, 10.0, 10.0, 0.0],
+            )
+        ],
+    )
 
     store = load_roi_stats(tmp_path)
-    key = (str(tmp_path / "a_raw.png"), 123.5, "abcd1234", "ellipse",
-           (50.0, 60.0, 10.0, 10.0, 0.0))
+    key = (
+        str(tmp_path / "a_raw.png"),
+        123.5,
+        "abcd1234",
+        "ellipse",
+        (50.0, 60.0, 10.0, 10.0, 0.0),
+    )
     assert store[key] == {"mean": 7.0}
     assert session.roi_by_id("abcd1234").kind == "ellipse"
 ```
@@ -368,8 +405,7 @@ Expected: both fail — the loader keeps `"circle"` and the 3-value geometry.
 ```
 
 ```python
-    interaction_mode = Enum("pan", "draw_ellipse", "draw_box",
-                            "draw_capsule", "edit")
+interaction_mode = Enum("pan", "draw_ellipse", "draw_box", "draw_capsule", "edit")
 ```
 
 ```python
@@ -385,22 +421,30 @@ Update the `kind` docstring above the trait to name all three geometries (the ca
 ```python
 def _roi_from(entry):
     style = RoiStyle()
-    style.trait_set(**{name: entry.get("style", {})[name]
-                       for name in _STYLE_FIELDS
-                       if name in entry.get("style", {})})
+    style.trait_set(
+        **{
+            name: entry.get("style", {})[name]
+            for name in _STYLE_FIELDS
+            if name in entry.get("style", {})
+        }
+    )
     kind, geometry = normalize(entry["kind"], entry["geometry"])
-    return Roi(roi_id=entry["roi_id"], name=entry["name"],
-               kind=kind, geometry=geometry,
-               base_anchor=float(entry["base_anchor"]),
-               overrides={
-                   float(anchor): normalize(kind, override)[1]
-                   for anchor, override in entry["overrides"].items()},
-               style=style)
+    return Roi(
+        roi_id=entry["roi_id"],
+        name=entry["name"],
+        kind=kind,
+        geometry=geometry,
+        base_anchor=float(entry["base_anchor"]),
+        overrides={
+            float(anchor): normalize(kind, override)[1]
+            for anchor, override in entry["overrides"].items()
+        },
+        style=style,
+    )
 ```
 
 ```python
-        return {_stats_key(entry): entry["stats"]
-                for entry in payload["entries"]}
+return {_stats_key(entry): entry["stats"] for entry in payload["entries"]}
 ```
 
 with, above `load_roi_stats`:
@@ -411,8 +455,13 @@ def _stats_key(entry):
     the ROI it belongs to is — so intensities computed before shapes
     could rotate keep matching after."""
     kind, geometry = normalize(entry["kind"], entry["geometry"])
-    return (entry["path"], float(entry["mtime"]), entry["roi_id"],
-            kind, tuple(geometry))
+    return (
+        entry["path"],
+        float(entry["mtime"]),
+        entry["roi_id"],
+        kind,
+        tuple(geometry),
+    )
 ```
 
 Import at the top: `from .roi_geometry import normalize`.
@@ -431,10 +480,13 @@ In `test_analysis_session.py`, `test_plot_series.py`, `test_roi_model.py` and `t
 `examples/generate_fit_demo_experiment.py:104-107` builds `Roi(..., kind="circle", geometry=list(geometry))` from `DEMO_ROIS`, whose entries are `(cx, cy, r)` tuples also fed to `cv2.circle`. Keep the tuples as they are (the frame drawing needs three values) and canonicalize only at construction:
 
 ```python
-        Roi(roi_id=f"demo-{name}", name=name, kind="ellipse",
-            geometry=[geometry[0], geometry[1], geometry[2],
-                      geometry[2], 0.0],
-            base_anchor=0.0)
+Roi(
+    roi_id=f"demo-{name}",
+    name=name,
+    kind="ellipse",
+    geometry=[geometry[0], geometry[1], geometry[2], geometry[2], 0.0],
+    base_anchor=0.0,
+)
 ```
 
 Run it into the scratchpad (never the user's Documents) and confirm the report still prints five ROIs with their fits intact:
@@ -535,36 +587,40 @@ In `_setup`, after `self._handle = _ResizeHandle(self)`:
 Extend `set_editable` and add the shared angle/resize plumbing:
 
 ```python
-    def set_editable(self, editable):
-        self.setFlag(self.GraphicsItemFlag.ItemIsMovable, editable)
-        self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, editable)
-        self._handle.setVisible(editable)
-        self._rotate_handle.setVisible(editable)
+def set_editable(self, editable):
+    self.setFlag(self.GraphicsItemFlag.ItemIsMovable, editable)
+    self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, editable)
+    self._handle.setVisible(editable)
+    self._rotate_handle.setVisible(editable)
 
-    def angle_to(self, scene_point):
-        """Degrees clockwise from the shape's centre to a scene point."""
-        centre = self.mapToScene(self.transformOriginPoint())
-        return math.degrees(math.atan2(scene_point.y() - centre.y(),
-                                       scene_point.x() - centre.x()))
 
-    def set_angle(self, degrees):
-        self.setRotation(degrees)
+def angle_to(self, scene_point):
+    """Degrees clockwise from the shape's centre to a scene point."""
+    centre = self.mapToScene(self.transformOriginPoint())
+    return math.degrees(
+        math.atan2(scene_point.y() - centre.y(), scene_point.x() - centre.x())
+    )
 
-    def resize_to(self, scene_point, uniform=False):
-        # mapFromScene undoes the item's rotation, so every shape sizes
-        # itself in the unrotated frame it was authored in.
-        self._apply_size(self.mapFromScene(scene_point), uniform)
-        self._place_attachments()
 
-    def _place_grips(self, centre_x, centre_y, half_width, half_height):
-        """Resize grip at the local bottom-right, rotate grip at the
-        top-left, label clear of both."""
-        self._handle.setPos(centre_x + half_width,
-                            centre_y + half_height)
-        self._rotate_handle.setPos(centre_x - half_width,
-                                   centre_y - half_height)
-        self._label.setPos(centre_x - half_width + HANDLE_SIZE_PX,
-                           centre_y - half_height - 2)
+def set_angle(self, degrees):
+    self.setRotation(degrees)
+
+
+def resize_to(self, scene_point, uniform=False):
+    # mapFromScene undoes the item's rotation, so every shape sizes
+    # itself in the unrotated frame it was authored in.
+    self._apply_size(self.mapFromScene(scene_point), uniform)
+    self._place_attachments()
+
+
+def _place_grips(self, centre_x, centre_y, half_width, half_height):
+    """Resize grip at the local bottom-right, rotate grip at the
+    top-left, label clear of both."""
+    self._handle.setPos(centre_x + half_width, centre_y + half_height)
+    self._rotate_handle.setPos(centre_x - half_width, centre_y - half_height)
+    self._label.setPos(
+        centre_x - half_width + HANDLE_SIZE_PX, centre_y - half_height - 2
+    )
 ```
 
 - [ ] **Step 4: Rewrite the shape items**
@@ -577,9 +633,12 @@ def capsule_path(geometry):
     unrotated local coordinates (the item transform adds the angle)."""
     _, values = normalize("capsule", geometry)
     centre_x, centre_y, half_length, radius, _angle = values
-    rectangle = QRectF(centre_x - half_length - radius,
-                       centre_y - radius,
-                       2 * (half_length + radius), 2 * radius)
+    rectangle = QRectF(
+        centre_x - half_length - radius,
+        centre_y - radius,
+        2 * (half_length + radius),
+        2 * radius,
+    )
     path = QPainterPath()
     path.addRoundedRect(rectangle, radius, radius)
     return path
@@ -598,8 +657,9 @@ class EllipseRoiItem(_RoiItemBase, QGraphicsEllipseItem):
         _, values = normalize("ellipse", geometry)
         centre_x, centre_y, radius_x, radius_y, angle = values
         self.setPos(0, 0)
-        self.setRect(centre_x - radius_x, centre_y - radius_y,
-                     2 * radius_x, 2 * radius_y)
+        self.setRect(
+            centre_x - radius_x, centre_y - radius_y, 2 * radius_x, 2 * radius_y
+        )
         self.setTransformOriginPoint(centre_x, centre_y)
         self.setRotation(angle)
         self._place_attachments()
@@ -607,8 +667,13 @@ class EllipseRoiItem(_RoiItemBase, QGraphicsEllipseItem):
     def geometry(self):
         rect = self.rect()
         centre = rect.center() + self.pos()
-        return [centre.x(), centre.y(), rect.width() / 2,
-                rect.height() / 2, self.rotation()]
+        return [
+            centre.x(),
+            centre.y(),
+            rect.width() / 2,
+            rect.height() / 2,
+            self.rotation(),
+        ]
 
     def _apply_size(self, point, uniform):
         centre = self.rect().center()
@@ -616,13 +681,15 @@ class EllipseRoiItem(_RoiItemBase, QGraphicsEllipseItem):
         radius_y = max(abs(point.y() - centre.y()), MIN_ROI_SIZE_PX)
         if uniform:
             radius_x = radius_y = max(radius_x, radius_y)
-        self.setRect(centre.x() - radius_x, centre.y() - radius_y,
-                     2 * radius_x, 2 * radius_y)
+        self.setRect(
+            centre.x() - radius_x, centre.y() - radius_y, 2 * radius_x, 2 * radius_y
+        )
 
     def _place_attachments(self):
         rect = self.rect()
-        self._place_grips(rect.center().x(), rect.center().y(),
-                          rect.width() / 2, rect.height() / 2)
+        self._place_grips(
+            rect.center().x(), rect.center().y(), rect.width() / 2, rect.height() / 2
+        )
 
 
 class BoxRoiItem(_RoiItemBase, QGraphicsRectItem):
@@ -645,8 +712,13 @@ class BoxRoiItem(_RoiItemBase, QGraphicsRectItem):
 
     def geometry(self):
         rect = self.rect()
-        return [rect.x() + self.pos().x(), rect.y() + self.pos().y(),
-                rect.width(), rect.height(), self.rotation()]
+        return [
+            rect.x() + self.pos().x(),
+            rect.y() + self.pos().y(),
+            rect.width(),
+            rect.height(),
+            self.rotation(),
+        ]
 
     def _apply_size(self, point, uniform):
         # Centre-anchored, unlike the pre-rotation top-left anchoring:
@@ -654,13 +726,18 @@ class BoxRoiItem(_RoiItemBase, QGraphicsRectItem):
         centre = self.rect().center()
         half_width = max(abs(point.x() - centre.x()), MIN_ROI_SIZE_PX)
         half_height = max(abs(point.y() - centre.y()), MIN_ROI_SIZE_PX)
-        self.setRect(centre.x() - half_width, centre.y() - half_height,
-                     2 * half_width, 2 * half_height)
+        self.setRect(
+            centre.x() - half_width,
+            centre.y() - half_height,
+            2 * half_width,
+            2 * half_height,
+        )
 
     def _place_attachments(self):
         rect = self.rect()
-        self._place_grips(rect.center().x(), rect.center().y(),
-                          rect.width() / 2, rect.height() / 2)
+        self._place_grips(
+            rect.center().x(), rect.center().y(), rect.width() / 2, rect.height() / 2
+        )
 
 
 class CapsuleRoiItem(_RoiItemBase, QGraphicsPathItem):
@@ -678,8 +755,9 @@ class CapsuleRoiItem(_RoiItemBase, QGraphicsPathItem):
 
     def set_geometry(self, geometry):
         _, values = normalize("capsule", geometry)
-        (self._centre_x, self._centre_y, self._half_length,
-         self._radius, angle) = values
+        (self._centre_x, self._centre_y, self._half_length, self._radius, angle) = (
+            values
+        )
         self.setPos(0, 0)
         self.setPath(capsule_path(values))
         self.setTransformOriginPoint(self._centre_x, self._centre_y)
@@ -687,26 +765,34 @@ class CapsuleRoiItem(_RoiItemBase, QGraphicsPathItem):
         self._place_attachments()
 
     def geometry(self):
-        return [self._centre_x + self.pos().x(),
-                self._centre_y + self.pos().y(),
-                self._half_length, self._radius, self.rotation()]
+        return [
+            self._centre_x + self.pos().x(),
+            self._centre_y + self.pos().y(),
+            self._half_length,
+            self._radius,
+            self.rotation(),
+        ]
 
     def _apply_size(self, point, uniform):
         # The grip rides the bounding corner, so its x distance covers
         # the cap radius as well as the straight half-length.
-        self._radius = max(abs(point.y() - self._centre_y),
-                           MIN_ROI_SIZE_PX)
+        self._radius = max(abs(point.y() - self._centre_y), MIN_ROI_SIZE_PX)
         self._half_length = max(
-            abs(point.x() - self._centre_x) - self._radius,
-            MIN_ROI_SIZE_PX)
-        self.setPath(capsule_path(
-            [self._centre_x, self._centre_y, self._half_length,
-             self._radius, 0.0]))
+            abs(point.x() - self._centre_x) - self._radius, MIN_ROI_SIZE_PX
+        )
+        self.setPath(
+            capsule_path(
+                [self._centre_x, self._centre_y, self._half_length, self._radius, 0.0]
+            )
+        )
 
     def _place_attachments(self):
-        self._place_grips(self._centre_x, self._centre_y,
-                          self._half_length + self._radius,
-                          self._radius)
+        self._place_grips(
+            self._centre_x,
+            self._centre_y,
+            self._half_length + self._radius,
+            self._radius,
+        )
 ```
 
 - [ ] **Step 5: Check the label under rotation and correct the spec if needed**
@@ -738,10 +824,8 @@ git commit -m "feat(analysis): add a rotation grip and ellipse resizing"
 
 ```python
 #: Canvas item per ROI kind, and the kind each draw mode creates.
-ITEM_CLASSES = {"ellipse": EllipseRoiItem, "box": BoxRoiItem,
-                "capsule": CapsuleRoiItem}
-DRAW_KINDS = {"draw_ellipse": "ellipse", "draw_box": "box",
-              "draw_capsule": "capsule"}
+ITEM_CLASSES = {"ellipse": EllipseRoiItem, "box": BoxRoiItem, "capsule": CapsuleRoiItem}
+DRAW_KINDS = {"draw_ellipse": "ellipse", "draw_box": "box", "draw_capsule": "capsule"}
 ```
 
 In `sync`, replace the two-way `item_class` line:
@@ -753,85 +837,101 @@ In `sync`, replace the two-way `item_class` line:
 - [ ] **Step 2: Rewrite the draft drawing** — replace `mouse_press`, `mouse_move`, `mouse_release` and `_drag_geometry`:
 
 ```python
-    def mouse_press(self, scene_point):
-        if self.mode not in DRAW_KINDS:
-            return False
-        self._press_point = scene_point
-        self._draft_kind = DRAW_KINDS[self.mode]
-        self._draft = {"ellipse": QGraphicsEllipseItem,
-                       "box": QGraphicsRectItem,
-                       "capsule": QGraphicsPathItem}[self._draft_kind]()
-        self._draft.setPen(ROI_SELECTED_PEN)
-        self._scene.addItem(self._draft)
-        return True
+def mouse_press(self, scene_point):
+    if self.mode not in DRAW_KINDS:
+        return False
+    self._press_point = scene_point
+    self._draft_kind = DRAW_KINDS[self.mode]
+    self._draft = {
+        "ellipse": QGraphicsEllipseItem,
+        "box": QGraphicsRectItem,
+        "capsule": QGraphicsPathItem,
+    }[self._draft_kind]()
+    self._draft.setPen(ROI_SELECTED_PEN)
+    self._scene.addItem(self._draft)
+    return True
 
-    def mouse_move(self, scene_point):
-        if self._draft is None:
-            return False
-        geometry = self._drag_geometry(scene_point)
-        if self._draft_kind == "ellipse":
-            centre_x, centre_y, radius_x, radius_y, _angle = geometry
-            self._draft.setRect(centre_x - radius_x, centre_y - radius_y,
-                                2 * radius_x, 2 * radius_y)
-        elif self._draft_kind == "box":
-            self._draft.setRect(*geometry[:4])
-        else:
-            self._draft.setPath(capsule_path(geometry))
-            self._draft.setTransformOriginPoint(geometry[0], geometry[1])
-            self._draft.setRotation(geometry[4])
-        return True
 
-    def mouse_release(self, scene_point):
-        if self._draft is None:
-            return False
-        geometry = self._drag_geometry(scene_point)
-        self._scene.removeItem(self._draft)
-        self._draft = None
-        if self._draft_kind == "box":
-            size = min(geometry[2], geometry[3])
-        elif self._draft_kind == "capsule":
-            size = geometry[3]
-        else:
-            size = geometry[2]
-        if size >= MIN_ROI_SIZE_PX:
-            self.on_roi_created(self._draft_kind, geometry)
-        return True
+def mouse_move(self, scene_point):
+    if self._draft is None:
+        return False
+    geometry = self._drag_geometry(scene_point)
+    if self._draft_kind == "ellipse":
+        centre_x, centre_y, radius_x, radius_y, _angle = geometry
+        self._draft.setRect(
+            centre_x - radius_x, centre_y - radius_y, 2 * radius_x, 2 * radius_y
+        )
+    elif self._draft_kind == "box":
+        self._draft.setRect(*geometry[:4])
+    else:
+        self._draft.setPath(capsule_path(geometry))
+        self._draft.setTransformOriginPoint(geometry[0], geometry[1])
+        self._draft.setRotation(geometry[4])
+    return True
 
-    def _drag_geometry(self, scene_point):
-        """Geometry of the press->current drag. Ellipse: press is the
-        centre. Box: press is a corner. Capsule: press and release are
-        the two cap centres, and the radius starts at a quarter of that
-        axis for the grip to tune."""
-        press = self._press_point
-        span_x = scene_point.x() - press.x()
-        span_y = scene_point.y() - press.y()
-        if self._draft_kind == "ellipse":
-            radius = math.hypot(span_x, span_y)
-            return [press.x(), press.y(), radius, radius, 0.0]
-        if self._draft_kind == "box":
-            return [min(press.x(), scene_point.x()),
-                    min(press.y(), scene_point.y()),
-                    abs(span_x), abs(span_y), 0.0]
-        length = math.hypot(span_x, span_y)
-        return [press.x() + span_x / 2, press.y() + span_y / 2,
-                length / 2, max(length / 4, MIN_ROI_SIZE_PX),
-                math.degrees(math.atan2(span_y, span_x))]
+
+def mouse_release(self, scene_point):
+    if self._draft is None:
+        return False
+    geometry = self._drag_geometry(scene_point)
+    self._scene.removeItem(self._draft)
+    self._draft = None
+    if self._draft_kind == "box":
+        size = min(geometry[2], geometry[3])
+    elif self._draft_kind == "capsule":
+        size = geometry[3]
+    else:
+        size = geometry[2]
+    if size >= MIN_ROI_SIZE_PX:
+        self.on_roi_created(self._draft_kind, geometry)
+    return True
+
+
+def _drag_geometry(self, scene_point):
+    """Geometry of the press->current drag. Ellipse: press is the
+    centre. Box: press is a corner. Capsule: press and release are
+    the two cap centres, and the radius starts at a quarter of that
+    axis for the grip to tune."""
+    press = self._press_point
+    span_x = scene_point.x() - press.x()
+    span_y = scene_point.y() - press.y()
+    if self._draft_kind == "ellipse":
+        radius = math.hypot(span_x, span_y)
+        return [press.x(), press.y(), radius, radius, 0.0]
+    if self._draft_kind == "box":
+        return [
+            min(press.x(), scene_point.x()),
+            min(press.y(), scene_point.y()),
+            abs(span_x),
+            abs(span_y),
+            0.0,
+        ]
+    length = math.hypot(span_x, span_y)
+    return [
+        press.x() + span_x / 2,
+        press.y() + span_y / 2,
+        length / 2,
+        max(length / 4, MIN_ROI_SIZE_PX),
+        math.degrees(math.atan2(span_y, span_x)),
+    ]
 ```
 
 - [ ] **Step 3: Arm the new tool** — in `roi_controller.py`, rename the ellipse observer and add the capsule one:
 
 ```python
-    @observe("analysis_model:draw_ellipse_button")
-    def _arm_draw_ellipse(self, event):
-        self.analysis_model.interaction_mode = "draw_ellipse"
+@observe("analysis_model:draw_ellipse_button")
+def _arm_draw_ellipse(self, event):
+    self.analysis_model.interaction_mode = "draw_ellipse"
 
-    @observe("analysis_model:draw_box_button")
-    def _arm_draw_box(self, event):
-        self.analysis_model.interaction_mode = "draw_box"
 
-    @observe("analysis_model:draw_capsule_button")
-    def _arm_draw_capsule(self, event):
-        self.analysis_model.interaction_mode = "draw_capsule"
+@observe("analysis_model:draw_box_button")
+def _arm_draw_box(self, event):
+    self.analysis_model.interaction_mode = "draw_box"
+
+
+@observe("analysis_model:draw_capsule_button")
+def _arm_draw_capsule(self, event):
+    self.analysis_model.interaction_mode = "draw_capsule"
 ```
 
 - [ ] **Step 4: Add the icon and the toolbar button**
@@ -839,27 +939,41 @@ In `sync`, replace the two-way `item_class` line:
 In the Microdrop submodule's `src/microdrop_style/icons/icons.py`, beside `ICON_CIRCLE`/`ICON_RECTANGLE`:
 
 ```python
-ICON_CAPSULE         = "pill"         # draw capsule (spherocylinder) ROI
+ICON_CAPSULE = "pill"  # draw capsule (spherocylinder) ROI
 ```
 
 In `image_viewer/view.py`, rename the first button's trait and add the third, importing `ICON_CAPSULE` alongside the existing icon imports:
 
 ```python
-    UItem("object.roi_analysis.draw_ellipse_button",
-          editor=IconButtonEditor(
-              glyph=ICON_CIRCLE,
-              tooltip="Draw an elliptical ROI (click-drag from its "
-                      "centre; the grip makes it an ellipse)")),
-    UItem("object.roi_analysis.draw_box_button",
-          editor=IconButtonEditor(
-              glyph=ICON_RECTANGLE,
-              tooltip="Draw a rectangular ROI (click-drag on the "
-                      "image)")),
-    UItem("object.roi_analysis.draw_capsule_button",
-          editor=IconButtonEditor(
-              glyph=ICON_CAPSULE,
-              tooltip="Draw a capsule ROI (click-drag its axis, then "
-                      "use the grip for its radius)")),
+(
+    UItem(
+        "object.roi_analysis.draw_ellipse_button",
+        editor=IconButtonEditor(
+            glyph=ICON_CIRCLE,
+            tooltip="Draw an elliptical ROI (click-drag from its "
+            "centre; the grip makes it an ellipse)",
+        ),
+    ),
+)
+(
+    UItem(
+        "object.roi_analysis.draw_box_button",
+        editor=IconButtonEditor(
+            glyph=ICON_RECTANGLE,
+            tooltip="Draw a rectangular ROI (click-drag on the image)",
+        ),
+    ),
+)
+(
+    UItem(
+        "object.roi_analysis.draw_capsule_button",
+        editor=IconButtonEditor(
+            glyph=ICON_CAPSULE,
+            tooltip="Draw a capsule ROI (click-drag its axis, then "
+            "use the grip for its radius)",
+        ),
+    ),
+)
 ```
 
 and extend the Edit toggle's tooltip to "Edit ROIs: drag to move, bottom-right grip to resize, top-left grip to rotate, click to select. Editing on a later image adds a drift override from there on".
@@ -897,6 +1011,7 @@ git commit -m "feat(analysis): draw capsule ROIs from the toolbar"
 ```python
 """Offscreen smoke for the shape items: each kind round-trips its
 geometry, the grips resize and rotate, and one drag reports one edit."""
+
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -914,21 +1029,28 @@ edits = []
 scene = QGraphicsScene()
 layer = RoiCanvasLayer(scene)
 layer.on_roi_edited = lambda roi_id, geometry: edits.append(
-    (roi_id, [round(value, 3) for value in geometry]))
+    (roi_id, [round(value, 3) for value in geometry])
+)
 layer.set_mode("edit")
 
-WANTED = {"a": ("ellipse", [100.0, 100.0, 20.0, 20.0, 0.0]),
-          "b": ("box", [10.0, 10.0, 40.0, 20.0, 30.0]),
-          "c": ("capsule", [80.0, 40.0, 25.0, 6.0, 45.0])}
-layer.sync([(roi_id, f"ROI {roi_id}", kind, list(geometry))
-            for roi_id, (kind, geometry) in WANTED.items()], "")
+WANTED = {
+    "a": ("ellipse", [100.0, 100.0, 20.0, 20.0, 0.0]),
+    "b": ("box", [10.0, 10.0, 40.0, 20.0, 30.0]),
+    "c": ("capsule", [80.0, 40.0, 25.0, 6.0, 45.0]),
+}
+layer.sync(
+    [
+        (roi_id, f"ROI {roi_id}", kind, list(geometry))
+        for roi_id, (kind, geometry) in WANTED.items()
+    ],
+    "",
+)
 for roi_id, item in layer._items.items():
     kind, geometry = WANTED[roi_id]
     read_back = [round(value, 6) for value in item.geometry()]
     assert read_back == geometry, f"{roi_id}: {read_back} != {geometry}"
     print(f"{roi_id}: {type(item).__name__} {read_back}")
-    print(f"   label rotation: {item._label.rotation()}, "
-          f"item angle: {item.rotation()}")
+    print(f"   label rotation: {item._label.rotation()}, item angle: {item.rotation()}")
 
 ellipse = layer._items["a"]
 ellipse.resize_to(QPointF(140.0, 110.0), False)

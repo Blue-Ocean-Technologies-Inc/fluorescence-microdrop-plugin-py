@@ -1,4 +1,5 @@
 """Batch runner end-to-end on tiny synthetic images (real process pool)."""
+
 import queue
 import time
 
@@ -6,7 +7,10 @@ import cv2
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.roi_batch import (
-    BATCH_FINISHED, BATCH_RESULT, INSTANT_RESULT, RoiBatchRunner,
+    BATCH_FINISHED,
+    BATCH_RESULT,
+    INSTANT_RESULT,
+    RoiBatchRunner,
 )
 
 
@@ -38,10 +42,11 @@ def test_batch_computes_all_images_and_finishes(tmp_path):
     runner = RoiBatchRunner()
     runner.start([(path, rois, (2, 4, 0)) for path in paths])
     messages = _drain_until(runner.results, BATCH_FINISHED)
-    payloads = [payload for kind, payload in messages
-                if kind == BATCH_RESULT]
-    assert sorted(payload["stats"]["r1"]["mean"]
-                  for payload in payloads) == [100.0, 200.0]
+    payloads = [payload for kind, payload in messages if kind == BATCH_RESULT]
+    assert sorted(payload["stats"]["r1"]["mean"] for payload in payloads) == [
+        100.0,
+        200.0,
+    ]
 
 
 def test_compute_single_reports_on_queue(tmp_path):
@@ -49,8 +54,8 @@ def test_compute_single_reports_on_queue(tmp_path):
     _write_image(path, 300)
     runner = RoiBatchRunner()
     runner.compute_single(
-        str(path), {"r1": ("ellipse", (10.0, 10.0, 4.0, 4.0, 0.0))},
-        (2, 4, 0))
+        str(path), {"r1": ("ellipse", (10.0, 10.0, 4.0, 4.0, 0.0))}, (2, 4, 0)
+    )
     messages = _drain_until(runner.results, INSTANT_RESULT, timeout_s=15.0)
     kind, payload = messages[-1]
     assert payload["stats"]["r1"]["mean"] == 300.0

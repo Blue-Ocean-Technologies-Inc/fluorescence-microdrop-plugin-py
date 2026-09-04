@@ -12,9 +12,10 @@ rather than opening a second one on the single camera.
 ``activate`` / ``deactivate`` touch Qt camera objects, so they must run on the
 GUI thread — the message handler marshals them there via ``GUI.invoke_later``.
 """
-from logger.logger_service import get_logger
 
 from .cameras.provider import AsiCameraSourceProvider, current_feed
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -32,8 +33,9 @@ def activate():
     provider = AsiCameraSourceProvider()
     sources = provider.list_sources()
     if not sources:
-        logger.warning("No ASI camera found; the run's captures will fail "
-                       "until one is connected.")
+        logger.warning(
+            "No ASI camera found; the run's captures will fail until one is connected."
+        )
         return
     _label, camera_id = sources[0]
     try:

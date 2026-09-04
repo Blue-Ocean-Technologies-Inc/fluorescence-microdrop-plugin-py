@@ -18,21 +18,40 @@ which applies them between frames.
 Traits only notify on real changes, so the pane <-> settings back-sync
 naturally terminates instead of looping.
 """
+
 from traits.api import Bool, Enum, Float, HasTraits, Int, List, Range, Str
 
 from .consts import (
-    ASI_BINNING_CHOICES, ASI_EXPOSURE_DEFAULT, ASI_FLIP_CHOICES,
-    ASI_GAIN_DEFAULT, ASI_GAIN_MAX, ASI_GAIN_MIN, ASI_IMAGE_TYPE_CHOICES,
-    ASI_OFFSET_DEFAULT, ASI_OFFSET_MAX, ASI_OFFSET_MIN,
-    ASI_USB_BANDWIDTH_DEFAULT, ASI_USB_BANDWIDTH_MAX, ASI_USB_BANDWIDTH_MIN,
-    ASI_WHITE_BALANCE_BLUE_DEFAULT, ASI_WHITE_BALANCE_MAX,
-    ASI_WHITE_BALANCE_MIN, ASI_WHITE_BALANCE_RED_DEFAULT,
-    AUTO_MAX_EXPOSURE_MS_DEFAULT, AUTO_MAX_GAIN_DEFAULT,
-    AUTO_TARGET_BRIGHTNESS_DEFAULT, AUTO_TARGET_BRIGHTNESS_MAX,
+    ASI_BINNING_CHOICES,
+    ASI_EXPOSURE_DEFAULT,
+    ASI_FLIP_CHOICES,
+    ASI_GAIN_DEFAULT,
+    ASI_GAIN_MAX,
+    ASI_GAIN_MIN,
+    ASI_IMAGE_TYPE_CHOICES,
+    ASI_OFFSET_DEFAULT,
+    ASI_OFFSET_MAX,
+    ASI_OFFSET_MIN,
+    ASI_USB_BANDWIDTH_DEFAULT,
+    ASI_USB_BANDWIDTH_MAX,
+    ASI_USB_BANDWIDTH_MIN,
+    ASI_WHITE_BALANCE_BLUE_DEFAULT,
+    ASI_WHITE_BALANCE_MAX,
+    ASI_WHITE_BALANCE_MIN,
+    ASI_WHITE_BALANCE_RED_DEFAULT,
+    AUTO_MAX_EXPOSURE_MS_DEFAULT,
+    AUTO_MAX_GAIN_DEFAULT,
+    AUTO_TARGET_BRIGHTNESS_DEFAULT,
+    AUTO_TARGET_BRIGHTNESS_MAX,
     AUTO_TARGET_BRIGHTNESS_MIN,
-    DISPLAY_BRIGHTNESS_DEFAULT, DISPLAY_BRIGHTNESS_MAX,
-    DISPLAY_BRIGHTNESS_MIN, DISPLAY_CONTRAST_DEFAULT, DISPLAY_CONTRAST_MAX,
-    DISPLAY_CONTRAST_MIN, DISPLAY_GAMMA_DEFAULT, DISPLAY_GAMMA_MAX,
+    DISPLAY_BRIGHTNESS_DEFAULT,
+    DISPLAY_BRIGHTNESS_MAX,
+    DISPLAY_BRIGHTNESS_MIN,
+    DISPLAY_CONTRAST_DEFAULT,
+    DISPLAY_CONTRAST_MAX,
+    DISPLAY_CONTRAST_MIN,
+    DISPLAY_GAMMA_DEFAULT,
+    DISPLAY_GAMMA_MAX,
     DISPLAY_GAMMA_MIN,
 )
 
@@ -43,27 +62,45 @@ from .consts import (
 #: add_timestamp are software post-processing on the live preview, and
 #: the auto_* values parameterize the capture thread's auto-exposure loop.
 ADVANCED_CAMERA_TRAITS = (
-    "binning", "image_type", "resolution", "white_balance_red",
-    "white_balance_blue", "offset", "usb_bandwidth", "high_speed_mode",
-    "hardware_bin", "mono_bin", "flip", "add_timestamp",
-    "display_gamma", "display_contrast", "display_brightness",
-    "auto_target_brightness", "auto_max_gain",
+    "binning",
+    "image_type",
+    "resolution",
+    "white_balance_red",
+    "white_balance_blue",
+    "offset",
+    "usb_bandwidth",
+    "high_speed_mode",
+    "hardware_bin",
+    "mono_bin",
+    "flip",
+    "add_timestamp",
+    "display_gamma",
+    "display_contrast",
+    "display_brightness",
+    "auto_target_brightness",
+    "auto_max_gain",
 )
 
 #: Software auto-exposure parameters the feed forwards to the capture
 #: thread (auto_exposure/auto_gain checkboxes live in the main controls
 #: pane; the limits in the advanced pane's Auto tab).
 AUTO_SETTING_TRAITS = (
-    "auto_exposure", "auto_gain", "auto_target_brightness",
-    "auto_max_gain", "auto_max_exposure",
+    "auto_exposure",
+    "auto_gain",
+    "auto_target_brightness",
+    "auto_max_gain",
+    "auto_max_exposure",
 )
 
 #: Capabilities the running feed reports back after camera init (sensor
 #: size, color/mono, supported bins/image types); the advanced pane
 #: narrows its dropdowns to them and shows concrete resolutions.
 CAMERA_CAPS_TRAITS = (
-    "camera_max_width", "camera_max_height", "camera_is_color",
-    "camera_supported_bins", "camera_supported_image_types",
+    "camera_max_width",
+    "camera_max_height",
+    "camera_is_color",
+    "camera_supported_bins",
+    "camera_supported_image_types",
 )
 
 
@@ -81,8 +118,10 @@ class AsiCameraSettings(HasTraits):
     auto_exposure = Bool(False)
     auto_gain = Bool(False)
     auto_target_brightness = Range(
-        AUTO_TARGET_BRIGHTNESS_MIN, AUTO_TARGET_BRIGHTNESS_MAX,
-        AUTO_TARGET_BRIGHTNESS_DEFAULT)
+        AUTO_TARGET_BRIGHTNESS_MIN,
+        AUTO_TARGET_BRIGHTNESS_MAX,
+        AUTO_TARGET_BRIGHTNESS_DEFAULT,
+    )
     auto_max_gain = Range(ASI_GAIN_MIN, ASI_GAIN_MAX, AUTO_MAX_GAIN_DEFAULT)
     #: Microseconds (the pane edits a value + ms/s unit pair).
     auto_max_exposure = Int(AUTO_MAX_EXPOSURE_MS_DEFAULT * 1_000)
@@ -98,18 +137,18 @@ class AsiCameraSettings(HasTraits):
     # preview (like the ZWO native app's image panel), never touching the
     # saved raw captures.
     white_balance_red = Range(
-        ASI_WHITE_BALANCE_MIN, ASI_WHITE_BALANCE_MAX,
-        ASI_WHITE_BALANCE_RED_DEFAULT)
+        ASI_WHITE_BALANCE_MIN, ASI_WHITE_BALANCE_MAX, ASI_WHITE_BALANCE_RED_DEFAULT
+    )
     white_balance_blue = Range(
-        ASI_WHITE_BALANCE_MIN, ASI_WHITE_BALANCE_MAX,
-        ASI_WHITE_BALANCE_BLUE_DEFAULT)
-    display_gamma = Range(
-        DISPLAY_GAMMA_MIN, DISPLAY_GAMMA_MAX, DISPLAY_GAMMA_DEFAULT)
+        ASI_WHITE_BALANCE_MIN, ASI_WHITE_BALANCE_MAX, ASI_WHITE_BALANCE_BLUE_DEFAULT
+    )
+    display_gamma = Range(DISPLAY_GAMMA_MIN, DISPLAY_GAMMA_MAX, DISPLAY_GAMMA_DEFAULT)
     display_contrast = Range(
-        DISPLAY_CONTRAST_MIN, DISPLAY_CONTRAST_MAX, DISPLAY_CONTRAST_DEFAULT)
+        DISPLAY_CONTRAST_MIN, DISPLAY_CONTRAST_MAX, DISPLAY_CONTRAST_DEFAULT
+    )
     display_brightness = Range(
-        DISPLAY_BRIGHTNESS_MIN, DISPLAY_BRIGHTNESS_MAX,
-        DISPLAY_BRIGHTNESS_DEFAULT)
+        DISPLAY_BRIGHTNESS_MIN, DISPLAY_BRIGHTNESS_MAX, DISPLAY_BRIGHTNESS_DEFAULT
+    )
     flip = Enum(*ASI_FLIP_CHOICES)
     offset = Range(ASI_OFFSET_MIN, ASI_OFFSET_MAX, ASI_OFFSET_DEFAULT)
     #: Stamp the current time onto preview frames (display-only).
@@ -117,8 +156,8 @@ class AsiCameraSettings(HasTraits):
 
     # Transfer / binning behavior.
     usb_bandwidth = Range(
-        ASI_USB_BANDWIDTH_MIN, ASI_USB_BANDWIDTH_MAX,
-        ASI_USB_BANDWIDTH_DEFAULT)
+        ASI_USB_BANDWIDTH_MIN, ASI_USB_BANDWIDTH_MAX, ASI_USB_BANDWIDTH_DEFAULT
+    )
     high_speed_mode = Bool(False)
     hardware_bin = Bool(False)
     mono_bin = Bool(False)

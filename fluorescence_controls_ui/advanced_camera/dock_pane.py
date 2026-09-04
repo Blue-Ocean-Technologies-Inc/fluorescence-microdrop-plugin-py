@@ -6,16 +6,17 @@ picks them up between frames) and persist across sessions. Every write is
 clamped to the connected camera's own reported control range, so cameras
 with narrower capability sets stay safe.
 """
+
 from pyface.tasks.api import TraitsDockPane
 from traits.api import Instance
 from traitsui.api import Handler
-
-from logger.logger_service import get_logger
 
 from ..consts import PKG
 from .controller import AdvancedCameraController
 from .model import AdvancedCameraModel
 from .view import advanced_camera_view
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,8 @@ class AdvancedCameraDockPane(TraitsDockPane):
 
     def create_contents(self, parent):
         self.ui = self.edit_traits(
-            kind="subpanel", parent=parent, handler=self.controller)
+            kind="subpanel", parent=parent, handler=self.controller
+        )
         return self.ui.control
 
     def destroy(self):

@@ -1,13 +1,13 @@
-from traitsui.api import (
-    View, VGroup, HGroup, Item, UItem, Readonly, TableEditor, Label
-)
-from traitsui.key_bindings import KeyBindings, KeyBinding
-from traitsui.menu import Menu, Action
+from traitsui.api import HGroup, Item, Label, Readonly, TableEditor, UItem, VGroup, View
+from traitsui.key_bindings import KeyBinding, KeyBindings
+from traitsui.menu import Action, Menu
 
-from microdrop_style.icons.icons import ICON_DELETE
 from microdrop_utils.traitsui_qt_helpers import (
-    CustomCheckboxColumn, IconButtonEditor, InPlaceToggleEditor,
-    IconToggleEditor, ObjectColumn,
+    CustomCheckboxColumn,
+    IconButtonEditor,
+    IconToggleEditor,
+    InPlaceToggleEditor,
+    ObjectColumn,
 )
 
 # Every section is collapsible: an arrow glyph acts as the section header and
@@ -27,23 +27,24 @@ status_group = VGroup(
 # (br/fl/dual) is gone (issue #6): a single LED/camera param set now drives
 # whichever chain row is being edited.
 control_group = VGroup(
-
     HGroup(
-        UItem("light_on", editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
-              enabled_when="connected"),
-
+        UItem(
+            "light_on",
+            editor=InPlaceToggleEditor(on_label="Light On", off_label="Light Off"),
+            enabled_when="connected",
+        ),
         # Master gate for the pane's LED board commands (heater stream
         # toggle parity): while off, lighting edits are staged.
-        UItem("stream_active",
-              editor=InPlaceToggleEditor(on_label="Stream On",
-                                         off_label="Stream Off"),
-              enabled_when="connected"),
+        UItem(
+            "stream_active",
+            editor=InPlaceToggleEditor(on_label="Stream On", off_label="Stream Off"),
+            enabled_when="connected",
+        ),
     ),
     # Live ASI preview in the device viewer — independent of the LED
     # board connection (it only needs the camera), hence no
     # enabled_when.
     Item("device_viewer_stream", label="Device View Camera Feed"),
-
     visible_when="show_control",
     show_border=True,
 )
@@ -56,15 +57,17 @@ control_group = VGroup(
 params_group = VGroup(
     # The chain-row label is derived (image_tag_wavelength_index) and
     # read-only in the table; the panel edits only this optional tag.
-    Item("image_tag", label="Image Tag",
-         tooltip="Optional tag prefixed to the derived capture label "
-                 "(tag_wavelength_index); leave empty for none"),
+    Item(
+        "image_tag",
+        label="Image Tag",
+        tooltip="Optional tag prefixed to the derived capture label "
+        "(tag_wavelength_index); leave empty for none",
+    ),
     Item("wavelength", label="Wavelength"),
     Item("intensity", label="Intensity (%)"),
     Item("frequency", label="Frequency (Hz)"),
     HGroup(
-        Item("exposure", label="Exposure (ms)",
-             enabled_when="not auto_exposure"),
+        Item("exposure", label="Exposure (ms)", enabled_when="not auto_exposure"),
         Item("auto_exposure", label="Auto"),
     ),
     HGroup(
@@ -77,12 +80,16 @@ params_group = VGroup(
     # protocol runs — the manual Run Capture buttons ignore it.
     HGroup(
         Label("Protocol Step Time of Capture:"),
-        UItem("capture_start",
-              editor=InPlaceToggleEditor(on_label="Start", off_label="Start"),
-              enabled_when="capture_end or not capture_start"),
-        UItem("capture_end",
-              editor=InPlaceToggleEditor(on_label="End", off_label="End"),
-              enabled_when="capture_start or not capture_end"),
+        UItem(
+            "capture_start",
+            editor=InPlaceToggleEditor(on_label="Start", off_label="Start"),
+            enabled_when="capture_end or not capture_start",
+        ),
+        UItem(
+            "capture_end",
+            editor=InPlaceToggleEditor(on_label="End", off_label="End"),
+            enabled_when="capture_start or not capture_end",
+        ),
     ),
     visible_when="show_params",
     show_border=True,
@@ -108,8 +115,9 @@ chain_table_editor = TableEditor(
     columns=[
         # Derived (image_tag_wavelength_index) — read-only, route-table
         # name-column parity; authored only via the panel's Image Tag.
-        ObjectColumn(name="label", label="Label", resize_mode="stretch",
-                     editable=False),
+        ObjectColumn(
+            name="label", label="Label", resize_mode="stretch", editable=False
+        ),
         RunColumn(
             name="run",
             label="Run",
@@ -139,41 +147,56 @@ chain_table_editor = TableEditor(
 # selected row, or the last one when nothing is selected.
 _spacing = 16
 chain_group = VGroup(
-
     HGroup(
         HGroup(
-            UItem("add_capture_button", editor=IconButtonEditor(
-            glyph="add", tooltip="Add a capture from the panel's params")
-                  ),
-            UItem("delete_capture_button", editor=IconButtonEditor(
-                   glyph="remove",
-                   tooltip="Delete the selected capture (the last one when "
-                           "nothing is selected)"))
+            UItem(
+                "add_capture_button",
+                editor=IconButtonEditor(
+                    glyph="add", tooltip="Add a capture from the panel's params"
+                ),
+            ),
+            UItem(
+                "delete_capture_button",
+                editor=IconButtonEditor(
+                    glyph="remove",
+                    tooltip="Delete the selected capture (the last one when "
+                    "nothing is selected)",
+                ),
+            ),
         ),
-
         Item(str(_spacing)),
-
         HGroup(
-            UItem("move_up_button", editor=IconButtonEditor(
-                glyph="arrow_upward", tooltip="Move the selected capture up")
-                  ),
-            UItem("move_down_button", editor=IconButtonEditor(
-                glyph="arrow_downward",
-                tooltip="Move the selected capture down")
-                  ),
+            UItem(
+                "move_up_button",
+                editor=IconButtonEditor(
+                    glyph="arrow_upward", tooltip="Move the selected capture up"
+                ),
+            ),
+            UItem(
+                "move_down_button",
+                editor=IconButtonEditor(
+                    glyph="arrow_downward", tooltip="Move the selected capture down"
+                ),
+            ),
         ),
-
         Item(str(_spacing)),
-
         HGroup(
-            UItem("capture_selected_button", editor=IconButtonEditor(
-                glyph="photo_camera", tooltip="Capture the selected row now (ticked or not)"),
-                  enabled_when="connected and not protocol_running"),
-            UItem("run_capture_button", editor=IconButtonEditor(
-                glyph="play_circle", tooltip="Run the ticked captures now"),
-                  enabled_when="connected and not protocol_running")
+            UItem(
+                "capture_selected_button",
+                editor=IconButtonEditor(
+                    glyph="photo_camera",
+                    tooltip="Capture the selected row now (ticked or not)",
+                ),
+                enabled_when="connected and not protocol_running",
+            ),
+            UItem(
+                "run_capture_button",
+                editor=IconButtonEditor(
+                    glyph="play_circle", tooltip="Run the ticked captures now"
+                ),
+                enabled_when="connected and not protocol_running",
+            ),
         ),
-
     ),
     UItem("chain_rows", editor=chain_table_editor),
     show_border=True,
@@ -193,13 +216,10 @@ UnifiedView = View(
     VGroup(
         _collapse_header("show_status", "Status"),
         status_group,
-
         _collapse_header("show_control", "Control"),
         control_group,
-
         _collapse_header("show_params", "LED / Camera Params"),
         params_group,
-
         chain_group,
     ),
     # Resizable so the pane can be dragged larger/smaller; scrollable so the

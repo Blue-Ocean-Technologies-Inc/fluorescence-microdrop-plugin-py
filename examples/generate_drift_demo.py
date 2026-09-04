@@ -32,6 +32,7 @@ then press Track drift and step through the frames — the outlines
 should follow the motion and shape changes, and dragging any frame's
 shape shows the capture-time override the tracker wrote.
 """
+
 import argparse
 import math
 import sys
@@ -45,10 +46,10 @@ from device_viewer.consts import RAW_CAPTURES_SUBDIR
 
 FRAME_COUNT = 24
 FRAME_INTERVAL_S = 10.0
-IMAGE_SHAPE = (512, 640)          # (height, width)
+IMAGE_SHAPE = (512, 640)  # (height, width)
 
 BACKGROUND_FLOOR = 600.0
-GRADIENT_PER_PX = 0.6             # mild unevenness; not the point here
+GRADIENT_PER_PX = 0.6  # mild unevenness; not the point here
 DROPLET_SIGNAL = 1400.0
 EDGE_SOFTEN_SIGMA_PX = 2.0
 NOISE_SIGMA = 10.0
@@ -56,22 +57,30 @@ NOISE_SIGMA = 10.0
 #: (name, center_of_t, radii_of_t, angle_of_t) with t = frame index.
 #: center in px, radii (rx, ry) in px, angle in degrees.
 DEMO_DROPLETS = (
-    ("drifter",
-     lambda t: (90.0 + 16.0 * t, 120.0),
-     lambda t: (24.0, 24.0),
-     lambda t: 0.0),
-    ("stretcher",
-     lambda t: (170.0 + 1.5 * t, 360.0),
-     lambda t: (22.0 + 0.5 * t, 22.0 - 0.25 * t),
-     lambda t: 3.0 * t),
-    ("wobbler",
-     lambda t: (420.0 + 6.0 * t, 130.0 + 9.0 * t),
-     lambda t: (20.0 + 5.0 * math.sin(t / 3.0),) * 2,
-     lambda t: 0.0),
-    ("shrinker",
-     lambda t: (520.0 - 4.0 * t, 400.0),
-     lambda t: (28.0 - 0.7 * t, 28.0 - 0.7 * t),
-     lambda t: 0.0),
+    (
+        "drifter",
+        lambda t: (90.0 + 16.0 * t, 120.0),
+        lambda t: (24.0, 24.0),
+        lambda t: 0.0,
+    ),
+    (
+        "stretcher",
+        lambda t: (170.0 + 1.5 * t, 360.0),
+        lambda t: (22.0 + 0.5 * t, 22.0 - 0.25 * t),
+        lambda t: 3.0 * t,
+    ),
+    (
+        "wobbler",
+        lambda t: (420.0 + 6.0 * t, 130.0 + 9.0 * t),
+        lambda t: (20.0 + 5.0 * math.sin(t / 3.0),) * 2,
+        lambda t: 0.0,
+    ),
+    (
+        "shrinker",
+        lambda t: (520.0 - 4.0 * t, 400.0),
+        lambda t: (28.0 - 0.7 * t, 28.0 - 0.7 * t),
+        lambda t: 0.0,
+    ),
 )
 
 
@@ -88,15 +97,20 @@ def _frame(frame_index, rng):
         if radius_x < 2.0 or radius_y < 2.0:
             continue
         mask = np.zeros(IMAGE_SHAPE, dtype=np.uint8)
-        cv2.ellipse(mask,
-                    (int(round(centre_x)), int(round(centre_y))),
-                    (int(round(radius_x)), int(round(radius_y))),
-                    angle_of(frame_index), 0.0, 360.0, 255, -1)
+        cv2.ellipse(
+            mask,
+            (int(round(centre_x)), int(round(centre_y))),
+            (int(round(radius_x)), int(round(radius_y))),
+            angle_of(frame_index),
+            0.0,
+            360.0,
+            255,
+            -1,
+        )
         droplets += (mask > 0) * DROPLET_SIGNAL
     # Soften the edges so the segmenter sees a natural boundary rather
     # than a 1-px cliff.
-    droplets = cv2.GaussianBlur(droplets, ksize=(0, 0),
-                                sigmaX=EDGE_SOFTEN_SIGMA_PX)
+    droplets = cv2.GaussianBlur(droplets, ksize=(0, 0), sigmaX=EDGE_SOFTEN_SIGMA_PX)
 
     frame = frame + droplets + rng.normal(0.0, NOISE_SIGMA, IMAGE_SHAPE)
     return np.clip(frame, 0, 65535).astype(np.uint16)
@@ -111,8 +125,8 @@ def _write_frames(captures_dir, start_time):
     paths = []
     for index in range(FRAME_COUNT):
         stamp = time.strftime(
-            "%Y_%m_%d-%H_%M_%S",
-            time.localtime(start_time + index * FRAME_INTERVAL_S))
+            "%Y_%m_%d-%H_%M_%S", time.localtime(start_time + index * FRAME_INTERVAL_S)
+        )
         path = raw_dir / f"green_540nm_{stamp}_raw.png"
         cv2.imwrite(str(path), _frame(index, rng))
         paths.append(path)
@@ -122,10 +136,15 @@ def _write_frames(captures_dir, start_time):
 def main():
     parser = argparse.ArgumentParser(
         description="Synthetic moving/shape-changing droplet series "
-                    "for testing the AI drift tracker.")
-    parser.add_argument("output_dir", nargs="?", default=".",
-                        help="Folder the drift_demo experiment is "
-                             "created in (default: current directory)")
+        "for testing the AI drift tracker."
+    )
+    parser.add_argument(
+        "output_dir",
+        nargs="?",
+        default=".",
+        help="Folder the drift_demo experiment is "
+        "created in (default: current directory)",
+    )
     arguments = parser.parse_args()
 
     experiment_dir = Path(arguments.output_dir).resolve() / "drift_demo"

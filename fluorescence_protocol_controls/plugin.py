@@ -5,16 +5,17 @@ Sibling plugin to fluorescence_controls_ui (column declarations are a UI
 concern; the board request handlers stay in fluorescence_controller).
 Loaded with the fluorescence UI plugin group.
 """
+
 from envisage.plugin import Plugin
 from traits.api import Instance, List
-
-from logger.logger_service import get_logger
 
 from pluggable_protocol_tree.consts import PROTOCOL_COLUMNS
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 
 from .consts import PKG, PKG_name
 from .protocol_columns.chain_column import make_fluorescence_chain_column
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -24,7 +25,8 @@ class FluorescenceProtocolControlsPlugin(Plugin):
     name = f"{PKG_name} Plugin"
 
     contributed_protocol_columns = List(
-        Instance(IColumn), contributes_to=PROTOCOL_COLUMNS,
+        Instance(IColumn),
+        contributes_to=PROTOCOL_COLUMNS,
     )
 
     def _contributed_protocol_columns_default(self):

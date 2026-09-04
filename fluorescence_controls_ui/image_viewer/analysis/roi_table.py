@@ -8,29 +8,36 @@ structure/style change; value-refreshes (stat cells rewritten in place)
 on stats/current-image change — both scheduled onto the next event-loop
 turn so nothing mutates the table from inside the emitting Qt signal or
 traits notification."""
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QColorDialog, QComboBox, QDoubleSpinBox, QPushButton, QSpinBox,
-    QTableWidget, QTableWidgetItem,
+    QColorDialog,
+    QComboBox,
+    QDoubleSpinBox,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
 )
 
 from microdrop_style.button_styles import ICON_FONT_FAMILY
 from microdrop_style.icons.icons import (
-    ICON_VISIBILITY, ICON_VISIBILITY_OFF,
+    ICON_VISIBILITY,
+    ICON_VISIBILITY_OFF,
 )
 
-from .consts import ROI_ALPHA_BOUNDS_PCT
 from ..scale_bar import area_unit, pixel_area
+from .consts import ROI_ALPHA_BOUNDS_PCT
 from .plot_series import stat_value
 
 
 def _visibility_glyph(visible):
     return ICON_VISIBILITY if visible else ICON_VISIBILITY_OFF
 
+
 #: Value columns after the editors, shown for the current image.
-_STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max",
-                 "count", "area")
+_STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max", "count", "area")
 #: The eye column's header stays blank, as in the device viewer's
 #: alpha sidebar; Name keeps column 0, where the rename handler
 #: expects it.
@@ -49,24 +56,36 @@ EYE_GLYPH_POINT_SIZE = 15
 #: swallows the curve it marks.
 MARKER_SIZE_BOUNDS_PT = (1.0, 30.0)
 
-_HEADERS = ("Name", "", "Bkg Ref", "Alpha", "Color", "Line", "Marker",
-            "Size") + _STAT_COLUMNS
+_HEADERS = (
+    "Name",
+    "",
+    "Bkg Ref",
+    "Alpha",
+    "Color",
+    "Line",
+    "Marker",
+    "Size",
+) + _STAT_COLUMNS
 _LINE_CHOICES = ("solid", "dashed", "dotted", "dashdot")
 _MARKER_CHOICES = ("none", ".", "o", "s", "^", "x")
 
 #: Row count/editors/cell identities change — triggers a full rebuild.
-_TABLE_STRUCTURE = ("session, session:rois.items, "
-                    "session:rois:items:name, "
-                    "session:rois:items:is_background_ref, "
-                    "session:rois:items:style:color, "
-                    "session:scale:metres_per_pixel, "
-                    "session:scale:unit")
+_TABLE_STRUCTURE = (
+    "session, session:rois.items, "
+    "session:rois:items:name, "
+    "session:rois:items:is_background_ref, "
+    "session:rois:items:style:color, "
+    "session:scale:metres_per_pixel, "
+    "session:scale:unit"
+)
 #: Only the stat-cell text can be stale — triggers a values-only
 #: refresh. The two geometry clauses close a staleness edge: editing an
 #: ROI back to an already-cached geometry never bumps stats_revision.
-_TABLE_VALUES = ("session:stats_revision, current_image_path, "
-                 "session:rois:items:geometry, "
-                 "session:rois:items:overrides.items")
+_TABLE_VALUES = (
+    "session:stats_revision, current_image_path, "
+    "session:rois:items:geometry, "
+    "session:rois:items:overrides.items"
+)
 
 
 class RoiStatsTable(QTableWidget):
@@ -77,7 +96,7 @@ class RoiStatsTable(QTableWidget):
         self._model = model
         self._rebuilding = False
         self._detached = False
-        self._pending = None   # None | "rebuild" | "values"
+        self._pending = None  # None | "rebuild" | "values"
         self.verticalHeader().setVisible(False)
         self.itemChanged.connect(self._on_item_changed)
         self.cellClicked.connect(self._on_cell_clicked)
@@ -89,10 +108,8 @@ class RoiStatsTable(QTableWidget):
         # An in-flight coalescing singleShot may fire after the widget's
         # C++ side is gone; the flag makes it a no-op.
         self._detached = True
-        self._model.observe(self._on_structure_changed, _TABLE_STRUCTURE,
-                            remove=True)
-        self._model.observe(self._on_values_changed, _TABLE_VALUES,
-                            remove=True)
+        self._model.observe(self._on_structure_changed, _TABLE_STRUCTURE, remove=True)
+        self._model.observe(self._on_values_changed, _TABLE_VALUES, remove=True)
 
     def _on_structure_changed(self, event):
         self._schedule("rebuild")
@@ -131,8 +148,11 @@ class RoiStatsTable(QTableWidget):
         # Rebuilt here, not in __init__: the area header names the unit
         # the session is calibrated in, which can change under us.
         self.setHorizontalHeaderLabels(
-            [f"Area ({self._area_unit()})" if header == "area"
-             else header for header in _HEADERS])
+            [
+                f"Area ({self._area_unit()})" if header == "area" else header
+                for header in _HEADERS
+            ]
+        )
         for row, roi in enumerate(rois):
             name_item = QTableWidgetItem(roi.name)
             name_item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
@@ -142,26 +162,36 @@ class RoiStatsTable(QTableWidget):
             self.setCellWidget(row, 3, self._alpha_spin(roi))
             self.setCellWidget(row, 4, self._color_button(roi))
             self.setCellWidget(
-                row, 5, self._combo(_LINE_CHOICES, roi.style.line_style,
-                                    lambda value, roi=roi:
-                                    roi.style.trait_set(line_style=value)))
+                row,
+                5,
+                self._combo(
+                    _LINE_CHOICES,
+                    roi.style.line_style,
+                    lambda value, roi=roi: roi.style.trait_set(line_style=value),
+                ),
+            )
             self.setCellWidget(
-                row, 6, self._combo(_MARKER_CHOICES, roi.style.marker,
-                                    lambda value, roi=roi:
-                                    roi.style.trait_set(marker=value)))
+                row,
+                6,
+                self._combo(
+                    _MARKER_CHOICES,
+                    roi.style.marker,
+                    lambda value, roi=roi: roi.style.trait_set(marker=value),
+                ),
+            )
             self.setCellWidget(row, 7, self._size_spin(roi))
-            stats = (session.stats.get(
-                session.cache_key(current, roi, stat_cache))
-                if current else None)
-            for column, stat in enumerate(_STAT_COLUMNS,
-                                          start=len(_HEADERS)
-                                          - len(_STAT_COLUMNS)):
-                value = stat_value(stats, stat,
-                                   area_per_pixel)
+            stats = (
+                session.stats.get(session.cache_key(current, roi, stat_cache))
+                if current
+                else None
+            )
+            for column, stat in enumerate(
+                _STAT_COLUMNS, start=len(_HEADERS) - len(_STAT_COLUMNS)
+            ):
+                value = stat_value(stats, stat, area_per_pixel)
                 text = self._cell_text(stat, value)
                 value_item = QTableWidgetItem(text)
-                value_item.setFlags(value_item.flags()
-                                    & ~Qt.ItemFlag.ItemIsEditable)
+                value_item.setFlags(value_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.setItem(row, column, value_item)
         self._rebuilding = False
 
@@ -195,14 +225,15 @@ class RoiStatsTable(QTableWidget):
         for row, roi in enumerate(rois):
             if row >= self.rowCount():
                 break
-            stats = (session.stats.get(
-                session.cache_key(current, roi, stat_cache))
-                if current else None)
-            for column, stat in enumerate(_STAT_COLUMNS,
-                                          start=len(_HEADERS)
-                                          - len(_STAT_COLUMNS)):
-                value = stat_value(stats, stat,
-                                   area_per_pixel)
+            stats = (
+                session.stats.get(session.cache_key(current, roi, stat_cache))
+                if current
+                else None
+            )
+            for column, stat in enumerate(
+                _STAT_COLUMNS, start=len(_HEADERS) - len(_STAT_COLUMNS)
+            ):
+                value = stat_value(stats, stat, area_per_pixel)
                 text = self._cell_text(stat, value)
                 item = self.item(row, column)
                 if item is not None:
@@ -213,16 +244,13 @@ class RoiStatsTable(QTableWidget):
         if self._rebuilding:
             return
         if item.column() == _BACKGROUND_REF_COLUMN:
-            roi = self._model.session.roi_by_id(
-                item.data(Qt.ItemDataRole.UserRole))
+            roi = self._model.session.roi_by_id(item.data(Qt.ItemDataRole.UserRole))
             if roi is not None:
-                roi.is_background_ref = (
-                    item.checkState() == Qt.CheckState.Checked)
+                roi.is_background_ref = item.checkState() == Qt.CheckState.Checked
             return
         if item.column() != 0:
             return
-        roi = self._model.session.roi_by_id(
-            item.data(Qt.ItemDataRole.UserRole))
+        roi = self._model.session.roi_by_id(item.data(Qt.ItemDataRole.UserRole))
         if roi is not None and item.text().strip():
             roi.name = item.text().strip()
 
@@ -240,8 +268,7 @@ class RoiStatsTable(QTableWidget):
         # Clickable and selectable, but never editable: the click is
         # the control, and a double-click must not open an editor over
         # the glyph.
-        item.setFlags(Qt.ItemFlag.ItemIsEnabled
-                      | Qt.ItemFlag.ItemIsSelectable)
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
         item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
         item.setToolTip("Show or hide this ROI on the plot")
         return item
@@ -250,14 +277,19 @@ class RoiStatsTable(QTableWidget):
         """Tick to make this ROI a background reference: the marked
         ROIs' mean is what the correction subtracts."""
         item = QTableWidgetItem()
-        item.setFlags(Qt.ItemFlag.ItemIsEnabled
-                      | Qt.ItemFlag.ItemIsSelectable
-                      | Qt.ItemFlag.ItemIsUserCheckable)
-        item.setCheckState(Qt.CheckState.Checked if roi.is_background_ref
-                           else Qt.CheckState.Unchecked)
+        item.setFlags(
+            Qt.ItemFlag.ItemIsEnabled
+            | Qt.ItemFlag.ItemIsSelectable
+            | Qt.ItemFlag.ItemIsUserCheckable
+        )
+        item.setCheckState(
+            Qt.CheckState.Checked if roi.is_background_ref else Qt.CheckState.Unchecked
+        )
         item.setData(Qt.ItemDataRole.UserRole, roi.roi_id)
-        item.setToolTip("Use this ROI as a background reference — the "
-                        "plot can subtract the marked ROIs' mean")
+        item.setToolTip(
+            "Use this ROI as a background reference — the "
+            "plot can subtract the marked ROIs' mean"
+        )
         return item
 
     def _on_cell_clicked(self, row, column):
@@ -265,8 +297,11 @@ class RoiStatsTable(QTableWidget):
         if self._rebuilding or column != _VISIBLE_COLUMN:
             return
         item = self.item(row, column)
-        roi = (self._model.session.roi_by_id(
-            item.data(Qt.ItemDataRole.UserRole)) if item else None)
+        roi = (
+            self._model.session.roi_by_id(item.data(Qt.ItemDataRole.UserRole))
+            if item
+            else None
+        )
         if roi is None:
             return
         roi.style.visible = not roi.style.visible
@@ -279,15 +314,16 @@ class RoiStatsTable(QTableWidget):
         spin.setValue(roi.style.alpha)
         spin.setToolTip("Opacity of this ROI's line on the plot")
         spin.valueChanged.connect(
-            lambda value, roi=roi: roi.style.trait_set(alpha=value))
+            lambda value, roi=roi: roi.style.trait_set(alpha=value)
+        )
         return spin
 
     def _color_button(self, roi):
         button = QPushButton(self)
-        button.setStyleSheet(
-            f"background-color: {roi.style.color};")
-        button.clicked.connect(lambda _=False, roi=roi, button=button:
-                               self._pick_color(roi, button))
+        button.setStyleSheet(f"background-color: {roi.style.color};")
+        button.clicked.connect(
+            lambda _=False, roi=roi, button=button: self._pick_color(roi, button)
+        )
         return button
 
     def _pick_color(self, roi, button):
@@ -308,6 +344,6 @@ class RoiStatsTable(QTableWidget):
         spin.setRange(*MARKER_SIZE_BOUNDS_PT)
         spin.setValue(roi.style.marker_size)
         spin.valueChanged.connect(
-            lambda value, roi=roi:
-            roi.style.trait_set(marker_size=value))
+            lambda value, roi=roi: roi.style.trait_set(marker_size=value)
+        )
         return spin

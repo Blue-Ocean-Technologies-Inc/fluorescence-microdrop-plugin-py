@@ -1,5 +1,6 @@
 """Pure display helpers for the 16-bit image viewer (hardware/Qt-light,
 testable): loading QImages into numpy and window/level stretching."""
+
 import numpy as np
 from PySide6.QtGui import QImage
 
@@ -14,15 +15,20 @@ def qimage_to_array(image: QImage) -> np.ndarray:
         image = image.copy()
         array = np.frombuffer(image.constBits(), dtype=np.uint16)
         stride = image.bytesPerLine() // 2
-        return array.reshape(image.height(), stride)[:, :image.width()].copy()
+        return array.reshape(image.height(), stride)[:, : image.width()].copy()
     if image.format() == QImage.Format_Grayscale8:
         image = image.copy()
         array = np.frombuffer(image.constBits(), dtype=np.uint8)
-        return array.reshape(image.height(), image.bytesPerLine())[:, :image.width()].copy()
+        return array.reshape(image.height(), image.bytesPerLine())[
+            :, : image.width()
+        ].copy()
     rgb = image.convertToFormat(QImage.Format_RGB888)
     array = np.frombuffer(rgb.constBits(), dtype=np.uint8)
-    return array.reshape(rgb.height(), rgb.bytesPerLine())[:, :rgb.width() * 3] \
-        .reshape(rgb.height(), rgb.width(), 3).copy()
+    return (
+        array.reshape(rgb.height(), rgb.bytesPerLine())[:, : rgb.width() * 3]
+        .reshape(rgb.height(), rgb.width(), 3)
+        .copy()
+    )
 
 
 def load_image_array(path) -> np.ndarray:
@@ -34,8 +40,9 @@ def load_image_array(path) -> np.ndarray:
     return qimage_to_array(image)
 
 
-def stretch_to_8bit(array: np.ndarray, auto_contrast: bool = True,
-                    window=None) -> np.ndarray:
+def stretch_to_8bit(
+    array: np.ndarray, auto_contrast: bool = True, window=None
+) -> np.ndarray:
     """Window a grayscale frame into displayable 8-bit.
 
     auto_contrast maps the (0.1, 99.9) percentile window onto 0..255 —

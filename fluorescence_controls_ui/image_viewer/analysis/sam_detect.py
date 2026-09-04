@@ -5,30 +5,43 @@ without the optional ``osam`` package — ``sam_available()`` reports which.
 Ported from the standalone droplet_roi prototype (labelme-derived); see
 docs/superpowers/specs/2026-08-07-automatic-roi-identification-design.md.
 """
+
 import collections
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
-from traits.api import (
-    Array, Bool, Float, HasTraits, Instance, Int, List, Property, Str,
-)
 
-from logger.logger_service import get_logger
+from traits.api import (
+    Array,
+    Bool,
+    Float,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Property,
+    Str,
+)
 
 from .consts import (
-    AI_DETECT_GRID_TARGET_POINTS, AI_DETECT_MAX_MASK_AREA_FRACTION,
-    AI_DETECT_MIN_MASK_AREA_PX, AI_ENCODE_WORK_WIDTH_PX,
-    AI_NORMALIZE_HIGH_PERCENTILE, AI_NORMALIZE_LOW_PERCENTILE,
+    AI_DETECT_GRID_TARGET_POINTS,
+    AI_DETECT_MAX_MASK_AREA_FRACTION,
+    AI_DETECT_MIN_MASK_AREA_PX,
+    AI_ENCODE_WORK_WIDTH_PX,
+    AI_NORMALIZE_HIGH_PERCENTILE,
+    AI_NORMALIZE_LOW_PERCENTILE,
 )
 from .roi_geometry import normalize
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
 try:
     import osam
-except ImportError:          # optional dependency: Help menu installs it
+except ImportError:  # optional dependency: Help menu installs it
     osam = None
 
 #: Set once _patch_osam_providers() has actually run, so a later
@@ -71,6 +84,7 @@ def gpu_encoder_available():
     # optional dependency: only reachable once osam (which depends on
     # onnxruntime) is installed
     import onnxruntime
+
     return "DmlExecutionProvider" in onnxruntime.get_available_providers()
 
 
@@ -91,8 +105,9 @@ def sam_available():
     return osam is not None
 
 
-def normalize_to_uint8(array, low_pct=AI_NORMALIZE_LOW_PERCENTILE,
-                       high_pct=AI_NORMALIZE_HIGH_PERCENTILE):
+def normalize_to_uint8(
+    array, low_pct=AI_NORMALIZE_LOW_PERCENTILE, high_pct=AI_NORMALIZE_HIGH_PERCENTILE
+):
     """Percentile-clip contrast stretch to uint8 (PROTO imaging.py)."""
     if array.dtype == np.uint8 and array.max() > 200:
         return array
@@ -104,8 +119,7 @@ def normalize_to_uint8(array, low_pct=AI_NORMALIZE_LOW_PERCENTILE,
     if high - low <= 0:
         return np.zeros(array.shape, dtype=np.uint8)
     normalized = (array - low) / (high - low) * 255
-    return np.nan_to_num(np.clip(normalized, 0, 255),
-                         nan=0.0).astype(np.uint8)
+    return np.nan_to_num(np.clip(normalized, 0, 255), nan=0.0).astype(np.uint8)
 
 
 def to_rgb(gray_u8):
@@ -167,8 +181,9 @@ class Candidate(HasTraits):
         """Whether this candidate survives significance filtering.
         Click-sourced candidates are exempt from the vote threshold;
         the size window applies to all."""
-        return ((self.source == "click" or self.votes >= min_votes)
-                and min_size <= self.size <= max_size)
+        return (
+            self.source == "click" or self.votes >= min_votes
+        ) and min_size <= self.size <= max_size
 
 
 def candidate_from_detection(detection, prompt=None, votes=1, source="auto"):
@@ -181,18 +196,14 @@ def candidate_from_detection(detection, prompt=None, votes=1, source="auto"):
     xmin, ymin = detection.bbox[0], detection.bbox[1]
     # 1-px pad so masks touching the bbox border still close their contour.
     padded = np.pad(mask.astype(np.uint8), 1)
-    contours, _ = cv2.findContours(
-        padded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
-    )
+    contours, _ = cv2.findContours(padded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not contours:
         return None
     contour = max(contours, key=lambda c: cv2.arcLength(c, closed=True))
     contour = contour.reshape(-1, 2).astype(np.float64) - 1.0  # undo pad
 
     if len(contour) >= 5:
-        (ecx, ecy), (ew, eh), angle = cv2.fitEllipse(
-            contour.astype(np.float32)
-        )
+        (ecx, ecy), (ew, eh), angle = cv2.fitEllipse(contour.astype(np.float32))
         rx, ry = ew / 2.0, eh / 2.0
     else:
         ecx, ecy = contour.mean(axis=0)
@@ -258,8 +269,8 @@ def _mask_intersection_area(a, b):
     y1 = min(ay0 + a.mask.shape[0], by0 + b.mask.shape[0])
     if x0 >= x1 or y0 >= y1:
         return 0
-    sub_a = a.mask[y0 - ay0:y1 - ay0, x0 - ax0:x1 - ax0]
-    sub_b = b.mask[y0 - by0:y1 - by0, x0 - bx0:x1 - bx0]
+    sub_a = a.mask[y0 - ay0 : y1 - ay0, x0 - ax0 : x1 - ax0]
+    sub_b = b.mask[y0 - by0 : y1 - by0, x0 - bx0 : x1 - bx0]
     return int(np.count_nonzero(sub_a & sub_b))
 
 
@@ -281,8 +292,9 @@ def _patch_osam_providers():
         # _gpu_encoder_enabled is read at load time, so flipping the
         # preference and rebuilding the refiner switches providers
         # without a restart.
-        use_dml = (_gpu_encoder_enabled
-                   and "encoder" in getattr(blob, "filename", "").lower())
+        use_dml = (
+            _gpu_encoder_enabled and "encoder" in getattr(blob, "filename", "").lower()
+        )
         try:
             return onnxruntime.InferenceSession(
                 blob.path,
@@ -330,17 +342,15 @@ class OsamSession(HasTraits):
     def ensure_model(self):
         with self._lock:
             if self._model is None:
-                self._model = osam.apis.get_model_type_by_name(
-                    self._model_name)()
+                self._model = osam.apis.get_model_type_by_name(self._model_name)()
                 # osam's own "Initialized inference sessions" line only
                 # shows the LAST session's providers (the decoder, kept
                 # on CPU on purpose) — log the true per-session split.
                 providers = {
                     key: session.get_providers()[0]
-                    for key, session
-                    in self._model._inference_sessions.items()}
-                logger.info(f"SAM {self._model_name} session providers: "
-                            f"{providers}")
+                    for key, session in self._model._inference_sessions.items()
+                }
+                logger.info(f"SAM {self._model_name} session providers: {providers}")
             return self._model
 
     def ensure_embedding(self, image, image_id):
@@ -361,8 +371,7 @@ class OsamSession(HasTraits):
                 model=model.name,
                 image=image,
                 image_embedding=embedding,
-                prompt=osam.types.Prompt(points=points,
-                                         point_labels=point_labels),
+                prompt=osam.types.Prompt(points=points, point_labels=point_labels),
             )
         )
 
@@ -440,9 +449,13 @@ class SamRefiner(HasTraits):
             return None
         return self._upscale(best, scale)
 
-    def segment_grid(self, image_id, image_shape,
-                     target_points=AI_DETECT_GRID_TARGET_POINTS,
-                     progress_cb=None):
+    def segment_grid(
+        self,
+        image_id,
+        image_shape,
+        target_points=AI_DETECT_GRID_TARGET_POINTS,
+        progress_cb=None,
+    ):
         """Detect-everything sweep: prompt the decoder on a point grid
         spanning the whole frame against the one cached embedding. Every
         point is decoded -- an earlier covered-point skip was measured to
@@ -484,8 +497,11 @@ class SamRefiner(HasTraits):
             area = int(np.count_nonzero(detection.mask))
             # Reject background grabs and specks. Generous bounds: real
             # droplets are far inside them, whole-image masks far outside.
-            if not (AI_DETECT_MIN_MASK_AREA_PX <= area
-                    <= AI_DETECT_MAX_MASK_AREA_FRACTION * frame_area):
+            if not (
+                AI_DETECT_MIN_MASK_AREA_PX
+                <= area
+                <= AI_DETECT_MAX_MASK_AREA_FRACTION * frame_area
+            ):
                 continue
             results.append((detection, [point[0], point[1]], 1))
         return results
@@ -502,8 +518,7 @@ class SamRefiner(HasTraits):
         if w <= 0 or h <= 0:
             return None
         mask = cv2.resize(
-            annotation.mask.astype(np.uint8), (w, h),
-            interpolation=cv2.INTER_NEAREST
+            annotation.mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST
         ).astype(bool)
         return Detection(
             bbox=[float(xmin), float(ymin), float(xmax), float(ymax)],

@@ -6,15 +6,22 @@ import serial
 
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from microdrop_utils.hardware_device_monitoring_helpers import (
-    WHOAMI_MARKER, parse_whoami_line,
+    parse_whoami_line,
 )
-from logger.logger_service import get_logger
 
 from .consts import (
-    BOARD_BAUDRATE, BOARD_ID, COMMAND_RETRY_DELAY_S, CONNECTED, DISCONNECTED,
-    MAX_COMMAND_RETRIES, SERIAL_READ_TIMEOUT_S, SERIAL_WRITE_TIMEOUT_S,
+    BOARD_BAUDRATE,
+    BOARD_ID,
+    COMMAND_RETRY_DELAY_S,
+    CONNECTED,
+    DISCONNECTED,
+    MAX_COMMAND_RETRIES,
+    SERIAL_READ_TIMEOUT_S,
+    SERIAL_WRITE_TIMEOUT_S,
     TELEMETRY,
 )
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -27,8 +34,7 @@ class FluorescenceSerialProxy:
     (requested on connect), which is published as the BOARD_ID identity.
     """
 
-    def __init__(self, port, expected_device_id_fragment=None,
-                 serial_instance=None):
+    def __init__(self, port, expected_device_id_fragment=None, serial_instance=None):
         self.port = port
         # When set, a connect-time WHOAMI whose device_id lacks this fragment
         # means the monitor claimed the wrong board (VID:PID collision) — the
@@ -45,7 +51,8 @@ class FluorescenceSerialProxy:
             self._serial.write_timeout = SERIAL_WRITE_TIMEOUT_S
         else:
             self._serial = serial.Serial(
-                port, BOARD_BAUDRATE,
+                port,
+                BOARD_BAUDRATE,
                 timeout=SERIAL_READ_TIMEOUT_S,
                 write_timeout=SERIAL_WRITE_TIMEOUT_S,
             )
@@ -89,12 +96,14 @@ class FluorescenceSerialProxy:
                 if attempt < MAX_COMMAND_RETRIES - 1:
                     logger.warning(
                         f"Fluorescence write failed (attempt {attempt + 1}"
-                        f"/{MAX_COMMAND_RETRIES}): {e}")
+                        f"/{MAX_COMMAND_RETRIES}): {e}"
+                    )
                     time.sleep(COMMAND_RETRY_DELAY_S)
                     continue
                 logger.error(
                     f"Fluorescence write failed after {MAX_COMMAND_RETRIES} "
-                    f"attempts ({command!r}): {e}; disconnecting")
+                    f"attempts ({command!r}): {e}; disconnecting"
+                )
                 self.terminate()
                 raise
 
@@ -113,13 +122,16 @@ class FluorescenceSerialProxy:
         identity = parse_whoami_line(line)
         if identity is not None:
             device_id = identity.get("device_id", "")
-            if (self._expected_device_id_fragment
-                    and self._expected_device_id_fragment not in device_id):
+            if (
+                self._expected_device_id_fragment
+                and self._expected_device_id_fragment not in device_id
+            ):
                 logger.warning(
                     f"Fluorescence proxy on {self.port} got WHOAMI device_id "
                     f"'{device_id}' — expected a "
                     f"'{self._expected_device_id_fragment}' board; "
-                    f"relinquishing the port")
+                    f"relinquishing the port"
+                )
                 self.terminate()  # publishes DISCONNECTED → monitor resumes
                 return
             publish_message(message=json.dumps(identity), topic=BOARD_ID)

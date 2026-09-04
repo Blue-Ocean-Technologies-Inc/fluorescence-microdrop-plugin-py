@@ -7,6 +7,7 @@ regex, which is what lets an unusable equation come back as a sentence
 ("unknown function 'sine'") instead of a failed fit — and what keeps
 anything that is not arithmetic (attributes, subscripts, lambdas,
 calls to anything unlisted) from reaching the interpreter at all."""
+
 import ast
 
 import numpy as np
@@ -19,11 +20,22 @@ VARIABLE_NAMES = ("x", "t")
 
 #: Vectorized functions an equation may call.
 FUNCTIONS = {
-    "exp": np.exp, "log": np.log, "log10": np.log10, "sqrt": np.sqrt,
-    "abs": np.abs, "sin": np.sin, "cos": np.cos, "tan": np.tan,
-    "asin": np.arcsin, "acos": np.arccos, "atan": np.arctan,
-    "sinh": np.sinh, "cosh": np.cosh, "tanh": np.tanh,
-    "expit": expit, "erf": erf,
+    "exp": np.exp,
+    "log": np.log,
+    "log10": np.log10,
+    "sqrt": np.sqrt,
+    "abs": np.abs,
+    "sin": np.sin,
+    "cos": np.cos,
+    "tan": np.tan,
+    "asin": np.arcsin,
+    "acos": np.arccos,
+    "atan": np.arctan,
+    "sinh": np.sinh,
+    "cosh": np.cosh,
+    "tanh": np.tanh,
+    "expit": expit,
+    "erf": erf,
 }
 
 #: Constants an equation may name.
@@ -47,12 +59,18 @@ class FitExpressionError(ValueError):
 def _describe(node):
     """The offending construct, named the way a user would recognize
     it."""
-    return {ast.Attribute: "attribute access", ast.Subscript: "indexing",
-            ast.Lambda: "a lambda", ast.IfExp: "a conditional",
-            ast.Compare: "a comparison", ast.BoolOp: "and/or",
-            ast.List: "a list", ast.Dict: "a dict",
-            ast.Tuple: "a tuple", ast.Starred: "*args",
-            }.get(type(node), type(node).__name__)
+    return {
+        ast.Attribute: "attribute access",
+        ast.Subscript: "indexing",
+        ast.Lambda: "a lambda",
+        ast.IfExp: "a conditional",
+        ast.Compare: "a comparison",
+        ast.BoolOp: "and/or",
+        ast.List: "a list",
+        ast.Dict: "a dict",
+        ast.Tuple: "a tuple",
+        ast.Starred: "*args",
+    }.get(type(node), type(node).__name__)
 
 
 def _check(node, parameters):
@@ -63,13 +81,15 @@ def _check(node, parameters):
     elif isinstance(node, ast.BinOp):
         if not isinstance(node.op, _BINARY_OPS):
             raise FitExpressionError(
-                f"{type(node.op).__name__} is not allowed in an equation")
+                f"{type(node.op).__name__} is not allowed in an equation"
+            )
         _check(node.left, parameters)
         _check(node.right, parameters)
     elif isinstance(node, ast.UnaryOp):
         if not isinstance(node.op, _UNARY_OPS):
             raise FitExpressionError(
-                f"{type(node.op).__name__} is not allowed in an equation")
+                f"{type(node.op).__name__} is not allowed in an equation"
+            )
         _check(node.operand, parameters)
     elif isinstance(node, ast.Call):
         if not isinstance(node.func, ast.Name):
@@ -77,10 +97,10 @@ def _check(node, parameters):
         if node.func.id not in FUNCTIONS:
             raise FitExpressionError(
                 f"unknown function '{node.func.id}' — known ones are "
-                f"{', '.join(sorted(FUNCTIONS))}")
+                f"{', '.join(sorted(FUNCTIONS))}"
+            )
         if node.keywords:
-            raise FitExpressionError(
-                f"{node.func.id}() takes no keyword arguments")
+            raise FitExpressionError(f"{node.func.id}() takes no keyword arguments")
         for argument in node.args:
             _check(argument, parameters)
     elif isinstance(node, ast.Name):
@@ -88,22 +108,17 @@ def _check(node, parameters):
         if name in VARIABLE_NAMES or name in CONSTANTS:
             return
         if name in FUNCTIONS:
-            raise FitExpressionError(
-                f"'{name}' is a function — write {name}(x)")
+            raise FitExpressionError(f"'{name}' is a function — write {name}(x)")
         if name.startswith("_"):
-            raise FitExpressionError(
-                f"'{name}' cannot be a parameter name")
+            raise FitExpressionError(f"'{name}' cannot be a parameter name")
         if name not in parameters:
             parameters.append(name)
     elif isinstance(node, ast.Constant):
         # Numbers only: a quoted string or a None is not arithmetic.
-        if isinstance(node.value, bool) or not isinstance(
-                node.value, (int, float)):
-            raise FitExpressionError(
-                f"{node.value!r} is not a number")
+        if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+            raise FitExpressionError(f"{node.value!r} is not a number")
     else:
-        raise FitExpressionError(
-            f"{_describe(node)} is not allowed in an equation")
+        raise FitExpressionError(f"{_describe(node)} is not allowed in an equation")
 
 
 class FitExpression:
@@ -148,7 +163,8 @@ def parse_expression(text):
         raise FitExpressionError("type an equation, e.g. a + b*exp(-c*x)")
     if len(text) > MAX_EXPRESSION_LENGTH:
         raise FitExpressionError(
-            f"equation is longer than {MAX_EXPRESSION_LENGTH} characters")
+            f"equation is longer than {MAX_EXPRESSION_LENGTH} characters"
+        )
     # Both are how an equation is written rather than how Python spells
     # it; ^ is exclusive-or to the parser, and a leading "y =" or
     # "F(x) =" is the label around the expression, not part of it.
@@ -161,16 +177,15 @@ def parse_expression(text):
     try:
         tree = ast.parse(text, mode="eval")
     except SyntaxError as error:
-        raise FitExpressionError(
-            f"could not read the equation: {error.msg}") from error
+        raise FitExpressionError(f"could not read the equation: {error.msg}") from error
     parameters = []
     _check(tree, parameters)
     if not parameters:
         raise FitExpressionError(
             "the equation has no parameters to fit — every symbol in it "
-            "is either x or a known function")
-    return FitExpression(text, parameters,
-                         compile(tree, "<fit equation>", "eval"))
+            "is either x or a known function"
+        )
+    return FitExpression(text, parameters, compile(tree, "<fit equation>", "eval"))
 
 
 def is_valid(text):

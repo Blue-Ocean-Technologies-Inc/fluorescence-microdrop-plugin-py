@@ -1,5 +1,6 @@
 """Controller-level tests for the ROI editing ergonomics: draw tools
 that stay armed, and copying a shape into a new ROI."""
+
 from fluorescence_controls_ui.image_viewer.analysis.consts import (
     PASTE_OFFSET_PX,
 )
@@ -19,8 +20,8 @@ def _controller():
     model hands out is an app-wide singleton, so tests sharing it would
     inherit each other's ROIs."""
     return RoiAnalysisController(
-        viewer_model=FluorescenceImageViewerModel(),
-        analysis_model=RoiAnalysisModel())
+        viewer_model=FluorescenceImageViewerModel(), analysis_model=RoiAnalysisModel()
+    )
 
 
 def test_a_drawn_roi_leaves_the_tool_armed():
@@ -32,8 +33,7 @@ def test_a_drawn_roi_leaves_the_tool_armed():
     assert model.interaction_mode == "draw_ellipse"
     model.canvas_roi_created = ("ellipse", [40.0, 10.0, 5.0, 5.0, 0.0])
     assert len(controller.session.rois) == 2
-    assert [roi.name for roi in controller.session.rois] == ["ROI 1",
-                                                             "ROI 2"]
+    assert [roi.name for roi in controller.session.rois] == ["ROI 1", "ROI 2"]
 
 
 def test_clicking_the_armed_tool_puts_it_away():
@@ -47,7 +47,7 @@ def test_clicking_the_armed_tool_puts_it_away():
     assert model.interaction_mode == "pan"
 
     model.draw_capsule_button = True
-    model.draw_box_button = True     # a different tool just switches
+    model.draw_box_button = True  # a different tool just switches
     assert model.interaction_mode == "draw_box"
 
 
@@ -58,7 +58,7 @@ def test_escaping_a_draw_tool_returns_to_the_resting_mode():
     model.canvas_draw_cancelled = True
     assert model.interaction_mode == "pan"
 
-    model.edit_mode = True          # resting mode follows the toggle
+    model.edit_mode = True  # resting mode follows the toggle
     model.draw_box_button = True
     model.canvas_draw_cancelled = True
     assert model.interaction_mode == "edit"
@@ -76,9 +76,14 @@ def test_copy_and_paste_offsets_the_shape_and_renames_it():
 
     original, pasted = controller.session.rois
     assert pasted.kind == "box"
-    assert pasted.geometry == [10.0 + PASTE_OFFSET_PX,
-                               20.0 + PASTE_OFFSET_PX,
-                               30.0, 40.0, 0.0, 5.0]
+    assert pasted.geometry == [
+        10.0 + PASTE_OFFSET_PX,
+        20.0 + PASTE_OFFSET_PX,
+        30.0,
+        40.0,
+        0.0,
+        5.0,
+    ]
     assert pasted.name == "ROI 2"
     assert pasted.roi_id != original.roi_id
     # A shared colour would make the two curves indistinguishable.
@@ -98,8 +103,7 @@ def test_one_copy_seeds_repeated_pastes():
     assert len(controller.session.rois) == 3
     # Each paste offsets from the copied shape, not from the last
     # paste, so repeated pastes stack in one place by design.
-    assert controller.session.rois[1].geometry == \
-        controller.session.rois[2].geometry
+    assert controller.session.rois[1].geometry == controller.session.rois[2].geometry
 
 
 def test_delete_removes_the_selected_roi_and_says_so_when_there_is_none():
@@ -140,11 +144,13 @@ def test_saved_fit_presets_load_whichever_order_the_models_arrive():
 
     viewer = FluorescenceImageViewerModel()
     viewer.preferences.fluorescence_fit_presets = save_presets(
-        [("Bleach", "a*exp(-b*x) + c")])
-    for kwargs in (dict(viewer_model=viewer,
-                        analysis_model=RoiAnalysisModel()),
-                   dict(analysis_model=RoiAnalysisModel(),
-                        viewer_model=viewer)):
+        [("Bleach", "a*exp(-b*x) + c")]
+    )
+    for kwargs in (
+        dict(viewer_model=viewer, analysis_model=RoiAnalysisModel()),
+        dict(analysis_model=RoiAnalysisModel(), viewer_model=viewer),
+    ):
         controller = RoiAnalysisController(**kwargs)
-        assert [name for name, _text
-                in controller.analysis_model.fit_presets] == ["Bleach"]
+        assert [name for name, _text in controller.analysis_model.fit_presets] == [
+            "Bleach"
+        ]

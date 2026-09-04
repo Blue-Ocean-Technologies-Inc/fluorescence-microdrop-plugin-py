@@ -7,18 +7,26 @@ an older chain shape (or hand-edited) must never crash a load. Entries
 that fail validation are skipped and logged; their valid siblings still
 load.
 """
+
 from pydantic import (
-    BaseModel, ConfigDict, Field, field_validator, model_validator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
 )
 
-from logger.logger_service import get_logger
-
 from fluorescence_controller.consts import (
-    LED_DUTY_MAX, LED_DUTY_MIN, LED_FREQUENCY_MAX, LED_FREQUENCY_MIN,
+    LED_DUTY_MAX,
+    LED_DUTY_MIN,
+    LED_FREQUENCY_MAX,
+    LED_FREQUENCY_MIN,
     LED_WAVELENGTHS,
 )
 from fluorescence_controls_ui.cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from fluorescence_controls_ui.consts import EXPOSURE_MS_MAX, EXPOSURE_MS_MIN
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -100,9 +108,7 @@ def sanitize_label(label: str) -> str:
     """A label reduced to a filename-safe form: alnum plus space/dash/
     underscore are kept, then spaces become underscores (the existing
     device_viewer scheme). An empty result falls back to `"capture"`."""
-    clean = "".join(
-        c for c in label if c.isalnum() or c in (" ", "-", "_")
-    ).strip()
+    clean = "".join(c for c in label if c.isalnum() or c in (" ", "-", "_")).strip()
     clean = clean.replace(" ", "_")
     return clean or "capture"
 
@@ -112,6 +118,7 @@ def chain_label(image_tag: str, wavelength: str, index: int) -> str:
     ``image_tag_wavelength_index``, with the optional tag omitted when
     empty. The index makes labels unique within a chain by construction,
     which is why there is no suffix-on-collision machinery."""
-    parts = ([image_tag, wavelength, str(index)] if image_tag
-             else [wavelength, str(index)])
+    parts = (
+        [image_tag, wavelength, str(index)] if image_tag else [wavelength, str(index)]
+    )
     return sanitize_label("_".join(parts))

@@ -46,18 +46,17 @@ RING_THICKNESS_PX = 4
 
 ```python
 def test_ring_never_touches_the_interior():
-    interior, ring = roi_masks((200, 200), "ellipse",
-                               (100.0, 100.0, 30.0, 30.0, 0.0))
+    interior, ring = roi_masks((200, 200), "ellipse", (100.0, 100.0, 30.0, 30.0, 0.0))
     assert np.count_nonzero((interior == 255) & (ring == 255)) == 0
 
 
 def test_ring_area_matches_the_annulus():
     gap, thickness = 2, 4
-    interior, ring = roi_masks((300, 300), "ellipse",
-                               (150.0, 150.0, 40.0, 40.0, 0.0),
-                               gap, thickness)
+    interior, ring = roi_masks(
+        (300, 300), "ellipse", (150.0, 150.0, 40.0, 40.0, 0.0), gap, thickness
+    )
     inner, outer = 40.0 + gap, 40.0 + gap + thickness
-    expected = math.pi * (outer ** 2 - inner ** 2)
+    expected = math.pi * (outer**2 - inner**2)
     assert abs(np.count_nonzero(ring) - expected) / expected < 0.10
 
 
@@ -78,35 +77,41 @@ def test_background_correction_recovers_the_true_signal():
     # ring read 1569 where the answer is 2900.
     image = np.full((200, 200), 100, dtype=np.uint16)
     cv2.circle(image, (100, 100), 30, 3000, -1)
-    interior, ring = roi_masks((200, 200), "ellipse",
-                               (100.0, 100.0, 30.0, 30.0, 0.0))
-    corrected = (masked_stats(image, interior)["mean"]
-                 - masked_stats(image, ring)["mean"])
+    interior, ring = roi_masks((200, 200), "ellipse", (100.0, 100.0, 30.0, 30.0, 0.0))
+    corrected = (
+        masked_stats(image, interior)["mean"] - masked_stats(image, ring)["mean"]
+    )
     assert abs(corrected - 2900.0) < 30.0
 
 
 def test_ring_excludes_a_neighbouring_roi(tmp_path):
     array = np.full((200, 200), 100, dtype=np.uint16)
     cv2.circle(array, (100, 100), 20, 3000, -1)
-    cv2.circle(array, (135, 100), 20, 3000, -1)   # neighbour, close by
+    cv2.circle(array, (135, 100), 20, 3000, -1)  # neighbour, close by
     path = tmp_path / "img_2026_07_20-17_46_24_raw.png"
     cv2.imwrite(str(path), array)
-    result = compute_image_stats(str(path), {
-        "a": ("ellipse", (100.0, 100.0, 20.0, 20.0, 0.0)),
-        "b": ("ellipse", (135.0, 100.0, 20.0, 20.0, 0.0))})
+    result = compute_image_stats(
+        str(path),
+        {
+            "a": ("ellipse", (100.0, 100.0, 20.0, 20.0, 0.0)),
+            "b": ("ellipse", (135.0, 100.0, 20.0, 20.0, 0.0)),
+        },
+    )
     # Without the exclusion the neighbour's 3000 would drag this up.
     assert result["stats"]["a"]["outline_mean"] < 200.0
 
 
 def test_ring_contours_trace_the_annulus():
-    contours = ring_contours((300, 300), "ellipse",
-                             (150.0, 150.0, 40.0, 40.0, 0.0), 2, 4)
-    assert len(contours) == 2          # an outer and an inner boundary
-    extents = sorted(np.max(np.hypot(points[:, 0] - 150.0,
-                                     points[:, 1] - 150.0))
-                     for points in contours)
-    assert abs(extents[0] - 42.0) < 2.0    # inner edge: radius + gap
-    assert abs(extents[1] - 46.0) < 2.0    # outer: + thickness
+    contours = ring_contours(
+        (300, 300), "ellipse", (150.0, 150.0, 40.0, 40.0, 0.0), 2, 4
+    )
+    assert len(contours) == 2  # an outer and an inner boundary
+    extents = sorted(
+        np.max(np.hypot(points[:, 0] - 150.0, points[:, 1] - 150.0))
+        for points in contours
+    )
+    assert abs(extents[0] - 42.0) < 2.0  # inner edge: radius + gap
+    assert abs(extents[1] - 46.0) < 2.0  # outer: + thickness
 ```
 
 Keep the existing interior-mask tests; delete only assertions about the old boundary stroke.
@@ -120,8 +125,9 @@ Expected: ImportError on `ring_contours`, and the ring tests failing on the stro
 
 ```python
 def _disk(radius):
-    return cv2.getStructuringElement(cv2.MORPH_ELLIPSE,
-                                     (2 * radius + 1, 2 * radius + 1))
+    return cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)
+    )
 
 
 def ring_mask(interior, gap_px, thickness_px):
@@ -149,17 +155,15 @@ def ring_mask(interior, gap_px, thickness_px):
     return ring
 
 
-def ring_contours(shape, kind, geometry, gap_px=RING_GAP_PX,
-                  thickness_px=RING_THICKNESS_PX):
+def ring_contours(
+    shape, kind, geometry, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX
+):
     """The annulus's boundaries as (N, 2) image-pixel arrays — the
     canvas draws these, taken from the very mask that is averaged, so
     the two cannot disagree."""
-    interior, ring = roi_masks(shape, kind, geometry, gap_px,
-                               thickness_px)
-    found, _hierarchy = cv2.findContours(ring, cv2.RETR_LIST,
-                                         cv2.CHAIN_APPROX_SIMPLE)
-    return [points.reshape(-1, 2).astype(float) for points in found
-            if len(points) >= 3]
+    interior, ring = roi_masks(shape, kind, geometry, gap_px, thickness_px)
+    found, _hierarchy = cv2.findContours(ring, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    return [points.reshape(-1, 2).astype(float) for points in found if len(points) >= 3]
 ```
 
 and rewrite `roi_masks` to build the interior as it does today, then
@@ -169,21 +173,22 @@ constants and dropping `OUTLINE_PERIMETER_PX`.
 - [ ] **Step 5: Exclude the neighbours** — rewrite `compute_image_stats`'s loop into two passes:
 
 ```python
-        interiors, rings = {}, {}
-        for roi_id, (kind, geometry) in effective_rois.items():
-            interiors[roi_id], rings[roi_id] = roi_masks(
-                array.shape[:2], kind, geometry, gap_px, thickness_px)
-        union = np.zeros(array.shape[:2], dtype=np.uint8)
-        for interior in interiors.values():
-            cv2.bitwise_or(union, interior, union)
-        for roi_id, ring in rings.items():
-            # Another ROI's interior is not background, however close.
-            others = cv2.subtract(union, interiors[roi_id])
-            ring[others == 255] = 0
-            stats = masked_stats(array, interiors[roi_id])
-            for name, value in masked_stats(array, ring).items():
-                stats[OUTLINE_STATS_PREFIX + name] = value
-            result["stats"][roi_id] = stats
+interiors, rings = {}, {}
+for roi_id, (kind, geometry) in effective_rois.items():
+    interiors[roi_id], rings[roi_id] = roi_masks(
+        array.shape[:2], kind, geometry, gap_px, thickness_px
+    )
+union = np.zeros(array.shape[:2], dtype=np.uint8)
+for interior in interiors.values():
+    cv2.bitwise_or(union, interior, union)
+for roi_id, ring in rings.items():
+    # Another ROI's interior is not background, however close.
+    others = cv2.subtract(union, interiors[roi_id])
+    ring[others == 255] = 0
+    stats = masked_stats(array, interiors[roi_id])
+    for name, value in masked_stats(array, ring).items():
+        stats[OUTLINE_STATS_PREFIX + name] = value
+    result["stats"][roi_id] = stats
 ```
 
 with the signature gaining the parameters:
@@ -228,8 +233,7 @@ In `test_analysis_session.py`:
 def test_cache_key_includes_the_ring(tmp_path):
     image = tmp_path / "a_2026_07_20-10_00_00_raw.png"
     image.write_bytes(b"")
-    roi = Roi(name="ROI 1", kind="ellipse",
-              geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
     session = AnalysisSession(rois=[roi])
     before = session.cache_key(str(image), roi)
     session.ring.gap_px = 5
@@ -243,8 +247,7 @@ In `test_roi_store.py`:
 ```python
 def test_background_ring_round_trips(tmp_path):
     session = AnalysisSession(directory=str(tmp_path))
-    session.ring.trait_set(gap_px=3, thickness_px=7,
-                           show_on_canvas=False)
+    session.ring.trait_set(gap_px=3, thickness_px=7, show_on_canvas=False)
     save_session(tmp_path, session)
 
     ring = load_session(tmp_path).ring
@@ -255,14 +258,23 @@ def test_background_ring_round_trips(tmp_path):
 def test_stats_written_before_the_ring_are_ignored(tmp_path):
     analysis = tmp_path / "analysis"
     analysis.mkdir()
-    (analysis / "roi_stats.json").write_text(json.dumps({
-        "version": 1, "entries": [{
-            "path": str(tmp_path / "a_raw.png"), "mtime": 1.0,
-            "roi_id": "abcd1234", "kind": "ellipse",
-            "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
-            "stats": {"mean": 7.0},
-        }],
-    }))
+    (analysis / "roi_stats.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "entries": [
+                    {
+                        "path": str(tmp_path / "a_raw.png"),
+                        "mtime": 1.0,
+                        "roi_id": "abcd1234",
+                        "kind": "ellipse",
+                        "geometry": [5.0, 5.0, 2.0, 2.0, 0.0],
+                        "stats": {"mean": 7.0},
+                    }
+                ],
+            }
+        )
+    )
     # They were measured with the boundary-stroke ring, so no current
     # key may match them.
     (key,) = load_roi_stats(tmp_path)
@@ -293,9 +305,14 @@ with `from .consts import RING_GAP_PX, RING_THICKNESS_PX`, plus
 key:
 
 ```python
-        return (str(path), mtime, roi.roi_id, roi.kind,
-                tuple(roi.effective_geometry(capture_time)),
-                (self.ring.gap_px, self.ring.thickness_px))
+return (
+    str(path),
+    mtime,
+    roi.roi_id,
+    roi.kind,
+    tuple(roi.effective_geometry(capture_time)),
+    (self.ring.gap_px, self.ring.thickness_px),
+)
 ```
 
 - [ ] **Step 4: Persist and migrate** — `roi_store.py` gains
@@ -304,11 +321,21 @@ key:
 mirroring the scale block, plus the key change:
 
 ```python
-    payload = {"version": 1, "entries": [{
-        "path": key[0], "mtime": key[1], "roi_id": key[2],
-        "kind": key[3], "geometry": list(key[4]), "ring": list(key[5]),
-        "stats": value,
-    } for key, value in stats.items()]}
+payload = {
+    "version": 1,
+    "entries": [
+        {
+            "path": key[0],
+            "mtime": key[1],
+            "roi_id": key[2],
+            "kind": key[3],
+            "geometry": list(key[4]),
+            "ring": list(key[5]),
+            "stats": value,
+        }
+        for key, value in stats.items()
+    ],
+}
 ```
 
 ```python
@@ -318,25 +345,32 @@ def _stats_key(entry):
     be recomputed rather than trusted."""
     kind, geometry = normalize(entry["kind"], entry["geometry"])
     ring = entry.get("ring")
-    return (entry["path"], float(entry["mtime"]), entry["roi_id"],
-            kind, tuple(geometry),
-            tuple(ring) if ring is not None else None)
+    return (
+        entry["path"],
+        float(entry["mtime"]),
+        entry["roi_id"],
+        kind,
+        tuple(geometry),
+        tuple(ring) if ring is not None else None,
+    )
 ```
 
 - [ ] **Step 5: Carry the ring to the workers** — `roi_batch._run` unpacks three-item work entries:
 
 ```python
-        futures = [executor.submit(compute_image_stats, path, rois,
-                                   ring[0], ring[1])
-                   for path, rois, ring in work_items]
+futures = [
+    executor.submit(compute_image_stats, path, rois, ring[0], ring[1])
+    for path, rois, ring in work_items
+]
 ```
 
 and `compute_single(path, effective_rois, ring)` passes them too. In `roi_controller`, `_missing_work` appends `(path, missing, (ring.gap_px, ring.thickness_px))`, and `_instant_stats` passes the same pair. Add the two traits to the persistence observer:
 
 ```python
-             "analysis_model:session:ring:gap_px, "
-             "analysis_model:session:ring:thickness_px, "
-             "analysis_model:session:ring:show_on_canvas, "
+"analysis_model:session:ring:gap_px,"
+
+"analysis_model:session:ring:thickness_px, "
+"analysis_model:session:ring:show_on_canvas, "
 ```
 
 - [ ] **Step 6: Run the whole controls_ui suite**
@@ -375,9 +409,8 @@ RING_PEN = QPen(QColor(0, 229, 255, 140), 0, Qt.PenStyle.DashLine)
 - [ ] **Step 2: Feed it from the canvas editor** — in `view.py`'s `_sync_roi_layer`, before `self._roi_layer.sync(...)`:
 
 ```python
-        ring = model.roi_analysis.session.ring
-        self._roi_layer.set_ring(ring.gap_px, ring.thickness_px,
-                                 ring.show_on_canvas)
+ring = model.roi_analysis.session.ring
+self._roi_layer.set_ring(ring.gap_px, ring.thickness_px, ring.show_on_canvas)
 ```
 
 and add the three ring traits to the editor's `_on_roi_state_changed` observer list (and its `remove=True` twin in `dispose`).
@@ -385,11 +418,16 @@ and add the three ring traits to the editor's `_on_roi_state_changed` observer l
 - [ ] **Step 3: Add the toggle** — in `analysis_toolbar`, after the scale-bar toggle:
 
 ```python
-    UItem("object.roi_analysis.show_background_ring",
-          editor=IconToggleEditor(
-              on_glyph=ICON_VISIBILITY, off_glyph=ICON_VISIBILITY_OFF,
-              tooltip="Show the background ring each ROI's correction "
-                      "is measured from")),
+(
+    UItem(
+        "object.roi_analysis.show_background_ring",
+        editor=IconToggleEditor(
+            on_glyph=ICON_VISIBILITY,
+            off_glyph=ICON_VISIBILITY_OFF,
+            tooltip="Show the background ring each ROI's correction is measured from",
+        ),
+    ),
+)
 ```
 
 with `show_background_ring = Bool(True)` on `RoiAnalysisModel` mirrored onto `session.ring.show_on_canvas` by the controller, exactly as `show_scale_bar` is — the toolbar outlives any one session.
@@ -420,16 +458,17 @@ git commit -m "feat(analysis): draw the background ring on the canvas"
 
 ```python
 def test_subtracted_series_starts_every_curve_at_zero():
-    series = {"a": ("ROI 1", [0.0, 1.0], [10.0, 30.0]),
-              "b": ("ROI 2", [0.0, 1.0], [100.0, 90.0])}
+    series = {
+        "a": ("ROI 1", [0.0, 1.0], [10.0, 30.0]),
+        "b": ("ROI 2", [0.0, 1.0], [100.0, 90.0]),
+    }
     result = subtracted_series(series)
     assert result["a"][2] == [0.0, 20.0]
     assert result["b"][2] == [0.0, -10.0]
 
 
 def test_subtracted_series_uses_the_first_finite_value():
-    series = {"a": ("ROI 1", [0.0, 1.0, 2.0],
-                    [math.nan, 10.0, 15.0])}
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0], [math.nan, 10.0, 15.0])}
     values = subtracted_series(series)["a"][2]
     assert math.isnan(values[0])
     assert values[1] == 0.0 and values[2] == 5.0
@@ -450,9 +489,13 @@ def subtracted_series(series):
     shifted = {}
     for roi_id, (name, elapsed, values) in series.items():
         first = next((value for value in values if value == value), None)
-        shifted[roi_id] = (name, elapsed, values if first is None else [
-            value if value != value else value - first
-            for value in values])
+        shifted[roi_id] = (
+            name,
+            elapsed,
+            values
+            if first is None
+            else [value if value != value else value - first for value in values],
+        )
     return shifted
 ```
 

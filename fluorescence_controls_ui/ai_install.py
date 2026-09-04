@@ -6,6 +6,7 @@ worker thread, streaming output into a cancellable ``QProgressDialog``.
 Mirrors ``image_viewer/sam_download.py``'s QThread + QProgressDialog
 pattern for consistency.
 """
+
 import importlib
 import os
 import signal
@@ -87,7 +88,8 @@ class _InstallThread(QThread):
             try:
                 subprocess.run(
                     ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             except Exception as e:
                 logger.debug(f"taskkill failed for pid {process.pid}: {e}")
@@ -106,8 +108,12 @@ class _InstallThread(QThread):
         else:
             group_kwargs = {"start_new_session": True}
         self._process = subprocess.Popen(
-            args, cwd=self._root, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, **group_kwargs,
+            args,
+            cwd=self._root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            **group_kwargs,
         )
         for line in self._process.stdout:
             line = line.rstrip()
@@ -137,8 +143,15 @@ class _InstallThread(QThread):
                     # --platform: the DirectML wheel exists only for
                     # win_amd64, and a multi-platform pixi manifest
                     # fails to resolve it without the restriction.
-                    ["pixi", "add", "--pypi", "--platform", "win-64",
-                     "onnxruntime-directml"])
+                    [
+                        "pixi",
+                        "add",
+                        "--pypi",
+                        "--platform",
+                        "win-64",
+                        "onnxruntime-directml",
+                    ]
+                )
             except Exception as e:
                 gpu_code = None
                 logger.warning(

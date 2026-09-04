@@ -1,19 +1,22 @@
 import platform
 
-from device_viewer.consts import CAMERA_SOURCES
-from envisage.api import PREFERENCES_PANES, PREFERENCES_CATEGORIES
-from traits.api import List
+from envisage.api import PREFERENCES_CATEGORIES, PREFERENCES_PANES
+from traits.api import List, observe
 
+from device_viewer.consts import CAMERA_SOURCES
 from fluorescence_controller.consts import FLUORESCENCE_HWID, START_DEVICE_MONITORING
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.hardware_device_monitoring_helpers import check_connected_ports_hwid
 from template_status_and_controls.base_plugin import BaseStatusPlugin
-from traits.api import observe
+
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.hardware_device_monitoring_helpers import (
+    check_connected_ports_hwid,
+)
 
 from logger.logger_service import get_logger
+
 logger = get_logger(__name__)
 
-from .consts import PKG, PKG_name, ACTOR_TOPIC_DICT, ASI_DRIVER_URL
+from .consts import ACTOR_TOPIC_DICT, ASI_DRIVER_URL, PKG, PKG_name
 
 
 class FluorescenceControlsUiPlugin(BaseStatusPlugin):
@@ -34,10 +37,12 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
 
     def _preferences_panes_default(self):
         from .preferences import FluorescencePreferencesPane
+
         return [FluorescencePreferencesPane]
 
     def _preferences_categories_default(self):
         from .preferences import fluorescence_tab
+
         return [fluorescence_tab]
 
     # ASI cameras join the device viewer's own camera dropdown and render
@@ -46,10 +51,12 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
 
     def _camera_sources_default(self):
         from .cameras.provider import AsiCameraSourceProvider
+
         return [AsiCameraSourceProvider]
 
     def _get_dock_pane_class(self):
         from .dock_pane import FluorescenceStatusDockPane
+
         return FluorescenceStatusDockPane
 
     def _get_extra_dock_pane_classes(self) -> list:
@@ -60,15 +67,21 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
             FluorescenceRoiPlotDockPane,
         )
         from .image_viewer.dock_pane import FluorescenceImageViewerDockPane
-        return [FluorescenceImageViewerDockPane,
-                FluorescenceRoiPlotDockPane, AdvancedCameraDockPane]
+
+        return [
+            FluorescenceImageViewerDockPane,
+            FluorescenceRoiPlotDockPane,
+            AdvancedCameraDockPane,
+        ]
 
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT
 
     def _get_menu_additions(self) -> list:
         from pyface.action.schema.schema_addition import SchemaAddition
-        from .menus import tools_menu_factory, help_menu_factory
+
+        from .menus import help_menu_factory, tools_menu_factory
+
         return [
             SchemaAddition(
                 factory=tools_menu_factory,
@@ -91,20 +104,28 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
         # boot plugins start before the GUI loop runs.
         if platform.system() == "Windows":
             from pyface.gui import GUI
+
             GUI.invoke_later(self._show_asi_driver_notice)
 
     def _show_asi_driver_notice(self):
         from microdrop_application.dialogs.pyface_wrapper import information
+
         from .preferences import FluorescencePreferences
 
         try:
             preferences = FluorescencePreferences(
-                preferences=self.application.preferences_helper.preferences)
+                preferences=self.application.preferences_helper.preferences
+            )
         except Exception:
-            logger.warning("Preferences unavailable; showing ASI driver "
-                           "notice without a don't-show-again option")
+            logger.warning(
+                "Preferences unavailable; showing ASI driver "
+                "notice without a don't-show-again option"
+            )
             preferences = None
-        if preferences is not None and not preferences.fluorescence_show_asi_driver_notice:
+        if (
+            preferences is not None
+            and not preferences.fluorescence_show_asi_driver_notice
+        ):
             return
 
         result = information(

@@ -5,13 +5,12 @@ from pyface.action.schema.schema import SGroup, SMenu
 from traits.api import Instance, Str
 
 from microdrop_utils.dramatiq_traits_helpers import DramatiqMessagePublishAction
-
 from microdrop_utils.firmware_upload_dialog.controller import (
     FirmwareUploadDialogController,
 )
 
 from .ai_install import install_ai_support
-from .consts import START_DEVICE_MONITORING, ASI_DRIVER_URL
+from .consts import ASI_DRIVER_URL, START_DEVICE_MONITORING
 from .firmware_upload.controller import make_firmware_upload_controller
 from .image_viewer.analysis.roi_model import roi_analysis_model
 from .image_viewer.analysis.sam_detect import sam_available
@@ -56,20 +55,30 @@ def help_menu_factory():
     """Help-menu group: the Windows camera-driver download link (the same
     URL the launch notice points at) and the optional AI ROI support
     installer."""
-    return SGroup(InstallAsiDriverAction(), InstallAiSupportAction(),
-                  id="fluorescence_help_actions")
+    return SGroup(
+        InstallAsiDriverAction(),
+        InstallAiSupportAction(),
+        id="fluorescence_help_actions",
+    )
 
 
 def fluorescence_tools_menu_factory():
     """Tools > Peripherals > Fluorescence > Search Connection / Upload
     Firmware."""
     search = DramatiqMessagePublishAction(
-        name="&Search Connection", topic=START_DEVICE_MONITORING)
-    return SMenu(items=[search, UploadFirmwareAction()],
-                 id="fluorescence_tools", name="&Fluorescence")
+        name="&Search Connection", topic=START_DEVICE_MONITORING
+    )
+    return SMenu(
+        items=[search, UploadFirmwareAction()],
+        id="fluorescence_tools",
+        name="&Fluorescence",
+    )
 
 
 def tools_menu_factory():
     # The fluorescence plugin contributes its own Tools -> Peripherals entry.
-    return SMenu(items=[fluorescence_tools_menu_factory()],
-                 id="peripherals_tools", name="&Peripherals")
+    return SMenu(
+        items=[fluorescence_tools_menu_factory()],
+        id="peripherals_tools",
+        name="&Peripherals",
+    )

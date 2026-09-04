@@ -3,16 +3,29 @@ its discovered images, the loaded pixel data, the display window, and the
 slideshow state. Mutated only on the GUI thread (button events, timers,
 the controller's loader), so no Qt bridging is needed.
 """
+
 from traits.api import (
-    Any, Bool, Button, Directory, Event, HasTraits, Instance, Int, List,
-    Property, Range, Str, observe,
+    Any,
+    Bool,
+    Button,
+    Directory,
+    Event,
+    HasTraits,
+    Instance,
+    Int,
+    List,
+    Property,
+    Range,
+    Str,
+    observe,
 )
 from traits.observation.api import parse
 
 from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
 from ..consts import (
-    IMAGE_ZOOM_STEP_BOUNDS, IMAGE_ZOOM_STEP_DEFAULT,
+    IMAGE_ZOOM_STEP_BOUNDS,
+    IMAGE_ZOOM_STEP_DEFAULT,
     PERSISTED_VIEWER_TRAITS,
 )
 from ..preferences import FluorescencePreferences
@@ -136,24 +149,19 @@ class FluorescenceImageViewerModel(HasTraits):
     max_burst_number = Property(Int, observe="bursts.items")
 
     # Display window: percentile auto-contrast, or the manual min/max pair.
-    auto_contrast = Bool(True, desc="Window the displayed intensities to "
-                                    "the 0.1–99.9 percentile range")
+    auto_contrast = Bool(
+        True, desc="Window the displayed intensities to the 0.1–99.9 percentile range"
+    )
 
     #:  Min/Max sliders — calibrates their scale (e.g. 4095 for 12-bit data).
     #: upper bound of the Min/Max sliders. Max - 1
     _max_window_min = Property(observe="window_max")
 
     window_min = RangeWithViewHints(
-        0.0,
-        "_max_window_min",
-        0.0,
-        desc="intensity displayed as black"
+        0.0, "_max_window_min", 0.0, desc="intensity displayed as black"
     )
     window_max = RangeWithViewHints(
-        1.0,
-        UINT16_MAX,
-        DEFAULT_WINDOW_MAX,
-        desc="intensity displayed as white"
+        1.0, UINT16_MAX, DEFAULT_WINDOW_MAX, desc="intensity displayed as white"
     )
 
     #: Slideshow auto-advance (the play/pause toggle).
@@ -192,29 +200,37 @@ class FluorescenceImageViewerModel(HasTraits):
     #: an image from elsewhere, '' when nothing is discovered) — the arrows
     #: traverse the whole experiment, so the counter spans every image group.
     position_text = Property(
-        Str, observe=("bursts.items, burst_index, selected_burst, "
-                      "selected_wavelength, paths.items, current_path"))
+        Str,
+        observe=(
+            "bursts.items, burst_index, selected_burst, "
+            "selected_wavelength, paths.items, current_path"
+        ),
+    )
 
     def _roi_analysis_default(self):
         return roi_analysis_model
 
     def traits_init(self):
         self._self_preference_change = True
-        self.trait_set(**{
-            model_trait: getattr(self.preferences, preference_trait)
-            for model_trait, preference_trait
-            in PERSISTED_VIEWER_TRAITS.items()})
+        self.trait_set(
+            **{
+                model_trait: getattr(self.preferences, preference_trait)
+                for model_trait, preference_trait in PERSISTED_VIEWER_TRAITS.items()
+            }
+        )
         self._self_preference_change = False
 
     @observe(f"[{','.join(PERSISTED_VIEWER_TRAITS)}]", post_init=True)
     def _push_preferences(self, event):
         self._self_preference_change = True
-        setattr(self.preferences,
-                PERSISTED_VIEWER_TRAITS[event.name], event.new)
+        setattr(self.preferences, PERSISTED_VIEWER_TRAITS[event.name], event.new)
         self._self_preference_change = False
 
-    @observe(parse("preferences").match(
-        lambda name, trait: name in set(PERSISTED_VIEWER_TRAITS.values())))
+    @observe(
+        parse("preferences").match(
+            lambda name, trait: name in set(PERSISTED_VIEWER_TRAITS.values())
+        )
+    )
     def _pull_preferences(self, event):
         if self._self_preference_change:
             return
@@ -290,8 +306,12 @@ class FluorescenceImageViewerModel(HasTraits):
         if self.selected_wavelength == WAVELENGTH_FILTER_ALL:
             return list(paths)
         from .discovery import detect_wavelength
-        return [path for path in paths
-                if detect_wavelength(path) == self.selected_wavelength]
+
+        return [
+            path
+            for path in paths
+            if detect_wavelength(path) == self.selected_wavelength
+        ]
 
     def _get_position_text(self):
         """Position across every image group in the experiment (the arrows

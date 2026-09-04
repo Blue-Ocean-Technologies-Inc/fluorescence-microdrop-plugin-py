@@ -68,6 +68,7 @@ without the optional ``osam`` package — ``sam_available()`` reports which.
 Ported from the standalone droplet_roi prototype (labelme-derived); see
 docs/superpowers/specs/2026-08-07-automatic-roi-identification-design.md.
 """
+
 import collections
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -75,15 +76,25 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import numpy as np
 from traits.api import (
-    Array, Bool, Float, HasTraits, Int, List, Property, Str,
+    Array,
+    Bool,
+    Float,
+    HasTraits,
+    Int,
+    List,
+    Property,
+    Str,
 )
 
 from logger.logger_service import get_logger
 
 from .consts import (
-    AI_DETECT_GRID_TARGET_POINTS, AI_DETECT_MAX_MASK_AREA_FRACTION,
-    AI_DETECT_MIN_MASK_AREA_PX, AI_ENCODE_WORK_WIDTH_PX,
-    AI_NORMALIZE_HIGH_PERCENTILE, AI_NORMALIZE_LOW_PERCENTILE,
+    AI_DETECT_GRID_TARGET_POINTS,
+    AI_DETECT_MAX_MASK_AREA_FRACTION,
+    AI_DETECT_MIN_MASK_AREA_PX,
+    AI_ENCODE_WORK_WIDTH_PX,
+    AI_NORMALIZE_HIGH_PERCENTILE,
+    AI_NORMALIZE_LOW_PERCENTILE,
 )
 from .roi_geometry import normalize
 
@@ -91,7 +102,7 @@ logger = get_logger(__name__)
 
 try:
     import osam
-except ImportError:          # optional dependency: Help menu installs it
+except ImportError:  # optional dependency: Help menu installs it
     osam = None
 
 #: (model_name, display_name) — PROTO sam.py MODEL_OPTIONS, labelme's
@@ -114,8 +125,9 @@ def sam_available():
     return osam is not None
 
 
-def normalize_to_uint8(array, low_pct=AI_NORMALIZE_LOW_PERCENTILE,
-                       high_pct=AI_NORMALIZE_HIGH_PERCENTILE):
+def normalize_to_uint8(
+    array, low_pct=AI_NORMALIZE_LOW_PERCENTILE, high_pct=AI_NORMALIZE_HIGH_PERCENTILE
+):
     """Percentile-clip contrast stretch to uint8 (PROTO imaging.py)."""
     if array.dtype == np.uint8 and array.max() > 200:
         return array
@@ -127,8 +139,7 @@ def normalize_to_uint8(array, low_pct=AI_NORMALIZE_LOW_PERCENTILE,
     if high - low <= 0:
         return np.zeros(array.shape, dtype=np.uint8)
     normalized = (array - low) / (high - low) * 255
-    return np.nan_to_num(np.clip(normalized, 0, 255),
-                         nan=0.0).astype(np.uint8)
+    return np.nan_to_num(np.clip(normalized, 0, 255), nan=0.0).astype(np.uint8)
 
 
 def to_rgb(gray_u8):
@@ -140,10 +151,14 @@ def to_rgb(gray_u8):
 
 ```python
 """Tests for SAM candidate conversion and filtering (no osam needed)."""
+
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.sam_detect import (
-    AI_MODEL_OPTIONS, DEFAULT_AI_MODEL, normalize_to_uint8, sam_available,
+    AI_MODEL_OPTIONS,
+    DEFAULT_AI_MODEL,
+    normalize_to_uint8,
+    sam_available,
 )
 
 
@@ -192,7 +207,10 @@ def test_normalize_of_flat_frame_is_black():
 from traits.api import TraitError  # noqa: F401  (import check only)
 
 from fluorescence_controls_ui.image_viewer.analysis.sam_detect import (
-    Candidate, Detection, candidate_from_detection, suppress_with_votes,
+    Candidate,
+    Detection,
+    candidate_from_detection,
+    suppress_with_votes,
 )
 
 
@@ -200,14 +218,12 @@ def _disk_detection(cx=30.0, cy=30.0, r=10, score=0.9):
     size = 2 * r + 1
     mask = np.zeros((size, size), dtype=bool)
     yy, xx = np.mgrid[0:size, 0:size]
-    mask[(xx - r) ** 2 + (yy - r) ** 2 <= r ** 2] = True
-    return Detection(bbox=[cx - r, cy - r, cx + r, cy + r],
-                     mask=mask, score=score)
+    mask[(xx - r) ** 2 + (yy - r) ** 2 <= r**2] = True
+    return Detection(bbox=[cx - r, cy - r, cx + r, cy + r], mask=mask, score=score)
 
 
 def test_disk_mask_becomes_polygon_and_ellipse_candidate():
-    candidate = candidate_from_detection(_disk_detection(),
-                                         prompt=[30.0, 30.0])
+    candidate = candidate_from_detection(_disk_detection(), prompt=[30.0, 30.0])
     kind, geometry = candidate.geometry_for("ellipse")
     assert kind == "ellipse"
     cx, cy, rx, ry, _angle = geometry
@@ -219,14 +235,16 @@ def test_disk_mask_becomes_polygon_and_ellipse_candidate():
 
 
 def test_duplicate_masks_merge_and_sum_votes():
-    kept = suppress_with_votes([(_disk_detection(score=0.9), 1),
-                                (_disk_detection(score=0.5), 1)])
+    kept = suppress_with_votes(
+        [(_disk_detection(score=0.9), 1), (_disk_detection(score=0.5), 1)]
+    )
     assert len(kept) == 1 and kept[0][1] == 2
 
 
 def test_click_candidates_are_exempt_from_significance():
-    clicked = candidate_from_detection(_disk_detection(),
-                                       prompt=[30.0, 30.0], source="click")
+    clicked = candidate_from_detection(
+        _disk_detection(), prompt=[30.0, 30.0], source="click"
+    )
     swept = candidate_from_detection(_disk_detection(), votes=1)
     assert clicked.passes(min_votes=2, min_size=0)
     assert not swept.passes(min_votes=2, min_size=0)
@@ -291,25 +309,27 @@ def test_click_candidates_are_exempt_from_significance():
 - [ ] **Step 2: Preferences** — in `preferences.py` add to `FluorescencePreferences` (below the fit-presets trait):
 
 ```python
-    # SAM model for AI ROI detection in the image viewer. Weights are
-    # downloaded on demand (cancellable dialog); cancel reverts this.
-    fluorescence_ai_model = Str(
-        DEFAULT_AI_MODEL, desc="SAM model for AI ROI detection")
+# SAM model for AI ROI detection in the image viewer. Weights are
+# downloaded on demand (cancellable dialog); cancel reverts this.
+fluorescence_ai_model = Str(DEFAULT_AI_MODEL, desc="SAM model for AI ROI detection")
 ```
 
 with `from .image_viewer.analysis.sam_detect import AI_MODEL_OPTIONS, DEFAULT_AI_MODEL` at the top, and on the pane a new group after `controls_group`, following the existing pattern:
 
 ```python
-    ai_group = create_item_label_group(
-        "fluorescence_ai_model",
-        label_text="AI ROI detection model",
-        item_editor=EnumEditor(values={
+ai_group = create_item_label_group(
+    "fluorescence_ai_model",
+    label_text="AI ROI detection model",
+    item_editor=EnumEditor(
+        values={
             name: f"{index}:{label}"
-            for index, (name, label) in enumerate(AI_MODEL_OPTIONS)}),
-        group_label="AI ROI Detection",
-        group_show_border=True,
-        group_style_sheet=preferences_group_style_sheet,
-    )
+            for index, (name, label) in enumerate(AI_MODEL_OPTIONS)
+        }
+    ),
+    group_label="AI ROI Detection",
+    group_show_border=True,
+    group_style_sheet=preferences_group_style_sheet,
+)
 ```
 
 (`EnumEditor` from `traitsui.api`; check `create_item_label_group`'s signature in `microdrop_utils/preferences_UI_helpers.py` first — if it takes no `item_editor` argument, build the group as the `settings` VGroup does, with an explicit `Item("fluorescence_ai_model", editor=EnumEditor(...), show_label=False)`.) Add `ai_group` to the pane's `View(...)`.
@@ -355,30 +375,37 @@ and have `download_ai_model` early-return `True` via `model_is_cached`. Top impo
 - [ ] **Step 1: `RoiAnalysisController._create_rois`** — below `_create_roi`:
 
 ```python
-    @observe("analysis_model:ai_rois_accepted")
-    def _on_ai_rois_accepted(self, event):
-        pairs, anchor = event.new
-        self._create_rois(pairs, anchor)
+@observe("analysis_model:ai_rois_accepted")
+def _on_ai_rois_accepted(self, event):
+    pairs, anchor = event.new
+    self._create_rois(pairs, anchor)
 
-    def _create_rois(self, pairs, anchor):
-        """Bulk sibling of _create_roi for accepted AI candidates: one
-        save and one batch restart for the whole set."""
-        created = []
-        for kind, geometry in pairs:
-            roi = Roi(name=self.session.next_roi_name(), kind=kind,
-                      geometry=[float(value) for value in geometry],
-                      base_anchor=anchor,
-                      style=RoiStyle(color=DEFAULT_ROI_COLORS[
-                          len(self.session.rois) % len(DEFAULT_ROI_COLORS)]))
-            self.session.rois.append(roi)
-            created.append(roi)
-        if not created:
-            return created
-        self._save_config()
-        self._restart_batch_if_running()
-        for roi in created:
-            self._instant_stats(roi)
+
+def _create_rois(self, pairs, anchor):
+    """Bulk sibling of _create_roi for accepted AI candidates: one
+    save and one batch restart for the whole set."""
+    created = []
+    for kind, geometry in pairs:
+        roi = Roi(
+            name=self.session.next_roi_name(),
+            kind=kind,
+            geometry=[float(value) for value in geometry],
+            base_anchor=anchor,
+            style=RoiStyle(
+                color=DEFAULT_ROI_COLORS[
+                    len(self.session.rois) % len(DEFAULT_ROI_COLORS)
+                ]
+            ),
+        )
+        self.session.rois.append(roi)
+        created.append(roi)
+    if not created:
         return created
+    self._save_config()
+    self._restart_batch_if_running()
+    for roi in created:
+        self._instant_stats(roi)
+    return created
 ```
 
 - [ ] **Step 2: Write `AiRoiController`** (module mirrors `roi_controller.py`'s header conventions). Responsibilities, each an `@observe` handler or method:
@@ -399,6 +426,7 @@ and have `download_ai_model` early-return `True` via `model_is_cached`. Top impo
 
 ```python
 """Accept/discard flow: candidates -> filters -> session ROIs."""
+
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.ai_controller import (
@@ -419,25 +447,29 @@ from fluorescence_controls_ui.image_viewer.model import (
 
 
 def _candidate(votes, rx=10.0):
-    return Candidate(polygon=[0.0, 0.0, 20.0, 0.0, 20.0, 20.0],
-                     ellipse=[10.0, 10.0, rx, rx, 0.0],
-                     votes=votes, score=0.9)
+    return Candidate(
+        polygon=[0.0, 0.0, 20.0, 0.0, 20.0, 20.0],
+        ellipse=[10.0, 10.0, rx, rx, 0.0],
+        votes=votes,
+        score=0.9,
+    )
 
 
 def _controllers():
     viewer = FluorescenceImageViewerModel()
     analysis = RoiAnalysisModel()
-    roi_controller = RoiAnalysisController(viewer_model=viewer,
-                                           analysis_model=analysis)
-    ai_controller = AiRoiController(viewer_model=viewer,
-                                    analysis_model=analysis)
+    roi_controller = RoiAnalysisController(viewer_model=viewer, analysis_model=analysis)
+    ai_controller = AiRoiController(viewer_model=viewer, analysis_model=analysis)
     return analysis, roi_controller, ai_controller
 
 
 def test_accept_commits_only_filter_passing_undiscarded_candidates():
     analysis, roi_controller, _ai = _controllers()
-    analysis.ai_candidates = [_candidate(votes=3), _candidate(votes=1),
-                              _candidate(votes=3)]
+    analysis.ai_candidates = [
+        _candidate(votes=3),
+        _candidate(votes=1),
+        _candidate(votes=3),
+    ]
     analysis.ai_candidates[2].discarded = True
     analysis.ai_significance = 2
     analysis.ai_accept_button = True
@@ -485,25 +517,41 @@ def test_output_kind_controls_accepted_geometry():
 - [ ] **Step 1: Toolbar** — append to `analysis_toolbar` after the reset button, using icons from `microdrop_style.icons.icons` (pick existing glyphs: `ICON_AUTO_AWESOME` or nearest available "AI/sparkle" glyph for the picker, `ICON_GRID_ON`-style for detect-all, `ICON_TIMELINE`-style for tracking — check `icons.py` for what exists and choose the closest three, no new font assets):
 
 ```python
-    UItem("object.roi_analysis.ai_pick_button",
-          editor=IconModeButtonEditor(
-              glyph=ICON_AI_PICK, mode="ai_pick",
-              tooltip="AI picker: click a droplet and the model segments "
-                      "it into an ROI. Stays armed — Esc puts it away"),
-          enabled_when="analysis.ai_available"),
-    UItem("object.roi_analysis.ai_detect_button",
-          editor=IconButtonEditor(
-              glyph=ICON_AI_DETECT,
-              tooltip="Detect all droplets on this frame (AI grid "
-                      "sweep). Results appear as dashed candidates: "
-                      "click to discard, then Accept"),
-          enabled_when="analysis.ai_available"),
-    UItem("object.roi_analysis.ai_track_button",
-          editor=IconButtonEditor(
-              glyph=ICON_AI_TRACK,
-              tooltip="Track the ROIs across later frames (drift). "
-                      "Press again to stop; finished frames are kept"),
-          enabled_when="analysis.ai_available"),
+(
+    UItem(
+        "object.roi_analysis.ai_pick_button",
+        editor=IconModeButtonEditor(
+            glyph=ICON_AI_PICK,
+            mode="ai_pick",
+            tooltip="AI picker: click a droplet and the model segments "
+            "it into an ROI. Stays armed — Esc puts it away",
+        ),
+        enabled_when="analysis.ai_available",
+    ),
+)
+(
+    UItem(
+        "object.roi_analysis.ai_detect_button",
+        editor=IconButtonEditor(
+            glyph=ICON_AI_DETECT,
+            tooltip="Detect all droplets on this frame (AI grid "
+            "sweep). Results appear as dashed candidates: "
+            "click to discard, then Accept",
+        ),
+        enabled_when="analysis.ai_available",
+    ),
+)
+(
+    UItem(
+        "object.roi_analysis.ai_track_button",
+        editor=IconButtonEditor(
+            glyph=ICON_AI_TRACK,
+            tooltip="Track the ROIs across later frames (drift). "
+            "Press again to stop; finished frames are kept",
+        ),
+        enabled_when="analysis.ai_available",
+    ),
+)
 ```
 
   When AI is unavailable the buttons are disabled; extend each tooltip with "— install via Help > Install AI support" ONLY in the disabled state if the editor supports it, otherwise append that sentence to all three tooltips unconditionally.
@@ -532,6 +580,7 @@ class InstallAiSupportAction(Action):
 
     def perform(self, event):
         from .ai_install import install_ai_support
+
         if install_ai_support():
             roi_analysis_model.ai_available = True
 ```

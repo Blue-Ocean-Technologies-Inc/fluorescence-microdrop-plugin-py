@@ -16,13 +16,10 @@ import sys
 
 from PySide6.QtWidgets import QApplication
 
-from microdrop_utils.dramatiq_controller_base import (
-    generate_class_method_dramatiq_listener_actor,
-)
-from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
-
 from fluorescence_controller.consts import (
-    ACTOR_TOPIC_DICT, FIRMWARE_UPLOAD_FINISHED, FIRMWARE_UPLOAD_LOG,
+    ACTOR_TOPIC_DICT,
+    FIRMWARE_UPLOAD_FINISHED,
+    FIRMWARE_UPLOAD_LOG,
     FIRMWARE_UPLOAD_STARTED,
 )
 from fluorescence_controller.fluorescence_controller_base import (
@@ -39,6 +36,11 @@ from fluorescence_controls_ui.firmware_upload.controller import (
 )
 from fluorescence_controls_ui.live_state import fluorescence_live_state
 
+from microdrop_utils.dramatiq_controller_base import (
+    generate_class_method_dramatiq_listener_actor,
+)
+from microdrop_utils.dramatiq_pub_sub_helpers import MessageRouterActor
+
 # Dramatiq listener receiving the backend's firmware-upload signals.
 DEMO_LISTENER_NAME = "firmware_upload_demo_listener"
 
@@ -47,14 +49,14 @@ def _on_backend_message(timestamped_message, topic):
     """Demo stand-in for the plugin's FluorescenceMessageHandler (worker
     thread): ferry each firmware-upload signal into live_state — the dialog
     controller's dispatch="ui" observer applies it on the GUI thread."""
-    fluorescence_live_state.firmware_upload_message = (
-        topic, str(timestamped_message))
+    fluorescence_live_state.firmware_upload_message = (topic, str(timestamped_message))
 
 
 def main():
     app = QApplication.instance() or QApplication(sys.argv)
 
     from microdrop_style.helpers import style_app
+
     style_app(app)
 
     router = MessageRouterActor()
@@ -63,21 +65,30 @@ def main():
     # the controller base); keep the reference alive for the app's lifetime.
     demo_backend_class = type(
         "DemoFluorescenceBackend",
-        (FluorescenceFirmwareUploadService, FluorescenceMonitorMixinService,
-         FluorescenceControllerBase), {})
+        (
+            FluorescenceFirmwareUploadService,
+            FluorescenceMonitorMixinService,
+            FluorescenceControllerBase,
+        ),
+        {},
+    )
     backend = demo_backend_class()
 
     listener_actor = generate_class_method_dramatiq_listener_actor(
-        listener_name=DEMO_LISTENER_NAME, class_method=_on_backend_message)
+        listener_name=DEMO_LISTENER_NAME, class_method=_on_backend_message
+    )
 
     for backend_listener_name, topics in ACTOR_TOPIC_DICT.items():
         for topic in topics:
             router.message_router_data.add_subscriber_to_topic(
-                topic, backend_listener_name)
-    for topic in (FIRMWARE_UPLOAD_STARTED, FIRMWARE_UPLOAD_LOG,
-                  FIRMWARE_UPLOAD_FINISHED):
-        router.message_router_data.add_subscriber_to_topic(
-            topic, DEMO_LISTENER_NAME)
+                topic, backend_listener_name
+            )
+    for topic in (
+        FIRMWARE_UPLOAD_STARTED,
+        FIRMWARE_UPLOAD_LOG,
+        FIRMWARE_UPLOAD_FINISHED,
+    ):
+        router.message_router_data.add_subscriber_to_topic(topic, DEMO_LISTENER_NAME)
 
     controller = make_firmware_upload_controller()
     controller.open()
@@ -87,7 +98,8 @@ def main():
 
 if __name__ == "__main__":
     from microdrop_utils.broker_server_helpers import (
-        dramatiq_workers_context, redis_server_context,
+        dramatiq_workers_context,
+        redis_server_context,
     )
 
     with redis_server_context():

@@ -125,18 +125,19 @@ def test_size_aware_stats_with_a_calibration():
 def test_size_aware_stats_are_nan_when_a_piece_is_missing():
     assert math.isnan(stat_value({"mean": 10.0}, "integrated"))
     assert math.isnan(stat_value({"count": 25.0}, "per_area"))
-    assert math.isnan(stat_value({"mean": 10.0, "count": 25.0},
-                                 "bg_integrated"))
+    assert math.isnan(stat_value({"mean": 10.0, "count": 25.0}, "bg_integrated"))
 
 
 def test_derive_series_uses_the_sessions_calibration(tmp_path):
     image = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
-    roi = Roi(name="ROI 1", kind="ellipse",
-              geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
     session = AnalysisSession(rois=[roi], plot_stat="area")
     session.scale.trait_set(metres_per_pixel=1e-5, unit="mm")
     session.stats[session.cache_key(image, roi)] = {
-        "mean": 10.0, "outline_mean": 4.0, "count": 25.0}
+        "mean": 10.0,
+        "outline_mean": 4.0,
+        "count": 25.0,
+    }
 
     _name, _elapsed, values = derive_series(session, [image])[roi.roi_id]
     assert abs(values[0] - 25.0 * 1e-4) < 1e-12
@@ -195,16 +196,14 @@ def stat_value(stats, stat, pixel_area=1.0):
 Then have `derive_series` resolve the calibration once and pass it, importing `from ..scale_bar import pixel_area`:
 
 ```python
-    stat_cache = {}
-    area_per_pixel = pixel_area(session.scale.metres_per_pixel,
-                                session.scale.unit)
+stat_cache = {}
+area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
 ```
 
 and at the value site:
 
 ```python
-            values.append(stat_value(stats, session.plot_stat,
-                                     area_per_pixel))
+values.append(stat_value(stats, session.plot_stat, area_per_pixel))
 ```
 
 The local is named `area_per_pixel` so it does not shadow the imported
@@ -218,9 +217,18 @@ The local is named `area_per_pixel` so it does not shadow the imported
 #: the ring exists for. The last four are size-aware: "integrated" is
 #: the ROI's total signal, "per_area" its density (see the design note
 #: — that one is the mean times a constant).
-PLOT_STATS = ("mean", "bg_corrected", "median", "min", "max",
-              "outline_mean", "integrated", "bg_integrated",
-              "per_area", "bg_per_area")
+PLOT_STATS = (
+    "mean",
+    "bg_corrected",
+    "median",
+    "min",
+    "max",
+    "outline_mean",
+    "integrated",
+    "bg_integrated",
+    "per_area",
+    "bg_per_area",
+)
 ```
 
 - [ ] **Step 5: Run the series tests and watch them pass**
@@ -279,10 +287,9 @@ importing `from ..scale_bar import area_unit`.
 - [ ] **Step 2: Use it for the y-axis** — in `_refresh_intensity`, replace the ylabel line:
 
 ```python
-    def _refresh_intensity(self, series, figure_settings):
-        session = self._model.session
-        self._axes.set_ylabel(y_axis_label(session.plot_stat,
-                                           session.scale))
+def _refresh_intensity(self, series, figure_settings):
+    session = self._model.session
+    self._axes.set_ylabel(y_axis_label(session.plot_stat, session.scale))
 ```
 
 leaving the rest of the method as it is.
@@ -290,15 +297,17 @@ leaving the rest of the method as it is.
 - [ ] **Step 3: Redraw when the calibration changes** — add to `_PLOT_STATE`, so a recalibration re-labels the axis:
 
 ```python
-               "session:scale:metres_per_pixel, session:scale:unit, "
+"session:scale:metres_per_pixel, session:scale:unit,"
 ```
 
 - [ ] **Step 4: Check it offscreen** — a throwaway in the scratchpad:
 
 ```python
 import os
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
+
 app = QApplication.instance() or QApplication([])
 from fluorescence_controls_ui.image_viewer.analysis.plot_pane import (
     y_axis_label,
@@ -347,16 +356,18 @@ git commit -m "feat(analysis): label the per-area axis with its unit"
 ```python
 def test_write_intensity_csv_includes_the_derived_columns(tmp_path):
     roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
-    rows = [{
-        "filename": "img_raw.png", "time_utc": "2026_07_20-17_46_24",
-        "elapsed_sec": 0.0, "group": "burst_a",
-        "wavelength": "Green 540 nm",
-        "stats": {roi.roi_id: {"mean": 10.0, "outline_mean": 4.0,
-                               "count": 25.0}},
-    }]
+    rows = [
+        {
+            "filename": "img_raw.png",
+            "time_utc": "2026_07_20-17_46_24",
+            "elapsed_sec": 0.0,
+            "group": "burst_a",
+            "wavelength": "Green 540 nm",
+            "stats": {roi.roi_id: {"mean": 10.0, "outline_mean": 4.0, "count": 25.0}},
+        }
+    ]
     csv_path = tmp_path / "out.csv"
-    write_intensity_csv(csv_path, rows, [roi], pixel_area=1e-4,
-                        area_unit_label="mm²")
+    write_intensity_csv(csv_path, rows, [roi], pixel_area=1e-4, area_unit_label="mm²")
     with open(csv_path, newline="", encoding="utf-8") as handle:
         records = list(csv.reader(handle))
 
@@ -382,38 +393,41 @@ Expected: `TypeError: write_intensity_csv() got an unexpected keyword argument '
 #: Per-ROI CSV columns, in order: interior stats, outline stats, then
 #: the values derived from the pixel count and the scale.
 CSV_STAT_COLUMNS = tuple(STAT_NAMES) + tuple(
-    OUTLINE_STATS_PREFIX + name for name in STAT_NAMES)
-CSV_DERIVED_COLUMNS = ("area", "integrated", "bg_integrated",
-                       "per_area", "bg_per_area")
+    OUTLINE_STATS_PREFIX + name for name in STAT_NAMES
+)
+CSV_DERIVED_COLUMNS = ("area", "integrated", "bg_integrated", "per_area", "bg_per_area")
 
 
-def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0,
-                        area_unit_label="px²"):
+def write_intensity_csv(csv_path, rows, rois, pixel_area=1.0, area_unit_label="px²"):
     """One row per image, blank cells where an (image, ROI) pair has no
     computed stats. ``rows``: [{"filename", "time_utc", "elapsed_sec",
     "group", "wavelength", "stats": {roi_id: stats_dict}}, ...].
     ``pixel_area`` scales the derived size-aware columns; it is 1.0
     (px²) for an uncalibrated experiment."""
-    header = ["index", "time_utc", "elapsed_sec", "filename", "group",
-              "wavelength"]
+    header = ["index", "time_utc", "elapsed_sec", "filename", "group", "wavelength"]
     for roi in rois:
         header += [f"{roi.name}_{stat}" for stat in CSV_STAT_COLUMNS]
         header += [f"{roi.name}_area_{area_unit_label}"]
-        header += [f"{roi.name}_{stat}"
-                   for stat in CSV_DERIVED_COLUMNS[1:]]
+        header += [f"{roi.name}_{stat}" for stat in CSV_DERIVED_COLUMNS[1:]]
     # utf-8, not the platform default: the area header carries µ and ².
     with open(csv_path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(header)
         for index, row in enumerate(rows):
-            record = [index, row["time_utc"], row["elapsed_sec"],
-                      row["filename"], row["group"], row["wavelength"]]
+            record = [
+                index,
+                row["time_utc"],
+                row["elapsed_sec"],
+                row["filename"],
+                row["group"],
+                row["wavelength"],
+            ]
             for roi in rois:
                 stats = row["stats"].get(roi.roi_id, {})
-                record += [stats.get(stat, "")
-                           for stat in CSV_STAT_COLUMNS]
-                record += [_csv_cell(stats, stat, pixel_area)
-                           for stat in CSV_DERIVED_COLUMNS]
+                record += [stats.get(stat, "") for stat in CSV_STAT_COLUMNS]
+                record += [
+                    _csv_cell(stats, stat, pixel_area) for stat in CSV_DERIVED_COLUMNS
+                ]
             writer.writerow(record)
 
 
@@ -429,28 +443,35 @@ with `from .plot_series import stat_value` at the top.
 - [ ] **Step 4: Pass the calibration at the export site** — in `roi_controller.py`, where `write_intensity_csv` is called (~line 490), importing `area_unit, pixel_area` from `..scale_bar`:
 
 ```python
-            scale = session.scale
-            write_intensity_csv(
-                csv_path, rows, session.rois,
-                pixel_area(scale.metres_per_pixel, scale.unit),
-                area_unit(scale.metres_per_pixel, scale.unit))
+scale = session.scale
+write_intensity_csv(
+    csv_path,
+    rows,
+    session.rois,
+    pixel_area(scale.metres_per_pixel, scale.unit),
+    area_unit(scale.metres_per_pixel, scale.unit),
+)
 ```
 
 - [ ] **Step 5: Add the table column** — in `roi_table.py`:
 
 ```python
-_STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max",
-                 "count", "area")
+_STAT_COLUMNS = ("mean", "bg_corrected", "median", "min", "max", "count", "area")
 ```
 
 Move the header assignment out of `__init__` and into `_rebuild`, so the unit tracks the calibration:
 
 ```python
-        scale = session.scale
-        area_per_pixel = pixel_area(scale.metres_per_pixel, scale.unit)
-        self.setHorizontalHeaderLabels(
-            [f"Area ({area_unit(scale.metres_per_pixel, scale.unit)})"
-             if header == "area" else header for header in _HEADERS])
+scale = session.scale
+area_per_pixel = pixel_area(scale.metres_per_pixel, scale.unit)
+self.setHorizontalHeaderLabels(
+    [
+        f"Area ({area_unit(scale.metres_per_pixel, scale.unit)})"
+        if header == "area"
+        else header
+        for header in _HEADERS
+    ]
+)
 ```
 
 and pass `area_per_pixel` into both `stat_value` calls (in `_rebuild`
@@ -485,6 +506,7 @@ git commit -m "feat(analysis): report ROI area in the table and the CSV"
 """Offscreen smoke for the area statistics: every new stat draws on the
 demo experiment, the y-label carries the unit, and the table grows its
 area column with the calibration's unit in the header."""
+
 import os
 import sys
 from pathlib import Path
@@ -502,7 +524,8 @@ from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
     roi_analysis_model,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
-    load_roi_stats, load_session,
+    load_roi_stats,
+    load_session,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_table import (
     RoiStatsTable,
@@ -518,37 +541,38 @@ session.figure.view_mode = "intensity"
 session.scale.trait_set(metres_per_pixel=1e-5, unit="mm")
 roi_analysis_model.session = session
 roi_analysis_model.filtered_paths = [
-    str(path) for path in discover_captures(experiment_dir / "captures")]
+    str(path) for path in discover_captures(experiment_dir / "captures")
+]
 
 canvas = RoiPlotCanvas(roi_analysis_model)
 canvas.show()
 
-for stat in ("mean", "integrated", "bg_integrated", "per_area",
-             "bg_per_area"):
+for stat in ("mean", "integrated", "bg_integrated", "per_area", "bg_per_area"):
     session.plot_stat = stat
     canvas._refresh()
     canvas.figure.canvas.draw()
-    lines = [line for line in canvas._lines.values()
-             if len(line.get_ydata())]
+    lines = [line for line in canvas._lines.values() if len(line.get_ydata())]
     assert lines, f"{stat} drew no data"
     first = list(lines[0].get_ydata())[:2]
-    print(f"{stat:14s} ylabel={canvas._axes.get_ylabel()!r} "
-          f"first={[round(value, 3) for value in first]}")
+    print(
+        f"{stat:14s} ylabel={canvas._axes.get_ylabel()!r} "
+        f"first={[round(value, 3) for value in first]}"
+    )
 
 session.plot_stat = "per_area"
 canvas._refresh()
 assert canvas._axes.get_ylabel().endswith("mm²")
 session.scale.metres_per_pixel = 0.0
 canvas._refresh()
-assert canvas._axes.get_ylabel().endswith("px²"), \
-    canvas._axes.get_ylabel()
+assert canvas._axes.get_ylabel().endswith("px²"), canvas._axes.get_ylabel()
 print("uncalibrated axis falls back to px²")
 
 session.scale.trait_set(metres_per_pixel=1e-5, unit="mm")
 table = RoiStatsTable(roi_analysis_model)
 table._rebuild()
-headers = [table.horizontalHeaderItem(column).text()
-           for column in range(table.columnCount())]
+headers = [
+    table.horizontalHeaderItem(column).text() for column in range(table.columnCount())
+]
 print(f"table headers: {headers}")
 assert "Area (mm²)" in headers
 area_column = headers.index("Area (mm²)")

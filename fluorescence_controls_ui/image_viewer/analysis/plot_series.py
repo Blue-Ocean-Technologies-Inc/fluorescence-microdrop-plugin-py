@@ -1,18 +1,22 @@
 """Series derivation for the ROI plot: a pure function of the session
 and the viewer's filtered paths, so the plot pane owns its own picture
 (observer pattern — nothing pushes series at it). Qt-free."""
+
 import math
 
-from logger.logger_service import get_logger
-
-from .consts import (
-    BUTTER_CUTOFF, BUTTER_CUTOFF_BOUNDS, BUTTER_ORDER,
-    BUTTER_ORDER_BOUNDS, OUTLIER_THRESHOLD_MAD,
-    OUTLIER_WINDOW_PTS, SAVGOL_ORDER, SAVGOL_WINDOW_PTS,
-)
-
 from ..scale_bar import pixel_area
+from .consts import (
+    BUTTER_CUTOFF,
+    BUTTER_CUTOFF_BOUNDS,
+    BUTTER_ORDER_BOUNDS,
+    OUTLIER_THRESHOLD_MAD,
+    OUTLIER_WINDOW_PTS,
+    SAVGOL_ORDER,
+    SAVGOL_WINDOW_PTS,
+)
 from .heater_log import temperature_at
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -69,32 +73,32 @@ def derive_series(session, filtered_paths):
     NaN where an (image, ROI) pair has no computed stats (line gaps).
     User-excluded images are left out entirely (no gap: they are not
     part of the analysis)."""
-    paths = [path for path in filtered_paths
-             if not session.is_excluded(path)]
+    paths = [path for path in filtered_paths if not session.is_excluded(path)]
     if not paths or not session.rois:
         return {}
     stat_cache = {}
     # Named to leave the imported pixel_area() function reachable.
-    area_per_pixel = pixel_area(session.scale.metres_per_pixel,
-                                session.scale.unit)
+    area_per_pixel = pixel_area(session.scale.metres_per_pixel, session.scale.unit)
     times = [session.stat_info(path, stat_cache)[1] for path in paths]
     start_time = times[0]
     figure = session.figure
-    x_values = (temperature_at(session.heater_samples,
-                               figure.heater_sensor, times,
-                               figure.heater_window_ms / 1000.0)
-                if figure.x_axis == "temperature"
-                else [capture_time - start_time
-                      for capture_time in times])
+    x_values = (
+        temperature_at(
+            session.heater_samples,
+            figure.heater_sensor,
+            times,
+            figure.heater_window_ms / 1000.0,
+        )
+        if figure.x_axis == "temperature"
+        else [capture_time - start_time for capture_time in times]
+    )
     series = {}
     for roi in session.rois:
         elapsed, values = [], []
         for index, path in enumerate(paths):
-            stats = session.stats.get(
-                session.cache_key(path, roi, stat_cache))
+            stats = session.stats.get(session.cache_key(path, roi, stat_cache))
             elapsed.append(x_values[index])
-            values.append(stat_value(stats, session.plot_stat,
-                                     area_per_pixel))
+            values.append(stat_value(stats, session.plot_stat, area_per_pixel))
         series[roi.roi_id] = (roi.name, elapsed, values)
     return series
 
@@ -106,9 +110,13 @@ def subtracted_series(series):
     shifted = {}
     for roi_id, (name, elapsed, values) in series.items():
         first = next((value for value in values if value == value), None)
-        shifted[roi_id] = (name, elapsed, values if first is None else [
-            value if value != value else value - first
-            for value in values])
+        shifted[roi_id] = (
+            name,
+            elapsed,
+            values
+            if first is None
+            else [value if value != value else value - first for value in values],
+        )
     return shifted
 
 
@@ -152,11 +160,10 @@ def _robust_scale(values, centre):
 
 def _window_slice(values, index, window):
     half = window // 2
-    return values[max(index - half, 0):index + half + 1]
+    return values[max(index - half, 0) : index + half + 1]
 
 
-def outlier_mask(values, threshold=OUTLIER_THRESHOLD_MAD,
-                 window=OUTLIER_WINDOW_PTS):
+def outlier_mask(values, threshold=OUTLIER_THRESHOLD_MAD, window=OUTLIER_WINDOW_PTS):
     """Which points are outliers, by the Hampel test: each point
     against the median and median-absolute-deviation of the window
     around it.
@@ -183,19 +190,18 @@ def outlier_mask(values, threshold=OUTLIER_THRESHOLD_MAD,
     flags = []
     for index, value in enumerate(values):
         if value != value:
-            flags.append(False)         # a gap is not an outlier
+            flags.append(False)  # a gap is not an outlier
             continue
-        neighbours = [other for other in _window_slice(values, index,
-                                                       window)
-                      if other == other]
+        neighbours = [
+            other for other in _window_slice(values, index, window) if other == other
+        ]
         if len(neighbours) < _MIN_MEDIAN_POINTS:
             flags.append(False)
             continue
         middle = _median(neighbours)
         deviation = abs(value - middle)
         scale = _robust_scale(neighbours, middle) or overall_scale
-        flags.append(deviation > threshold * scale if scale > 0.0
-                     else deviation > 0.0)
+        flags.append(deviation > threshold * scale if scale > 0.0 else deviation > 0.0)
     return flags
 
 
@@ -208,8 +214,9 @@ def _median(values):
     return (ordered[middle - 1] + ordered[middle]) / 2.0
 
 
-def without_outliers(series, threshold=OUTLIER_THRESHOLD_MAD,
-                     window=OUTLIER_WINDOW_PTS):
+def without_outliers(
+    series, threshold=OUTLIER_THRESHOLD_MAD, window=OUTLIER_WINDOW_PTS
+):
     """``series`` with outlying points replaced by NaN — the same hole
     an uncomputed image leaves, so everything downstream already knows
     how to skip it. Returns (series, {roi_id: [flags]}) so the plot can
@@ -218,9 +225,11 @@ def without_outliers(series, threshold=OUTLIER_THRESHOLD_MAD,
     for roi_id, (name, elapsed, values) in series.items():
         flags = outlier_mask(values, threshold, window)
         flagged[roi_id] = flags
-        cleaned[roi_id] = (name, elapsed, [
-            math.nan if flag else value
-            for value, flag in zip(values, flags)])
+        cleaned[roi_id] = (
+            name,
+            elapsed,
+            [math.nan if flag else value for value, flag in zip(values, flags)],
+        )
     return cleaned, flagged
 
 
@@ -233,19 +242,24 @@ def background_ref_baseline(session, series):
     NaN where no reference has a value for an image, so the correction
     gaps there instead of quietly leaving that image uncorrected among
     corrected ones."""
-    columns = [values for roi_id, (_name, _elapsed, values)
-               in series.items()
-               if (session.roi_by_id(roi_id) is not None
-                   and session.roi_by_id(roi_id).is_background_ref)]
+    columns = [
+        values
+        for roi_id, (_name, _elapsed, values) in series.items()
+        if (
+            session.roi_by_id(roi_id) is not None
+            and session.roi_by_id(roi_id).is_background_ref
+        )
+    ]
     if not columns:
         return None
     baseline = []
-    for index in range(max((len(values) for values in columns),
-                           default=0)):
-        present = [values[index] for values in columns
-                   if index < len(values) and values[index] == values[index]]
-        baseline.append(sum(present) / len(present) if present
-                        else math.nan)
+    for index in range(max((len(values) for values in columns), default=0)):
+        present = [
+            values[index]
+            for values in columns
+            if index < len(values) and values[index] == values[index]
+        ]
+        baseline.append(sum(present) / len(present) if present else math.nan)
     return baseline
 
 
@@ -263,10 +277,14 @@ def background_ref_corrected_series(session, series):
         return series
     corrected = {}
     for roi_id, (name, elapsed, values) in series.items():
-        corrected[roi_id] = (name, elapsed, [
-            value - baseline[index]
-            if index < len(baseline) else math.nan
-            for index, value in enumerate(values)])
+        corrected[roi_id] = (
+            name,
+            elapsed,
+            [
+                value - baseline[index] if index < len(baseline) else math.nan
+                for index, value in enumerate(values)
+            ],
+        )
     return corrected
 
 
@@ -281,10 +299,16 @@ def normalized_series(series):
         finite = [value for value in values if value == value]
         low = min(finite) if finite else 0.0
         span = (max(finite) - low) if finite else 0.0
-        scaled[roi_id] = (name, elapsed, [
-            value if value != value
-            else (0.0 if span == 0 else (value - low) / span * 100.0)
-            for value in values])
+        scaled[roi_id] = (
+            name,
+            elapsed,
+            [
+                value
+                if value != value
+                else (0.0 if span == 0 else (value - low) / span * 100.0)
+                for value in values
+            ],
+        )
     return scaled
 
 
@@ -303,24 +327,23 @@ def visible_series(session, series):
 
 #: Smoothers the plot offers, in dropdown order.
 SMOOTH_METHODS = ("none", "savgol", "butterworth")
-SMOOTH_LABELS = {"none": "No smoothing",
-                 "savgol": "Savitzky-Golay",
-                 "butterworth": "Butterworth"}
+SMOOTH_LABELS = {
+    "none": "No smoothing",
+    "savgol": "Savitzky-Golay",
+    "butterworth": "Butterworth",
+}
 
 
 def _bridge_gaps(values):
     """``values`` with each internal NaN run replaced by the straight
     line between its two finite neighbours. Leading and trailing NaNs
     stay NaN — with nothing on the far side there is no line to draw."""
-    known = [(index, value) for index, value in enumerate(values)
-             if value == value]
+    known = [(index, value) for index, value in enumerate(values) if value == value]
     bridged = list(values)
-    for (left_index, left), (right_index, right) in zip(known,
-                                                        known[1:]):
+    for (left_index, left), (right_index, right) in zip(known, known[1:]):
         span = right_index - left_index
         for index in range(left_index + 1, right_index):
-            bridged[index] = (left + (right - left)
-                              * (index - left_index) / span)
+            bridged[index] = left + (right - left) * (index - left_index) / span
     return bridged
 
 
@@ -330,8 +353,10 @@ def interpolated_series(series):
     Only the DRAWN lines go through this: an interpolated value is
     invented data, and the fits, the CSV and the stats table keep the
     gaps."""
-    return {roi_id: (name, elapsed, _bridge_gaps(values))
-            for roi_id, (name, elapsed, values) in series.items()}
+    return {
+        roi_id: (name, elapsed, _bridge_gaps(values))
+        for roi_id, (name, elapsed, values) in series.items()
+    }
 
 
 def _fill_gaps(values):
@@ -343,8 +368,7 @@ def _fill_gaps(values):
     filled for the filter and punched back out afterwards. A gap is
     missing data, and smoothing must not invent a value there."""
     gaps = [value != value for value in values]
-    known = [(index, value) for index, value in enumerate(values)
-             if value == value]
+    known = [(index, value) for index, value in enumerate(values) if value == value]
     if not known:
         return None, gaps
     filled = _bridge_gaps(values)
@@ -357,12 +381,12 @@ def _fill_gaps(values):
 
 
 def _restore_gaps(values, gaps):
-    return [math.nan if gap else value
-            for value, gap in zip(values, gaps)]
+    return [math.nan if gap else value for value, gap in zip(values, gaps)]
 
 
-def smoothed_values(values, method, window=SAVGOL_WINDOW_PTS,
-                    order=SAVGOL_ORDER, cutoff=BUTTER_CUTOFF):
+def smoothed_values(
+    values, method, window=SAVGOL_WINDOW_PTS, order=SAVGOL_ORDER, cutoff=BUTTER_CUTOFF
+):
     """One series smoothed, or returned untouched when it is too short
     for the filter asked for — a curve that cannot be smoothed is shown
     as it is rather than not at all.
@@ -383,8 +407,7 @@ def smoothed_values(values, method, window=SAVGOL_WINDOW_PTS,
         if method == "savgol":
             # An even window has no centre point, and the polynomial
             # needs more points than its own order to be determined.
-            length = min(max(int(window), _MIN_MEDIAN_POINTS),
-                         count)
+            length = min(max(int(window), _MIN_MEDIAN_POINTS), count)
             if length % 2 == 0:
                 length -= 1
             polyorder = min(max(int(order), 1), length - 1)
@@ -395,36 +418,39 @@ def smoothed_values(values, method, window=SAVGOL_WINDOW_PTS,
             # filtfilt runs the filter forwards and back, so the result
             # has no phase shift — a smoothed peak stays where it was.
             # It needs a few times the filter length in samples.
-            filter_order = min(max(int(order),
-                                   BUTTER_ORDER_BOUNDS[0]),
-                               BUTTER_ORDER_BOUNDS[1])
-            if count <= (_FILTFILT_MIN_LENGTH_MULTIPLE
-                         * (filter_order + 1)):
+            filter_order = min(
+                max(int(order), BUTTER_ORDER_BOUNDS[0]), BUTTER_ORDER_BOUNDS[1]
+            )
+            if count <= (_FILTFILT_MIN_LENGTH_MULTIPLE * (filter_order + 1)):
                 return list(values)
-            normalized = min(max(float(cutoff),
-                                 BUTTER_CUTOFF_BOUNDS[0]),
-                             BUTTER_CUTOFF_BOUNDS[1])
-            numerator, denominator = butter(filter_order, normalized,
-                                            btype="low")
+            normalized = min(
+                max(float(cutoff), BUTTER_CUTOFF_BOUNDS[0]), BUTTER_CUTOFF_BOUNDS[1]
+            )
+            numerator, denominator = butter(filter_order, normalized, btype="low")
             smoothed = filtfilt(numerator, denominator, filled)
     except Exception:
         return list(values)
     return _restore_gaps([float(value) for value in smoothed], gaps)
 
 
-def smoothed_series(series, method, window=SAVGOL_WINDOW_PTS,
-                    order=SAVGOL_ORDER, cutoff=BUTTER_CUTOFF):
+def smoothed_series(
+    series, method, window=SAVGOL_WINDOW_PTS, order=SAVGOL_ORDER, cutoff=BUTTER_CUTOFF
+):
     """``series`` with every curve smoothed by ``method``."""
     if method not in ("savgol", "butterworth"):
         return series
     logger.debug(
         f"Smoothing {len(series)} curves for display: {method}"
-        + (f" window={window} order={order}" if method == "savgol"
-           else f" order={order} cutoff={cutoff:g} of Nyquist"))
-    return {roi_id: (name, elapsed,
-                     smoothed_values(values, method, window, order,
-                                     cutoff))
-            for roi_id, (name, elapsed, values) in series.items()}
+        + (
+            f" window={window} order={order}"
+            if method == "savgol"
+            else f" order={order} cutoff={cutoff:g} of Nyquist"
+        )
+    )
+    return {
+        roi_id: (name, elapsed, smoothed_values(values, method, window, order, cutoff))
+        for roi_id, (name, elapsed, values) in series.items()
+    }
 
 
 def analysed_series(session, filtered_paths, visible_only=True):
@@ -445,23 +471,27 @@ def analysed_series(session, filtered_paths, visible_only=True):
     flags = {}
     steps = []
     if figure.remove_outliers:
-        series, flags = without_outliers(series,
-                                         figure.outlier_threshold,
-                                         figure.outlier_window)
-        dropped = sum(sum(1 for flag in roi_flags if flag)
-                      for roi_flags in flags.values())
-        steps.append(f"outliers({figure.outlier_threshold:g} MAD, "
-                     f"window {figure.outlier_window}) dropped "
-                     f"{dropped}")
+        series, flags = without_outliers(
+            series, figure.outlier_threshold, figure.outlier_window
+        )
+        dropped = sum(
+            sum(1 for flag in roi_flags if flag) for roi_flags in flags.values()
+        )
+        steps.append(
+            f"outliers({figure.outlier_threshold:g} MAD, "
+            f"window {figure.outlier_window}) dropped "
+            f"{dropped}"
+        )
     if figure.subtract_background_ref:
         # After the outliers, before the visibility filter: the
         # references are the very curves a user hides once they are
         # flat, and reading the baseline from the filtered set would
         # let that click turn the correction off.
         series = background_ref_corrected_series(session, series)
-        steps.append(f"background-ref({sum(1 for roi in session.rois
-                                          if roi.is_background_ref)} "
-                     f"marked)")
+        steps.append(
+            f"background-ref({sum(1 for roi in session.rois if roi.is_background_ref)} "
+            f"marked)"
+        )
     if visible_only:
         series = visible_series(session, series)
     if figure.subtract_first:
@@ -473,5 +503,6 @@ def analysed_series(session, filtered_paths, visible_only=True):
     logger.debug(
         f"Series for {len(series)} ROIs over {len(filtered_paths)} "
         f"images, stat={session.plot_stat}"
-        + (f"; {'; '.join(steps)}" if steps else "; no corrections"))
+        + (f"; {'; '.join(steps)}" if steps else "; no corrections")
+    )
     return series, flags

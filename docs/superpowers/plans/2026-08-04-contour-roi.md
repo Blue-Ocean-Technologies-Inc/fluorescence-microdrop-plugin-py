@@ -80,8 +80,9 @@ Append to `fluorescence_controls_ui/tests/test_roi_compute.py`:
 
 ```python
 def test_contour_mask_area_matches_the_triangle():
-    interior, outline = roi_masks((200, 200), "polygon",
-                                  (20.0, 20.0, 120.0, 20.0, 20.0, 100.0))
+    interior, outline = roi_masks(
+        (200, 200), "polygon", (20.0, 20.0, 120.0, 20.0, 20.0, 100.0)
+    )
     expected = 0.5 * 100.0 * 80.0
     assert abs(np.count_nonzero(interior) - expected) / expected < 0.05
     assert 0 < np.count_nonzero(outline) < np.count_nonzero(interior)
@@ -89,8 +90,7 @@ def test_contour_mask_area_matches_the_triangle():
 
 def test_contour_below_minimum_vertices_masks_nothing():
     array = np.full((50, 50), 7, dtype=np.uint16)
-    interior, _outline = roi_masks((50, 50), "polygon",
-                                   (10.0, 10.0, 20.0, 20.0))
+    interior, _outline = roi_masks((50, 50), "polygon", (10.0, 10.0, 20.0, 20.0))
     stats = masked_stats(array, interior)
     assert np.count_nonzero(interior) == 0
     assert stats["count"] == 0.0 and math.isnan(stats["mean"])
@@ -108,12 +108,12 @@ In the `GEOMETRY_LENGTH` comment block, document the new kind: `polygon [x1, y1,
 Add the early return at the top of `normalize`, right after the kind lookup:
 
 ```python
-    kind = _LEGACY_KINDS.get(kind, kind)
-    values = [float(value) for value in geometry]
-    if kind == "polygon":
-        # A contour is a vertex list, so it has no fixed length to pad
-        # to and no angle: rotating one rewrites its coordinates.
-        return kind, values[:len(values) - len(values) % 2]
+kind = _LEGACY_KINDS.get(kind, kind)
+values = [float(value) for value in geometry]
+if kind == "polygon":
+    # A contour is a vertex list, so it has no fixed length to pad
+    # to and no angle: rotating one rewrites its coordinates.
+    return kind, values[: len(values) - len(values) % 2]
 ```
 
 Extend `centre_of` before its box branch:
@@ -188,13 +188,14 @@ git commit -m "feat(analysis): mask contour ROIs from a vertex list"
 
 ```python
 def test_contour_round_trips_its_vertex_list(tmp_path):
-    roi = Roi(name="Cell edge", kind="polygon",
-              geometry=[10.0, 10.0, 40.0, 12.0, 35.0, 50.0, 8.0, 44.0],
-              base_anchor=0.0,
-              overrides={90.0: [11.0, 11.0, 41.0, 13.0, 36.0, 51.0,
-                                9.0, 45.0]})
-    save_session(tmp_path, AnalysisSession(directory=str(tmp_path),
-                                           rois=[roi]))
+    roi = Roi(
+        name="Cell edge",
+        kind="polygon",
+        geometry=[10.0, 10.0, 40.0, 12.0, 35.0, 50.0, 8.0, 44.0],
+        base_anchor=0.0,
+        overrides={90.0: [11.0, 11.0, 41.0, 13.0, 36.0, 51.0, 9.0, 45.0]},
+    )
+    save_session(tmp_path, AnalysisSession(directory=str(tmp_path), rois=[roi]))
 
     (back,) = load_session(tmp_path).rois
     assert back.kind == "polygon"
@@ -216,8 +217,9 @@ Expected: `TraitError: The 'kind' trait of a Roi instance must be 'ellipse', 'bo
 extending the trait's comment with `polygon [x1, y1, x2, y2, ...]` (a vertex list with rotation already applied), and:
 
 ```python
-    interaction_mode = Enum("pan", "draw_ellipse", "draw_box",
-                            "draw_capsule", "draw_polygon", "edit")
+interaction_mode = Enum(
+    "pan", "draw_ellipse", "draw_box", "draw_capsule", "draw_polygon", "edit"
+)
 ```
 
 ```python
@@ -267,6 +269,7 @@ This task moves code only. No behaviour changes, so the whole suite is the test.
 contour-node. Each marks its parent dragging on press so the layer's
 sync() leaves the shape alone, edits it on move, and commits one edit
 on release."""
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor, QPen
 from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsRectItem
@@ -288,7 +291,10 @@ Then move `_ResizeHandle` and `_RotateHandle` in unchanged, renamed to `ResizeHa
 from .consts import MIN_ROI_SIZE_PX
 from .roi_geometry import centre_of, normalize
 from .roi_handles import (
-    HANDLE_SIZE_PX, ROI_PEN, ROI_SELECTED_PEN, ResizeHandle,
+    HANDLE_SIZE_PX,
+    ROI_PEN,
+    ROI_SELECTED_PEN,
+    ResizeHandle,
     RotateHandle,
 )
 ```
@@ -302,16 +308,22 @@ Update `_setup` to construct `ResizeHandle(self)` / `RotateHandle(self)`. Rewrit
 forwarded mouse and key events into creation/edit/selection callbacks.
 Stateless wiring around Qt items, so it stays a plain class; it never
 touches the analysis model."""
+
 import math
 
 from PySide6.QtWidgets import (
-    QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsRectItem,
+    QGraphicsEllipseItem,
+    QGraphicsPathItem,
+    QGraphicsRectItem,
 )
 
 from .consts import MIN_ROI_SIZE_PX
 from .roi_handles import ROI_SELECTED_PEN
 from .roi_items import (
-    BoxRoiItem, CapsuleRoiItem, EllipseRoiItem, capsule_path,
+    BoxRoiItem,
+    CapsuleRoiItem,
+    EllipseRoiItem,
+    capsule_path,
 )
 ```
 
@@ -356,8 +368,7 @@ class NodeHandle(QGraphicsRectItem):
 
     def __init__(self, parent, index):
         half = HANDLE_SIZE_PX / 2
-        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX,
-                         parent)
+        super().__init__(-half, -half, HANDLE_SIZE_PX, HANDLE_SIZE_PX, parent)
         self._index = index
         self.setBrush(HANDLE_BRUSH)
         self.setPen(QPen(Qt.PenStyle.NoPen))
@@ -398,10 +409,12 @@ class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
 
     def set_geometry(self, geometry):
         _, values = normalize("polygon", geometry)
-        points = [QPointF(values[index], values[index + 1])
-                  for index in range(0, len(values), 2)]
+        points = [
+            QPointF(values[index], values[index + 1])
+            for index in range(0, len(values), 2)
+        ]
         self.setPos(0, 0)
-        self.setRotation(0)     # a stored contour is already oriented
+        self.setRotation(0)  # a stored contour is already oriented
         self.setPolygon(QPolygonF(points))
         self.setTransformOriginPoint(*centre_of("polygon", values))
         self._rebuild_node_handles()
@@ -410,10 +423,11 @@ class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
     def geometry(self):
         # Through the item transform, so a move or a live rotation
         # lands in the coordinates and never needs storing as an angle.
-        return [value
-                for point in self.polygon()
-                for value in (self.mapToScene(point).x(),
-                              self.mapToScene(point).y())]
+        return [
+            value
+            for point in self.polygon()
+            for value in (self.mapToScene(point).x(), self.mapToScene(point).y())
+        ]
 
     def move_node(self, index, scene_point):
         polygon = self.polygon()
@@ -454,8 +468,12 @@ class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
 
     def _place_attachments(self):
         bounds = self.polygon().boundingRect()
-        self._place_grips(bounds.center().x(), bounds.center().y(),
-                          bounds.width() / 2, bounds.height() / 2)
+        self._place_grips(
+            bounds.center().x(),
+            bounds.center().y(),
+            bounds.width() / 2,
+            bounds.height() / 2,
+        )
 ```
 
 Add to the imports: `QPointF` from `PySide6.QtCore`, `QPolygonF` from `PySide6.QtGui`, `QGraphicsPolygonItem` from `PySide6.QtWidgets`, and `NodeHandle` from `.roi_handles`.
@@ -464,9 +482,11 @@ Add to the imports: `QPointF` from `PySide6.QtCore`, `QPolygonF` from `PySide6.Q
 
 ```python
 import os
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QPointF
 from PySide6.QtWidgets import QApplication, QGraphicsScene
+
 app = QApplication.instance() or QApplication([])
 from fluorescence_controls_ui.image_viewer.analysis.roi_items import (
     PolygonRoiItem,
@@ -474,8 +494,12 @@ from fluorescence_controls_ui.image_viewer.analysis.roi_items import (
 
 edits = []
 scene = QGraphicsScene()
-item = PolygonRoiItem("p", "ROI 1", [0.0, 0.0, 10.0, 0.0, 0.0, 8.0],
-                      lambda roi_id, geometry: edits.append(geometry))
+item = PolygonRoiItem(
+    "p",
+    "ROI 1",
+    [0.0, 0.0, 10.0, 0.0, 0.0, 8.0],
+    lambda roi_id, geometry: edits.append(geometry),
+)
 scene.addItem(item)
 assert item.geometry() == [0.0, 0.0, 10.0, 0.0, 0.0, 8.0], item.geometry()
 item.move_node(2, QPointF(1.0, 9.0))
@@ -513,10 +537,18 @@ git commit -m "feat(analysis): add the contour ROI item with node grips"
 - [ ] **Step 1: Register the kind** in `roi_canvas_layer.py`:
 
 ```python
-ITEM_CLASSES = {"ellipse": EllipseRoiItem, "box": BoxRoiItem,
-                "capsule": CapsuleRoiItem, "polygon": PolygonRoiItem}
-DRAW_KINDS = {"draw_ellipse": "ellipse", "draw_box": "box",
-              "draw_capsule": "capsule", "draw_polygon": "polygon"}
+ITEM_CLASSES = {
+    "ellipse": EllipseRoiItem,
+    "box": BoxRoiItem,
+    "capsule": CapsuleRoiItem,
+    "polygon": PolygonRoiItem,
+}
+DRAW_KINDS = {
+    "draw_ellipse": "ellipse",
+    "draw_box": "box",
+    "draw_capsule": "capsule",
+    "draw_polygon": "polygon",
+}
 ```
 
 importing `PolygonRoiItem`, `QPainterPath` (from `PySide6.QtGui`), and `MIN_POLYGON_POINTS, POLYGON_CLOSE_DISTANCE_PX` from `.consts`. The draft's vertices arrive as scene points from the view, so no `QPointF` import is needed here.
@@ -524,7 +556,7 @@ importing `PolygonRoiItem`, `QPainterPath` (from `PySide6.QtGui`), and `MIN_POLY
 In `__init__`, beside `self._draft = None`, add the draft's vertices:
 
 ```python
-        self._draft_points = []   # contour vertices placed so far
+self._draft_points = []  # contour vertices placed so far
 ```
 
 - [ ] **Step 2: Branch the mouse handlers to the contour state machine**
@@ -557,75 +589,80 @@ At the top of `mouse_release`:
 - [ ] **Step 3: Add the contour methods** to `RoiCanvasLayer`:
 
 ```python
-    def _press_contour(self, scene_point):
-        """Place a vertex, or close the contour when the click lands
-        back on its first one."""
-        if self._draft_points:
-            first = self._draft_points[0]
-            near_first = math.hypot(scene_point.x() - first.x(),
-                                    scene_point.y() - first.y())
-            if near_first <= POLYGON_CLOSE_DISTANCE_PX:
-                self._close_contour()
-                return True
-        else:
-            self._draft_kind = "polygon"
-            self._draft = QGraphicsPathItem()
-            self._draft.setPen(ROI_SELECTED_PEN)
-            self._scene.addItem(self._draft)
-        self._draft_points.append(scene_point)
-        self._draft.setPath(self._contour_path(scene_point))
-        return True
-
-    def _contour_path(self, cursor_point):
-        """The placed vertices, rubber-banded to the cursor."""
-        path = QPainterPath(self._draft_points[0])
-        for point in self._draft_points[1:]:
-            path.lineTo(point)
-        path.lineTo(cursor_point)
-        return path
-
-    def _close_contour(self):
-        """Finish the draft into an ROI, if it has enough vertices."""
-        points = self._draft_points
-        self._discard_contour()
-        if len(points) < MIN_POLYGON_POINTS:
-            return
-        self.on_roi_created("polygon", [value for point in points
-                                        for value in (point.x(),
-                                                      point.y())])
-
-    def _discard_contour(self):
-        if self._draft is not None:
-            self._scene.removeItem(self._draft)
-        self._draft = None
-        self._draft_points = []
-
-    def mouse_double_click(self, scene_point):
-        """Close the contour on the vertices already placed."""
-        if self.mode != "draw_polygon" or not self._draft_points:
-            return False
-        self._close_contour()
-        return True
-
-    def key_press(self, key):
-        """Enter closes the contour, Escape discards it, Backspace
-        takes back the last vertex."""
-        if self.mode != "draw_polygon" or not self._draft_points:
-            return False
-        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+def _press_contour(self, scene_point):
+    """Place a vertex, or close the contour when the click lands
+    back on its first one."""
+    if self._draft_points:
+        first = self._draft_points[0]
+        near_first = math.hypot(
+            scene_point.x() - first.x(), scene_point.y() - first.y()
+        )
+        if near_first <= POLYGON_CLOSE_DISTANCE_PX:
             self._close_contour()
-        elif key == Qt.Key.Key_Escape:
-            self._discard_contour()
-        elif key == Qt.Key.Key_Backspace:
-            self._draft_points.pop()
-            if self._draft_points:
-                self._draft.setPath(
-                    self._contour_path(self._draft_points[-1]))
-            else:
-                self._discard_contour()
+            return True
+    else:
+        self._draft_kind = "polygon"
+        self._draft = QGraphicsPathItem()
+        self._draft.setPen(ROI_SELECTED_PEN)
+        self._scene.addItem(self._draft)
+    self._draft_points.append(scene_point)
+    self._draft.setPath(self._contour_path(scene_point))
+    return True
+
+
+def _contour_path(self, cursor_point):
+    """The placed vertices, rubber-banded to the cursor."""
+    path = QPainterPath(self._draft_points[0])
+    for point in self._draft_points[1:]:
+        path.lineTo(point)
+    path.lineTo(cursor_point)
+    return path
+
+
+def _close_contour(self):
+    """Finish the draft into an ROI, if it has enough vertices."""
+    points = self._draft_points
+    self._discard_contour()
+    if len(points) < MIN_POLYGON_POINTS:
+        return
+    self.on_roi_created(
+        "polygon", [value for point in points for value in (point.x(), point.y())]
+    )
+
+
+def _discard_contour(self):
+    if self._draft is not None:
+        self._scene.removeItem(self._draft)
+    self._draft = None
+    self._draft_points = []
+
+
+def mouse_double_click(self, scene_point):
+    """Close the contour on the vertices already placed."""
+    if self.mode != "draw_polygon" or not self._draft_points:
+        return False
+    self._close_contour()
+    return True
+
+
+def key_press(self, key):
+    """Enter closes the contour, Escape discards it, Backspace
+    takes back the last vertex."""
+    if self.mode != "draw_polygon" or not self._draft_points:
+        return False
+    if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        self._close_contour()
+    elif key == Qt.Key.Key_Escape:
+        self._discard_contour()
+    elif key == Qt.Key.Key_Backspace:
+        self._draft_points.pop()
+        if self._draft_points:
+            self._draft.setPath(self._contour_path(self._draft_points[-1]))
         else:
-            return False
-        return True
+            self._discard_contour()
+    else:
+        return False
+    return True
 ```
 
 Import `Qt` from `PySide6.QtCore`. Then make mode and experiment switches discard a draft — in `set_mode`, before the loop, and at the top of `clear_items`:
@@ -637,18 +674,19 @@ Import `Qt` from `PySide6.QtCore`. Then make mode and experiment switches discar
 - [ ] **Step 4: Forward double-clicks and keys** — in `view.py`'s `_ImageView`, after `mouseReleaseEvent`:
 
 ```python
-    def mouseDoubleClickEvent(self, event):
-        point = self.mapToScene(event.position().toPoint())
-        if self._roi_layer.mouse_double_click(point):
-            event.accept()
-            return
-        super().mouseDoubleClickEvent(event)
+def mouseDoubleClickEvent(self, event):
+    point = self.mapToScene(event.position().toPoint())
+    if self._roi_layer.mouse_double_click(point):
+        event.accept()
+        return
+    super().mouseDoubleClickEvent(event)
 
-    def keyPressEvent(self, event):
-        if self._roi_layer.key_press(event.key()):
-            event.accept()
-            return
-        super().keyPressEvent(event)
+
+def keyPressEvent(self, event):
+    if self._roi_layer.key_press(event.key()):
+        event.accept()
+        return
+    super().keyPressEvent(event)
 ```
 
 and in `__init__`, beside `setMouseTracking(True)`:
@@ -664,18 +702,23 @@ so a clicked canvas receives the keys.
 In the Microdrop submodule's `src/microdrop_style/icons/icons.py`, beside `ICON_CAPSULE`:
 
 ```python
-ICON_CONTOUR         = "pentagon"     # trace a contour (polygon) ROI
+ICON_CONTOUR = "pentagon"  # trace a contour (polygon) ROI
 ```
 
 In `image_viewer/view.py`, after the capsule button (add `ICON_CONTOUR` to the icon import):
 
 ```python
-    UItem("object.roi_analysis.draw_polygon_button",
-          editor=IconButtonEditor(
-              glyph=ICON_CONTOUR,
-              tooltip="Draw a contour ROI (click to place nodes; "
-                      "close on the first node, double-click, or "
-                      "Enter — Esc cancels, Backspace undoes)")),
+(
+    UItem(
+        "object.roi_analysis.draw_polygon_button",
+        editor=IconButtonEditor(
+            glyph=ICON_CONTOUR,
+            tooltip="Draw a contour ROI (click to place nodes; "
+            "close on the first node, double-click, or "
+            "Enter — Esc cancels, Backspace undoes)",
+        ),
+    ),
+)
 ```
 
 and extend the Edit toggle's tooltip with ", drag a node to reshape a contour" after the rotate-grip clause.
@@ -709,6 +752,7 @@ git commit -m "feat(analysis): draw contour ROIs by placing nodes"
 """Offscreen smoke for contour drawing: every closing gesture makes
 exactly one ROI, cancelling makes none, and a node drag reports one
 edit."""
+
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -726,7 +770,8 @@ created, edits = [], []
 scene = QGraphicsScene()
 layer = RoiCanvasLayer(scene)
 layer.on_roi_created = lambda kind, geometry: created.append(
-    (kind, [round(value, 3) for value in geometry]))
+    (kind, [round(value, 3) for value in geometry])
+)
 layer.on_roi_edited = lambda roi_id, geometry: edits.append(roi_id)
 
 
@@ -739,24 +784,24 @@ def place(*points):
 
 TRIANGLE = ((10.0, 10.0), (60.0, 10.0), (60.0, 50.0))
 
-place(*TRIANGLE)                        # close on the first node
+place(*TRIANGLE)  # close on the first node
 layer.mouse_press(QPointF(12.0, 11.0))
 assert len(created) == 1, created
 assert created[0][0] == "polygon" and len(created[0][1]) == 6
 
-place(*TRIANGLE)                        # close by double-click
+place(*TRIANGLE)  # close by double-click
 layer.mouse_double_click(QPointF(60.0, 50.0))
 assert len(created) == 2, created
 
-place(*TRIANGLE)                        # close by Enter
+place(*TRIANGLE)  # close by Enter
 layer.key_press(Qt.Key.Key_Return)
 assert len(created) == 3, created
 
-place(*TRIANGLE)                        # Escape discards
+place(*TRIANGLE)  # Escape discards
 layer.key_press(Qt.Key.Key_Escape)
 assert len(created) == 3, created
 
-place(*TRIANGLE)                        # too few vertices to close
+place(*TRIANGLE)  # too few vertices to close
 layer.key_press(Qt.Key.Key_Backspace)
 layer.key_press(Qt.Key.Key_Return)
 assert len(created) == 3, created
@@ -764,8 +809,7 @@ layer.key_press(Qt.Key.Key_Escape)
 print(f"created: {created}")
 
 layer.set_mode("edit")
-layer.sync([("p", "ROI 1", "polygon",
-             [10.0, 10.0, 60.0, 10.0, 60.0, 50.0])], "p")
+layer.sync([("p", "ROI 1", "polygon", [10.0, 10.0, 60.0, 10.0, 60.0, 50.0])], "p")
 item = layer._items["p"]
 assert len(item._node_handles) == 3
 assert all(handle.isVisible() for handle in item._node_handles)
@@ -774,10 +818,10 @@ item.commit_geometry()
 assert edits == ["p"], edits
 assert item.geometry() == [10.0, 10.0, 70.0, 12.0, 60.0, 50.0]
 
-layer.sync([("p", "ROI 1", "polygon",
-             [10.0, 10.0, 70.0, 12.0, 60.0, 50.0])], "")
-assert not any(handle.isVisible() for handle in item._node_handles), \
+layer.sync([("p", "ROI 1", "polygon", [10.0, 10.0, 70.0, 12.0, 60.0, 50.0])], "")
+assert not any(handle.isVisible() for handle in item._node_handles), (
     "node grips must hide when the contour is not selected"
+)
 print("smoke passed")
 ```
 

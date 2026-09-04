@@ -63,8 +63,7 @@ def test_first_derivative_linear_is_slope():
 
 def test_first_derivative_exponential():
     t = np.arange(0.0, 200.0, 10.0)
-    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0,
-                     "exponential")
+    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0, "exponential")
     # dy/dt at 0 is A*k = -150
     assert abs(float(fit.first_derivative(0.0)) + 150.0) < 5.0
 
@@ -84,8 +83,7 @@ def test_fastest_change_linear_is_suppressed():
 
 def test_fastest_change_exponential_decay_at_start():
     t = np.arange(0.0, 200.0, 10.0)
-    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0,
-                     "exponential")
+    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0, "exponential")
     assert abs(fastest_change_time(fit, 0.0, 190.0)) < 1.0
 ```
 
@@ -98,13 +96,16 @@ Add `fastest_change_time` to the test module's `curve_fit` import.
 Imports: add `from scipy.special import expit`.
 
 ```python
-FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential",
-               "sigmoid")
-FIT_LABELS = {"none": "No fit", "linear": "Linear",
-              "poly2": "Quadratic", "poly3": "Cubic",
-              "exponential": "Exponential", "sigmoid": "Sigmoid"}
-_MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4,
-               "sigmoid": 5}
+FIT_METHODS = ("none", "linear", "poly2", "poly3", "exponential", "sigmoid")
+FIT_LABELS = {
+    "none": "No fit",
+    "linear": "Linear",
+    "poly2": "Quadratic",
+    "poly3": "Cubic",
+    "exponential": "Exponential",
+    "sigmoid": "Sigmoid",
+}
+_MIN_POINTS = {"linear": 2, "poly2": 3, "poly3": 4, "exponential": 4, "sigmoid": 5}
 ```
 
 `FitResult` gains `#: Vectorized t -> analytic dy/dt.` / `first_derivative = Any()`.
@@ -117,8 +118,7 @@ New sigmoid (mirror `_fit_exponential`'s shape):
 
 ```python
 def _sigmoid(t, amplitude, rate, midpoint, offset):
-    return amplitude * expit(
-        rate * (np.asarray(t, dtype=float) - midpoint)) + offset
+    return amplitude * expit(rate * (np.asarray(t, dtype=float) - midpoint)) + offset
 
 
 def _fit_sigmoid(elapsed, values):
@@ -129,32 +129,39 @@ def _fit_sigmoid(elapsed, values):
         amplitude0 = float(np.ptp(values)) or 1.0
     half = offset0 + amplitude0 / 2.0
     midpoint0 = float(elapsed[int(np.argmin(np.abs(values - half)))])
-    params, _ = curve_fit(_sigmoid, elapsed, values,
-                          p0=(amplitude0, 4.0 / t_span, midpoint0,
-                              offset0),
-                          maxfev=10000)
-    amplitude, rate, midpoint, offset = (float(value)
-                                         for value in params)
-    if not all(math.isfinite(value)
-               for value in (amplitude, rate, midpoint, offset)):
+    params, _ = curve_fit(
+        _sigmoid,
+        elapsed,
+        values,
+        p0=(amplitude0, 4.0 / t_span, midpoint0, offset0),
+        maxfev=10000,
+    )
+    amplitude, rate, midpoint, offset = (float(value) for value in params)
+    if not all(math.isfinite(value) for value in (amplitude, rate, midpoint, offset)):
         return None
-    if rate < 0:      # canonical k>0: L·s(kx)+C == -L·s(-kx)+(L+C)
+    if rate < 0:  # canonical k>0: L·s(kx)+C == -L·s(-kx)+(L+C)
         amplitude, rate, offset = -amplitude, -rate, offset + amplitude
 
     def sig(t):
         return expit(rate * (np.asarray(t, dtype=float) - midpoint))
 
     return FitResult(
-        params={"amplitude": amplitude, "rate": rate,
-                "midpoint": midpoint, "offset": offset},
-        equation=(f"y = {amplitude:.3g}/(1+e^(-{rate:.3g}"
-                  f"·(t{_signed(-midpoint)}))){_signed(offset)}"),
-        predict=lambda t: _sigmoid(t, amplitude, rate, midpoint,
-                                   offset),
-        first_derivative=lambda t: amplitude * rate * sig(t)
-        * (1.0 - sig(t)),
-        second_derivative=lambda t: amplitude * rate * rate * sig(t)
-        * (1.0 - sig(t)) * (1.0 - 2.0 * sig(t)))
+        params={
+            "amplitude": amplitude,
+            "rate": rate,
+            "midpoint": midpoint,
+            "offset": offset,
+        },
+        equation=(
+            f"y = {amplitude:.3g}/(1+e^(-{rate:.3g}"
+            f"·(t{_signed(-midpoint)}))){_signed(offset)}"
+        ),
+        predict=lambda t: _sigmoid(t, amplitude, rate, midpoint, offset),
+        first_derivative=lambda t: amplitude * rate * sig(t) * (1.0 - sig(t)),
+        second_derivative=lambda t: (
+            amplitude * rate * rate * sig(t) * (1.0 - sig(t)) * (1.0 - 2.0 * sig(t))
+        ),
+    )
 ```
 
 `fit_series` dispatch: `elif method == "sigmoid": result = _fit_sigmoid(elapsed, values)` before the polynomial else-branch.
@@ -169,7 +176,7 @@ def fastest_change_time(fit, t_start, t_end):
     callers draw nothing rather than an arbitrary bar."""
     grid = np.linspace(float(t_start), float(t_end), 512)
     speed = np.abs(np.asarray(fit.first_derivative(grid), dtype=float))
-    if speed.shape != grid.shape:   # scalar-returning closure
+    if speed.shape != grid.shape:  # scalar-returning closure
         speed = np.full_like(grid, float(speed))
     if not np.all(np.isfinite(speed)):
         return None
@@ -202,9 +209,11 @@ def fastest_change_time(fit, t_start, t_end):
 #: Plot pane view modes: the intensity chart, the fits' second-
 #: derivative curves, or the per-ROI time-of-fastest-change bars.
 VIEW_MODES = ("intensity", "second_derivative", "fastest_change")
-VIEW_MODE_LABELS = {"intensity": "Intensity",
-                    "second_derivative": "2nd derivative",
-                    "fastest_change": "Fastest change"}
+VIEW_MODE_LABELS = {
+    "intensity": "Intensity",
+    "second_derivative": "2nd derivative",
+    "fastest_change": "Fastest change",
+}
 ```
 
 `roi_model.py`: import `VIEW_MODES` from `.consts`; on `FigureSettings` add `#: Which chart the plot pane renders.` / `view_mode = Enum(*VIEW_MODES)`. `roi_store.py`: append `"view_mode"` to `_FIGURE_FIELDS`. `roi_controller.py`: add `"analysis_model:session:figure:view_mode, "` clause to the `_on_plot_settings_changed` observe string (same format as the fit clauses there).
@@ -222,9 +231,13 @@ VIEW_MODE_LABELS = {"intensity": "Intensity",
 - [ ] **Step 1: Controls + observer.** Import `VIEW_MODES, VIEW_MODE_LABELS` from `.consts` and `fastest_change_time` from `.curve_fit`; also `from matplotlib.ticker import AutoLocator, ScalarFormatter`. Row 1 of `_plot_controls_view` gets, as its FIRST item:
 
 ```python
-Item("figure.view_mode", label="View",
-     editor=EnumEditor(values=list(VIEW_MODES),
-                       format_func=VIEW_MODE_LABELS.get)),
+(
+    Item(
+        "figure.view_mode",
+        label="View",
+        editor=EnumEditor(values=list(VIEW_MODES), format_func=VIEW_MODE_LABELS.get),
+    ),
+)
 ```
 
 `_PLOT_STATE` gains `"session:figure:view_mode, "`.
@@ -264,9 +277,17 @@ def _apply_legend(self, wanted):
 
 
 def _draw_hint(self, message):
-    self._fit_artists.append(self._axes.text(
-        0.5, 0.5, message, transform=self._axes.transAxes,
-        ha="center", va="center", color="gray"))
+    self._fit_artists.append(
+        self._axes.text(
+            0.5,
+            0.5,
+            message,
+            transform=self._axes.transAxes,
+            ha="center",
+            va="center",
+            color="gray",
+        )
+    )
 ```
 
 (Existing legend code inside the old `_refresh` moves into `_refresh_intensity` as `self._apply_legend(bool(self._lines) and figure_settings.show_legend)`.)
@@ -291,29 +312,32 @@ def _draw_second_derivative(self, series, figure_settings):
         if fit is None:
             continue
         finite_t = np.asarray(elapsed, dtype=float)[
-            np.isfinite(np.asarray(values, dtype=float))]
+            np.isfinite(np.asarray(values, dtype=float))
+        ]
         dense = np.linspace(finite_t.min(), finite_t.max(), 200)
         d2 = np.asarray(fit.second_derivative(dense), dtype=float)
         if d2.shape != dense.shape:
             d2 = np.full_like(dense, float(d2))
-        (curve,) = self._axes.plot(dense, d2, color=roi.style.color,
-                                   label=name)
+        (curve,) = self._axes.plot(dense, d2, color=roi.style.color, label=name)
         self._fit_artists.append(curve)
         drew = True
-        wanted = [key for key, enabled in
-                  (("max", figure_settings.show_second_derivative_max),
-                   ("min", figure_settings.show_second_derivative_min))
-                  if enabled]
+        wanted = [
+            key
+            for key, enabled in (
+                ("max", figure_settings.show_second_derivative_max),
+                ("min", figure_settings.show_second_derivative_min),
+            )
+            if enabled
+        ]
         if wanted:
-            extrema = second_derivative_extrema(
-                fit, finite_t.min(), finite_t.max())
+            extrema = second_derivative_extrema(fit, finite_t.min(), finite_t.max())
             for key in wanted:
                 if key not in extrema:
                     continue
                 t_star = extrema[key][0]
                 self._draw_extremum_marker(
-                    t_star, float(fit.second_derivative(t_star)),
-                    roi, figure_settings)
+                    t_star, float(fit.second_derivative(t_star)), roi, figure_settings
+                )
     self._apply_legend(drew and figure_settings.show_legend)
 ```
 
@@ -339,26 +363,31 @@ def _draw_fastest_change(self, series, figure_settings):
         if fit is None:
             continue
         finite_t = np.asarray(elapsed, dtype=float)[
-            np.isfinite(np.asarray(values, dtype=float))]
-        t_star = fastest_change_time(fit, finite_t.min(),
-                                     finite_t.max())
+            np.isfinite(np.asarray(values, dtype=float))
+        ]
+        t_star = fastest_change_time(fit, finite_t.min(), finite_t.max())
         if t_star is None:
             continue
         labels.append(name)
         times.append(t_star)
         colors.append(roi.style.color)
     if not labels:
-        self._draw_hint("No fastest-change times "
-                        "(fits failed or rate is constant)")
+        self._draw_hint("No fastest-change times (fits failed or rate is constant)")
         return
     positions = list(range(len(labels)))
-    self._fit_artists.extend(
-        self._axes.bar(positions, times, color=colors))
+    self._fit_artists.extend(self._axes.bar(positions, times, color=colors))
     self._axes.set_xticks(positions, labels)
     for x, t_star in zip(positions, times):
-        self._fit_artists.append(self._axes.annotate(
-            f"{t_star:.3g}", (x, t_star), textcoords="offset points",
-            xytext=(0, 4), ha="center", fontsize="x-small"))
+        self._fit_artists.append(
+            self._axes.annotate(
+                f"{t_star:.3g}",
+                (x, t_star),
+                textcoords="offset points",
+                xytext=(0, 4),
+                ha="center",
+                fontsize="x-small",
+            )
+        )
 ```
 
 - [ ] **Step 5: Offscreen smoke** (scratchpad script, not committed): build an `AnalysisSession` against the demo experiment, set each view_mode in turn, force `_refresh`, assert no exception and that `_fit_artists` is non-empty for d²/bars.
@@ -376,19 +405,25 @@ def _draw_fastest_change(self, series, figure_settings):
 - [ ] **Step 1:** Add to `DEMO_ROIS` (after "linear"):
 
 ```python
-    ("sigmoid", (60.0, 170.0, 30.0),
-     lambda t: 3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0,
-     "y = 3000/(1+e^(-0.08·(t-95))) + 500"),
+(
+    (
+        "sigmoid",
+        (60.0, 170.0, 30.0),
+        lambda t: 3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0,
+        "y = 3000/(1+e^(-0.08·(t-95))) + 500",
+    ),
+)
 ```
 
 `build_session`: `figure_settings.fit_method = "sigmoid"` (replaces "exponential"). `verify_and_report`: import `fastest_change_time`; method sweep tuple becomes `("linear", "poly2", "poly3", "exponential", "sigmoid")`; after the extrema suffix append:
 
 ```python
-            t_fastest = fastest_change_time(
-                fit, min(elapsed), max(elapsed))
-            line += (f"  fastest@{t_fastest:.3g}s"
-                     if t_fastest is not None
-                     else "  (constant rate -> no bar)")
+t_fastest = fastest_change_time(fit, min(elapsed), max(elapsed))
+line += (
+    f"  fastest@{t_fastest:.3g}s"
+    if t_fastest is not None
+    else "  (constant rate -> no bar)"
+)
 ```
 
 Update the module docstring's ROI list to include the sigmoid disk (inflection at t=95; d² max/min ≈ 78/112 s, interior).

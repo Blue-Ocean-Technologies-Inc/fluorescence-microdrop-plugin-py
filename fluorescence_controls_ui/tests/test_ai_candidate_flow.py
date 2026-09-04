@@ -1,5 +1,4 @@
 """Accept/discard flow: candidates -> filters -> session ROIs."""
-import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.ai_controller import (
     AiRoiController,
@@ -19,25 +18,29 @@ from fluorescence_controls_ui.image_viewer.model import (
 
 
 def _candidate(votes, rx=10.0):
-    return Candidate(polygon=[0.0, 0.0, 20.0, 0.0, 20.0, 20.0],
-                     ellipse=[10.0, 10.0, rx, rx, 0.0],
-                     votes=votes, score=0.9)
+    return Candidate(
+        polygon=[0.0, 0.0, 20.0, 0.0, 20.0, 20.0],
+        ellipse=[10.0, 10.0, rx, rx, 0.0],
+        votes=votes,
+        score=0.9,
+    )
 
 
 def _controllers():
     viewer = FluorescenceImageViewerModel()
     analysis = RoiAnalysisModel()
-    roi_controller = RoiAnalysisController(viewer_model=viewer,
-                                           analysis_model=analysis)
-    ai_controller = AiRoiController(viewer_model=viewer,
-                                    analysis_model=analysis)
+    roi_controller = RoiAnalysisController(viewer_model=viewer, analysis_model=analysis)
+    ai_controller = AiRoiController(viewer_model=viewer, analysis_model=analysis)
     return analysis, roi_controller, ai_controller
 
 
 def test_accept_commits_only_filter_passing_undiscarded_candidates():
     analysis, roi_controller, _ai = _controllers()
-    analysis.ai_candidates = [_candidate(votes=3), _candidate(votes=1),
-                              _candidate(votes=3)]
+    analysis.ai_candidates = [
+        _candidate(votes=3),
+        _candidate(votes=1),
+        _candidate(votes=3),
+    ]
     analysis.ai_candidates[2].discarded = True
     analysis.ai_significance = 2
     analysis.ai_accept_button = True

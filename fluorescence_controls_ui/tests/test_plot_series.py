@@ -1,14 +1,24 @@
 """Series derivation: pure function of (session, filtered paths)."""
+
 import math
 
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
-    derive_series, interpolated_series, normalized_series, outlier_mask,
+    background_ref_baseline,
+    background_ref_corrected_series,
+    derive_series,
+    interpolated_series,
+    normalized_series,
+    outlier_mask,
     smoothed_values,
-    background_ref_baseline, background_ref_corrected_series, stat_value,
-    subtracted_series, visible_series, without_outliers,
+    stat_value,
+    subtracted_series,
+    visible_series,
+    without_outliers,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
-    AnalysisSession, Roi, RoiStyle,
+    AnalysisSession,
+    Roi,
+    RoiStyle,
 )
 
 
@@ -21,28 +31,24 @@ def _image(tmp_path, name):
 def test_derive_series_elapsed_axis_and_nan_gaps(tmp_path):
     first = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
     second = _image(tmp_path, "b_2026_07_20-10_00_30_raw.png")
-    roi = Roi(name="ROI 1", kind="ellipse",
-              geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
     session = AnalysisSession(rois=[roi])
-    session.stats[session.cache_key(first, roi)] = {
-        "mean": 10.0, "outline_mean": 4.0}
+    session.stats[session.cache_key(first, roi)] = {"mean": 10.0, "outline_mean": 4.0}
 
     series = derive_series(session, [first, second])
     name, elapsed, values = series[roi.roi_id]
     assert name == "ROI 1"
     assert elapsed == [0.0, 30.0]
     assert values[0] == 10.0
-    assert math.isnan(values[1])          # uncomputed image gaps
+    assert math.isnan(values[1])  # uncomputed image gaps
 
 
 def test_derive_series_honors_plot_stat(tmp_path):
     image = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
-    roi = Roi(name="ROI 1", kind="ellipse",
-              geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
     session = AnalysisSession(rois=[roi], plot_stat="bg_corrected")
-    session.stats[session.cache_key(image, roi)] = {
-        "mean": 10.0, "outline_mean": 4.0}
-    (_, _, values), = derive_series(session, [image]).values()
+    session.stats[session.cache_key(image, roi)] = {"mean": 10.0, "outline_mean": 4.0}
+    ((_, _, values),) = derive_series(session, [image]).values()
     assert values == [6.0]
 
 
@@ -61,11 +67,11 @@ def test_stat_value_variants():
 
 def test_visible_series_drops_the_hidden_rois():
     shown = Roi(roi_id="a", name="ROI 1", kind="ellipse")
-    hidden = Roi(roi_id="b", name="ROI 2", kind="ellipse",
-                 style=RoiStyle(visible=False))
+    hidden = Roi(
+        roi_id="b", name="ROI 2", kind="ellipse", style=RoiStyle(visible=False)
+    )
     session = AnalysisSession(rois=[shown, hidden])
-    series = {"a": ("ROI 1", [0.0], [1.0]),
-              "b": ("ROI 2", [0.0], [2.0])}
+    series = {"a": ("ROI 1", [0.0], [1.0]), "b": ("ROI 2", [0.0], [2.0])}
 
     assert visible_series(session, series) == {"a": ("ROI 1", [0.0], [1.0])}
 
@@ -110,28 +116,31 @@ def test_size_aware_stats_with_a_calibration():
 def test_size_aware_stats_are_nan_when_a_piece_is_missing():
     assert math.isnan(stat_value({"mean": 10.0}, "integrated"))
     assert math.isnan(stat_value({"count": 25.0}, "per_area"))
-    assert math.isnan(stat_value({"mean": 10.0, "count": 25.0},
-                                 "bg_integrated"))
+    assert math.isnan(stat_value({"mean": 10.0, "count": 25.0}, "bg_integrated"))
 
 
 def test_derive_series_uses_the_sessions_calibration(tmp_path):
     image = _image(tmp_path, "a_2026_07_20-10_00_00_raw.png")
-    roi = Roi(name="ROI 1", kind="ellipse",
-              geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
+    roi = Roi(name="ROI 1", kind="ellipse", geometry=[5.0, 5.0, 2.0, 2.0, 0.0])
     # "area" is table/CSV only, so per_area is what carries the
     # calibration into a plotted series: 10 / 1e-4 mm^2 = 1e5.
     session = AnalysisSession(rois=[roi], plot_stat="per_area")
     session.scale.trait_set(metres_per_pixel=1e-5, unit="mm")
     session.stats[session.cache_key(image, roi)] = {
-        "mean": 10.0, "outline_mean": 4.0, "count": 25.0}
+        "mean": 10.0,
+        "outline_mean": 4.0,
+        "count": 25.0,
+    }
 
     _name, _elapsed, values = derive_series(session, [image])[roi.roi_id]
     assert abs(values[0] - 1e5) < 1e-6
 
 
 def test_normalized_series_stretches_each_roi_to_its_own_range():
-    series = {"a": ("ROI 1", [0.0, 1.0, 2.0], [10.0, 20.0, 30.0]),
-              "b": ("ROI 2", [0.0, 1.0, 2.0], [100.0, 300.0, 500.0])}
+    series = {
+        "a": ("ROI 1", [0.0, 1.0, 2.0], [10.0, 20.0, 30.0]),
+        "b": ("ROI 2", [0.0, 1.0, 2.0], [100.0, 300.0, 500.0]),
+    }
     result = normalized_series(series)
     assert result["a"][2] == [0.0, 50.0, 100.0]
     assert result["b"][2] == [0.0, 50.0, 100.0]
@@ -140,8 +149,7 @@ def test_normalized_series_stretches_each_roi_to_its_own_range():
 
 
 def test_normalized_series_keeps_gaps_as_gaps():
-    series = {"a": ("ROI 1", [0.0, 1.0, 2.0],
-                    [10.0, math.nan, 30.0])}
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0], [10.0, math.nan, 30.0])}
     values = normalized_series(series)["a"][2]
     assert values[0] == 0.0 and values[2] == 100.0
     assert math.isnan(values[1])
@@ -154,21 +162,21 @@ def test_normalized_series_leaves_a_flat_curve_at_zero():
 
 def test_normalized_series_passes_an_all_nan_curve_through():
     series = {"a": ("ROI 1", [0.0, 1.0], [math.nan, math.nan])}
-    assert all(math.isnan(value)
-               for value in normalized_series(series)["a"][2])
+    assert all(math.isnan(value) for value in normalized_series(series)["a"][2])
 
 
 def test_subtracted_series_starts_every_curve_at_zero():
-    series = {"a": ("ROI 1", [0.0, 1.0], [10.0, 30.0]),
-              "b": ("ROI 2", [0.0, 1.0], [100.0, 90.0])}
+    series = {
+        "a": ("ROI 1", [0.0, 1.0], [10.0, 30.0]),
+        "b": ("ROI 2", [0.0, 1.0], [100.0, 90.0]),
+    }
     result = subtracted_series(series)
     assert result["a"][2] == [0.0, 20.0]
     assert result["b"][2] == [0.0, -10.0]
 
 
 def test_subtracted_series_uses_the_first_finite_value():
-    series = {"a": ("ROI 1", [0.0, 1.0, 2.0],
-                    [math.nan, 10.0, 15.0])}
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0], [math.nan, 10.0, 15.0])}
     values = subtracted_series(series)["a"][2]
     assert math.isnan(values[0])
     assert values[1] == 0.0 and values[2] == 5.0
@@ -185,10 +193,8 @@ def _background_refs_session():
     rois = [
         Roi(roi_id="s1", name="Sample 1", kind="ellipse"),
         Roi(roi_id="s2", name="Sample 2", kind="ellipse"),
-        Roi(roi_id="b1", name="Blank 1", kind="ellipse",
-            is_background_ref=True),
-        Roi(roi_id="b2", name="Blank 2", kind="ellipse",
-            is_background_ref=True),
+        Roi(roi_id="b1", name="Blank 1", kind="ellipse", is_background_ref=True),
+        Roi(roi_id="b2", name="Blank 2", kind="ellipse", is_background_ref=True),
     ]
     series = {
         "s1": ("Sample 1", [0.0, 1.0, 2.0], [100.0, 200.0, 300.0]),
@@ -225,14 +231,12 @@ def test_nothing_marked_leaves_the_series_untouched():
 
 def test_a_reference_missing_a_value_averages_the_others():
     session, series = _background_refs_session()
-    series["b1"] = ("Blank 1", [0.0, 1.0, 2.0],
-                    [math.nan, 20.0, math.nan])
-    series["b2"] = ("Blank 2", [0.0, 1.0, 2.0],
-                    [30.0, 40.0, math.nan])
+    series["b1"] = ("Blank 1", [0.0, 1.0, 2.0], [math.nan, 20.0, math.nan])
+    series["b2"] = ("Blank 2", [0.0, 1.0, 2.0], [30.0, 40.0, math.nan])
     baseline = background_ref_baseline(session, series)
-    assert baseline[0] == 30.0      # only the one that has a value
-    assert baseline[1] == 30.0      # both
-    assert baseline[2] != baseline[2]   # neither: a gap, not a guess
+    assert baseline[0] == 30.0  # only the one that has a value
+    assert baseline[1] == 30.0  # both
+    assert baseline[2] != baseline[2]  # neither: a gap, not a guess
     corrected = background_ref_corrected_series(session, series)["s1"][2]
     assert corrected[0] == 70.0 and corrected[1] == 170.0
     assert corrected[2] != corrected[2]
@@ -253,8 +257,7 @@ def test_a_hidden_reference_still_corrects():
 
 def test_background_ref_and_subtract_first_stack_and_commute():
     session, series = _background_refs_session()
-    stacked = subtracted_series(background_ref_corrected_series(session,
-                                                          series))
+    stacked = subtracted_series(background_ref_corrected_series(session, series))
     # Sample 1 corrected is [80, 170, 260]; less its own first value.
     assert stacked["s1"][2] == [0.0, 90.0, 180.0]
     # Both are subtractions of a constant per point, so on complete
@@ -262,8 +265,7 @@ def test_background_ref_and_subtract_first_stack_and_commute():
     # ticking the two boxes in either order gives the same curve.
     # (Only where a curve's first finite value falls on a different
     # image can they diverge.)
-    other_way = background_ref_corrected_series(session,
-                                          subtracted_series(series))
+    other_way = background_ref_corrected_series(session, subtracted_series(series))
     assert other_way["s1"][2] == stacked["s1"][2]
 
 
@@ -287,14 +289,16 @@ def test_an_isolated_spike_is_found_on_any_shape_of_baseline():
     spike = 900.0
     baselines = {
         "flat": [100.0] * 21,
-        "noisy": [100.0 + (2.0 if index % 2 else -2.0)
-                  for index in range(21)],
+        "noisy": [100.0 + (2.0 if index % 2 else -2.0) for index in range(21)],
         "rising": [100.0 + 10.0 * index for index in range(21)],
-        "sigmoid": [100.0 + 800.0 / (1.0 + math.exp(-0.3 * (index - 10)))
-                    for index in range(21)],
+        "sigmoid": [
+            100.0 + 800.0 / (1.0 + math.exp(-0.3 * (index - 10))) for index in range(21)
+        ],
     }
     for label, values in baselines.items():
-        assert not any(outlier_mask(values, window=7)),             f"{label}: a clean baseline has no outliers"
+        assert not any(outlier_mask(values, window=7)), (
+            f"{label}: a clean baseline has no outliers"
+        )
         # Index 3, where each of these baselines is still flat-ish.
         # A spike at the sigmoid's midpoint would NOT be found, the
         # curve moving as much across that window as the spike does.
@@ -317,17 +321,16 @@ def test_outliers_packed_into_one_window_stop_being_outliers():
     values = [100.0] * 21
     for index in (2, 10, 18):
         values[index] = 900.0
-    assert [index for index, flag
-            in enumerate(outlier_mask(values, window=7))
-            if flag] == [2, 10, 18]
+    assert [
+        index for index, flag in enumerate(outlier_mask(values, window=7)) if flag
+    ] == [2, 10, 18]
 
 
 def test_an_alternating_signal_is_not_all_outliers():
     # Half its values are identical, so the median deviation is zero
     # while the data plainly has spread — the case that made an
     # earlier version flag seventeen points of twenty-one.
-    sawtooth = [100.0 + (2.0 if index % 2 else -2.0)
-                for index in range(21)]
+    sawtooth = [100.0 + (2.0 if index % 2 else -2.0) for index in range(21)]
     assert not any(outlier_mask(sawtooth, window=7))
 
 
@@ -336,7 +339,7 @@ def test_gaps_are_not_outliers_and_survive_removal():
     assert outlier_mask(values) == [False] * 5
     series = {"a": ("ROI 1", [0.0, 1.0, 2.0, 3.0, 4.0], values)}
     cleaned, flags = without_outliers(series)
-    assert cleaned["a"][2][2] != cleaned["a"][2][2]     # still a gap
+    assert cleaned["a"][2][2] != cleaned["a"][2][2]  # still a gap
     assert not any(flags["a"])
 
 
@@ -352,15 +355,15 @@ def test_removal_replaces_the_point_with_a_gap():
 def test_the_threshold_and_window_are_the_users_to_set():
     _name, _elapsed, spiked = _rising(spike_at=10)
     assert outlier_mask(spiked, threshold=3.0)[10] is True
-    assert not outlier_mask(spiked, threshold=30.0)[10],         "a laxer threshold must keep the point"
+    assert not outlier_mask(spiked, threshold=30.0)[10], (
+        "a laxer threshold must keep the point"
+    )
 
 
 def test_smoothing_reduces_the_wiggle_without_moving_the_level():
-    noisy = [100.0 + (5.0 if index % 2 else -5.0)
-             for index in range(31)]
+    noisy = [100.0 + (5.0 if index % 2 else -5.0) for index in range(31)]
     for method in ("savgol", "butterworth"):
-        smoothed = smoothed_values(noisy, method, window=7, order=2,
-                                   cutoff=0.2)
+        smoothed = smoothed_values(noisy, method, window=7, order=2, cutoff=0.2)
         middle = smoothed[5:-5]
         assert max(middle) - min(middle) < 4.0, method
         assert abs(sum(middle) / len(middle) - 100.0) < 1.0, method
@@ -383,24 +386,26 @@ def test_a_series_too_short_to_filter_is_returned_as_it_is():
 
 
 def test_interpolation_bridges_an_internal_gap_linearly():
-    series = {"a": ("ROI 1", [0.0, 1.0, 2.0, 3.0],
-                    [10.0, math.nan, math.nan, 40.0])}
-    (_, _, values), = interpolated_series(series).values()
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0, 3.0], [10.0, math.nan, math.nan, 40.0])}
+    ((_, _, values),) = interpolated_series(series).values()
     assert values == [10.0, 20.0, 30.0, 40.0]
 
 
 def test_interpolation_leaves_the_open_ends_open():
-    series = {"a": ("ROI 1", [0.0, 1.0, 2.0, 3.0],
-                    [math.nan, 1.0, 2.0, math.nan])}
-    (_, _, values), = interpolated_series(series).values()
-    assert math.isnan(values[0]) and math.isnan(values[3]),         "an end gap has no far side to bridge to"
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0, 3.0], [math.nan, 1.0, 2.0, math.nan])}
+    ((_, _, values),) = interpolated_series(series).values()
+    assert math.isnan(values[0]) and math.isnan(values[3]), (
+        "an end gap has no far side to bridge to"
+    )
     assert values[1:3] == [1.0, 2.0]
 
 
 def test_interpolation_passes_curves_it_cannot_bridge_through():
-    series = {"a": ("ROI 1", [0.0, 1.0], [math.nan, math.nan]),
-              "b": ("ROI 2", [0.0, 1.0], [math.nan, 5.0]),
-              "c": ("ROI 3", [0.0, 1.0], [1.0, 2.0])}
+    series = {
+        "a": ("ROI 1", [0.0, 1.0], [math.nan, math.nan]),
+        "b": ("ROI 2", [0.0, 1.0], [math.nan, 5.0]),
+        "c": ("ROI 3", [0.0, 1.0], [1.0, 2.0]),
+    }
     bridged = interpolated_series(series)
     assert all(value != value for value in bridged["a"][2])
     assert math.isnan(bridged["b"][2][0]) and bridged["b"][2][1] == 5.0

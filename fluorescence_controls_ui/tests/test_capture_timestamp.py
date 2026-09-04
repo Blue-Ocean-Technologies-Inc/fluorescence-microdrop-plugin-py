@@ -1,4 +1,5 @@
 """capture_timestamp: filename UTC stamp preferred, mtime fallback."""
+
 import calendar
 import time
 
@@ -9,7 +10,8 @@ def test_timestamp_parsed_from_filename(tmp_path):
     path = tmp_path / "gfp_Green_540_nm_2_2026_07_20-17_46_24_raw.png"
     path.write_bytes(b"")
     expected = calendar.timegm(
-        time.strptime("2026_07_20-17_46_24", "%Y_%m_%d-%H_%M_%S"))
+        time.strptime("2026_07_20-17_46_24", "%Y_%m_%d-%H_%M_%S")
+    )
     assert capture_timestamp(path) == expected
 
 

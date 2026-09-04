@@ -6,15 +6,15 @@ chain table (`chain_rows`, `free_chain`, `chain_selection`,
 `FluorescenceChainRow` is the Qt-free row type the table editor binds to;
 it round-trips against Task 1's `ChainEntry` (`exposure` <-> `exposure_ms`).
 """
-from fluorescence_controller.consts import LED_WAVELENGTHS
-from fluorescence_protocol_controls.capture_chain import ChainEntry
 
+from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_controls_ui.chain_model import FluorescenceChainRow
 from fluorescence_controls_ui.consts import PERSISTED_CONTROL_TRAITS
 from fluorescence_controls_ui.model import FluorescenceStatusModel
-
+from fluorescence_protocol_controls.capture_chain import ChainEntry
 
 # --- FluorescenceChainRow <-> ChainEntry -----------------------------------------
+
 
 def test_chain_row_defaults():
     row = FluorescenceChainRow()
@@ -30,8 +30,13 @@ def test_chain_row_defaults():
 
 def test_chain_row_to_entry_dict_round_trips_through_chain_entry():
     row = FluorescenceChainRow(
-        label="GFP", wavelength=LED_WAVELENGTHS[2], intensity=75,
-        frequency=1000, exposure=25.5, gain=150, run=False,
+        label="GFP",
+        wavelength=LED_WAVELENGTHS[2],
+        intensity=75,
+        frequency=1000,
+        exposure=25.5,
+        gain=150,
+        run=False,
     )
     entry = ChainEntry(**row.to_entry_dict())
     assert entry.label == "GFP"
@@ -45,8 +50,13 @@ def test_chain_row_to_entry_dict_round_trips_through_chain_entry():
 
 def test_chain_row_from_entry():
     entry = ChainEntry(
-        label="DAPI", wavelength=LED_WAVELENGTHS[1], intensity=60,
-        frequency=2000, exposure_ms=15.0, gain=100, run=True,
+        label="DAPI",
+        wavelength=LED_WAVELENGTHS[1],
+        intensity=60,
+        frequency=2000,
+        exposure_ms=15.0,
+        gain=100,
+        run=True,
     )
     row = FluorescenceChainRow.from_entry(entry)
     assert row.label == "DAPI"
@@ -60,8 +70,13 @@ def test_chain_row_from_entry():
 
 def test_chain_row_from_entry_to_entry_dict_round_trip():
     entry = ChainEntry(
-        label="Cy5", wavelength=LED_WAVELENGTHS[3], intensity=40,
-        frequency=500, exposure_ms=8.0, gain=20, run=True,
+        label="Cy5",
+        wavelength=LED_WAVELENGTHS[3],
+        intensity=40,
+        frequency=500,
+        exposure_ms=8.0,
+        gain=20,
+        run=True,
     )
     row = FluorescenceChainRow.from_entry(entry)
     assert row.to_entry_dict() == entry.model_dump()
@@ -76,6 +91,7 @@ def test_chain_row_image_tag_round_trips_through_chain_entry():
 
 
 # --- model: deleted traits ---------------------------------------------------------
+
 
 def test_model_has_no_mode_or_per_mode_traits():
     model = FluorescenceStatusModel()
@@ -98,6 +114,7 @@ def test_model_has_no_mode_or_per_mode_traits():
 
 # --- model: new single param set ----------------------------------------------------
 
+
 def test_model_has_single_param_set_with_old_br_defaults():
     model = FluorescenceStatusModel()
     assert model.image_tag == ""
@@ -117,6 +134,7 @@ def test_model_led_index_tracks_wavelength():
 
 
 # --- model: chain state --------------------------------------------------------------
+
 
 def test_model_chain_state_defaults():
     model = FluorescenceStatusModel()
@@ -138,10 +156,17 @@ def test_model_chain_rows_hold_chain_row_instances():
 
 # --- PERSISTED_CONTROL_TRAITS ---------------------------------------------------------
 
+
 def test_persisted_control_traits_is_the_new_single_set():
     assert PERSISTED_CONTROL_TRAITS == [
-        "wavelength", "intensity", "frequency", "gain", "exposure",
-        "device_viewer_stream", "auto_exposure", "auto_gain",
+        "wavelength",
+        "intensity",
+        "frequency",
+        "gain",
+        "exposure",
+        "device_viewer_stream",
+        "auto_exposure",
+        "auto_gain",
     ]
 
 
@@ -168,8 +193,9 @@ def test_row_phase_defaults_and_entry_round_trip():
     assert d["capture_start"] is True
     assert d["capture_end"] is False
 
-    entry = ChainEntry(**{**d, "label": "x",
-                          "capture_start": False, "capture_end": True})
+    entry = ChainEntry(
+        **{**d, "label": "x", "capture_start": False, "capture_end": True}
+    )
     back = FluorescenceChainRow.from_entry(entry)
     assert back.capture_start is False
     assert back.capture_end is True

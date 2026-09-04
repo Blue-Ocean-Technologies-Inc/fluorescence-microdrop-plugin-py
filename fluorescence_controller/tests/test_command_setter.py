@@ -1,4 +1,5 @@
 """Hardware-free tests: typed requests -> exact board command lines."""
+
 import json
 
 import pytest
@@ -55,7 +56,7 @@ def test_payload_bounds_are_enforced():
     with pytest.raises(ValidationError):
         SetLedData(led=0, duty=101)
     with pytest.raises(ValidationError):
-        SetLedData(led=6, duty=50)          # only 6 LEDs (0-5)
+        SetLedData(led=6, duty=50)  # only 6 LEDs (0-5)
     with pytest.raises(ValidationError):
         SetLedFrequencyData(led=0, frequency=0)
 

@@ -1,25 +1,42 @@
 from traits.api import (
-    Bool, Button, Enum, Event, Instance, List, Range, Str, observe,
+    Bool,
+    Button,
+    Enum,
+    Event,
+    Instance,
+    List,
+    Range,
+    Str,
+    observe,
 )
 from traits.observation.api import parse
 
-from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
-
 from template_status_and_controls.base_model import BaseStatusModel
 
-from .cameras.consts import ASI_GAIN_MIN, ASI_GAIN_MAX
+from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
+
+from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .chain_model import FluorescenceChainRow
 from .consts import (
-    disconnected_color, connected_color, halted_color,
-    LED_WAVELENGTHS, LED_DUTY_MIN, LED_DUTY_MAX,
-    LED_FREQUENCY_MIN, LED_FREQUENCY_MAX,
-    INTENSITY_DEFAULT, FREQUENCY_DEFAULT,
-    EXPOSURE_DEFAULT, GAIN_DEFAULT,
-    EXPOSURE_MS_MIN, EXPOSURE_MS_MAX, PERSISTED_CONTROL_TRAITS,
+    EXPOSURE_DEFAULT,
+    EXPOSURE_MS_MAX,
+    EXPOSURE_MS_MIN,
+    FREQUENCY_DEFAULT,
+    GAIN_DEFAULT,
+    INTENSITY_DEFAULT,
+    LED_DUTY_MAX,
+    LED_DUTY_MIN,
+    LED_FREQUENCY_MAX,
+    LED_FREQUENCY_MIN,
+    LED_WAVELENGTHS,
+    PERSISTED_CONTROL_TRAITS,
+    connected_color,
+    disconnected_color,
+    halted_color,
 )
+from .preferences import FluorescencePreferences
 
 from logger.logger_service import get_logger
-from .preferences import FluorescencePreferences
 
 logger = get_logger(__name__)
 
@@ -83,19 +100,30 @@ class FluorescenceStatusModel(BaseStatusModel):
     capture_end = Bool(False)
     wavelength = Enum(*LED_WAVELENGTHS)
     intensity = Range(
-        LED_DUTY_MIN, LED_DUTY_MAX, value=INTENSITY_DEFAULT, mode="slider",
+        LED_DUTY_MIN,
+        LED_DUTY_MAX,
+        value=INTENSITY_DEFAULT,
+        mode="slider",
         desc="LED duty to apply (%)",
     )
     frequency = Range(
-        LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=FREQUENCY_DEFAULT, mode="xslider",
+        LED_FREQUENCY_MIN,
+        LED_FREQUENCY_MAX,
+        value=FREQUENCY_DEFAULT,
+        mode="xslider",
         desc="LED PWM frequency (Hz)",
     )
     exposure = RangeWithViewHints(
-        float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=float(EXPOSURE_DEFAULT),
+        float(EXPOSURE_MS_MIN),
+        float(EXPOSURE_MS_MAX),
+        value=float(EXPOSURE_DEFAULT),
         desc="camera exposure (milliseconds)",
     )
     gain = Range(
-        ASI_GAIN_MIN, ASI_GAIN_MAX, value=GAIN_DEFAULT, mode="slider",
+        ASI_GAIN_MIN,
+        ASI_GAIN_MAX,
+        value=GAIN_DEFAULT,
+        mode="slider",
         desc="camera gain",
     )
 
@@ -106,10 +134,17 @@ class FluorescenceStatusModel(BaseStatusModel):
     _self_preference_change = Bool(False)
 
     def traits_init(self):
-        logger.debug(f"Fluorescence Status Model: Initial fluorescence preferences to model sync")
+        logger.debug(
+            "Fluorescence Status Model: Initial fluorescence preferences to model sync"
+        )
         self._self_preference_change = True
-        self.trait_set(**{key: self.preferences.trait_get(key)[key] for key in PERSISTED_CONTROL_TRAITS})
-        self._self_preference_change = False # private trait to stop pull preference observer acting on self updates
+        self.trait_set(
+            **{
+                key: self.preferences.trait_get(key)[key]
+                for key in PERSISTED_CONTROL_TRAITS
+            }
+        )
+        self._self_preference_change = False  # private trait to stop pull preference observer acting on self updates
 
     # ------------------------------------------------------------------ #
     # Collapsible-section switches (view headers toggle these)             #
@@ -171,8 +206,12 @@ class FluorescenceStatusModel(BaseStatusModel):
         self.preferences.trait_set(**{event.name: event.new})
         self._self_preference_change = False
 
-    @observe(parse("preferences").match(lambda name, trait: name in PERSISTED_CONTROL_TRAITS))
+    @observe(
+        parse("preferences").match(lambda name, trait: name in PERSISTED_CONTROL_TRAITS)
+    )
     def _pull_preferences(self, event):
         if not self._self_preference_change:
-            logger.debug(f"Fluorescence Status Model: Syncing changed preferences values into model: {event}")
+            logger.debug(
+                f"Fluorescence Status Model: Syncing changed preferences values into model: {event}"
+            )
             self.trait_set(**{event.name: event.new})

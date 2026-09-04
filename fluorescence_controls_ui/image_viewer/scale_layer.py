@@ -2,6 +2,7 @@
 length in image pixels is reported on release. Separate from the ROI
 layer, which owns creation, editing and selection — a calibration line
 is none of those, and is not kept once its length becomes a number."""
+
 import math
 
 from PySide6.QtGui import QColor, QPen
@@ -47,15 +48,21 @@ class ScaleCanvasLayer:
     def mouse_move(self, scene_point):
         if self._draft is None:
             return False
-        self._draft.setLine(self._press_point.x(), self._press_point.y(),
-                            scene_point.x(), scene_point.y())
+        self._draft.setLine(
+            self._press_point.x(),
+            self._press_point.y(),
+            scene_point.x(),
+            scene_point.y(),
+        )
         return True
 
     def mouse_release(self, scene_point):
         if self._draft is None:
             return False
-        length_px = math.hypot(scene_point.x() - self._press_point.x(),
-                               scene_point.y() - self._press_point.y())
+        length_px = math.hypot(
+            scene_point.x() - self._press_point.x(),
+            scene_point.y() - self._press_point.y(),
+        )
         self.clear_draft()
         if length_px >= MIN_SCALE_LINE_PX:
             self.on_line_drawn(length_px)

@@ -3,6 +3,7 @@ the mode selector + per-mode brightfield/fluorescence groups are gone,
 replaced by a single params section plus a capture-chain table. Pure
 traitsui object-graph walk — no Qt widget instantiation (that's Task 10).
 """
+
 from traitsui.api import Group, Item, View
 
 from fluorescence_controls_ui.view import UnifiedView
@@ -40,8 +41,16 @@ def test_no_deleted_mode_or_per_mode_item_names():
 
 def test_params_group_present():
     names = _all_item_names()
-    for name in ("image_tag", "wavelength", "intensity", "frequency",
-                 "exposure", "auto_exposure", "gain", "auto_gain"):
+    for name in (
+        "image_tag",
+        "wavelength",
+        "intensity",
+        "frequency",
+        "exposure",
+        "auto_exposure",
+        "gain",
+        "auto_gain",
+    ):
         assert name in names, f"{name!r} missing from view item names"
 
 
@@ -73,12 +82,14 @@ def test_chain_buttons_present():
 
 def test_delete_button_present_in_chain_group():
     from fluorescence_controls_ui.view import UnifiedView
+
     assert "delete_capture_button" in _item_names(UnifiedView.content)
 
 
 def test_run_column_is_a_glyph_not_a_checkbox():
     """Route-table parity: the Run column renders Material glyphs."""
     from fluorescence_controls_ui.view import RunColumn, chain_table_editor
+
     col = chain_table_editor.columns[1]
     assert isinstance(col, RunColumn)
     assert col.formatter(True) == "play_arrow"
@@ -87,9 +98,12 @@ def test_run_column_is_a_glyph_not_a_checkbox():
 
 def test_chain_table_has_right_click_delete_menu():
     from fluorescence_controls_ui.view import chain_table_editor
-    actions = [item.action.action
-               for group in chain_table_editor.menu.groups
-               for item in group.items]
+
+    actions = [
+        item.action.action
+        for group in chain_table_editor.menu.groups
+        for item in group.items
+    ]
     assert "delete_chain_row" in actions
 
 
@@ -106,6 +120,7 @@ def test_capture_phase_toggles_cannot_switch_off_the_last_phase():
 
     def _find(node, name):
         from traitsui.api import Group, Item
+
         if isinstance(node, Item) and node.name == name:
             return node
         if isinstance(node, Group):

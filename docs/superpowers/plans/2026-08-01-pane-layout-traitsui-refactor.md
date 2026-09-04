@@ -53,8 +53,8 @@ PySide6 (QScrollArea/QSplitter), matplotlib QtAgg.
 - [ ] **Step 1: Append the constants**
 
 ```python
-ICON_CHEVRON_LEFT    = "chevron_left"  # collapse a sidebar leftward
-ICON_CHEVRON_RIGHT   = "chevron_right" # reveal a collapsed sidebar
+ICON_CHEVRON_LEFT = "chevron_left"  # collapse a sidebar leftward
+ICON_CHEVRON_RIGHT = "chevron_right"  # reveal a collapsed sidebar
 ```
 
 - [ ] **Step 2: Commit in the submodule (already on `feat/roi-analysis-icons`)**
@@ -114,7 +114,8 @@ from traitsui.api import EnumEditor, HGroup, Item, UItem, VGroup, View
 from microdrop_style.icons.icons import ICON_SAVE
 from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
 from .consts import (
-    ROI_PLOT_CANVAS_MIN_HEIGHT, ROI_PLOT_CANVAS_MIN_WIDTH,
+    ROI_PLOT_CANVAS_MIN_HEIGHT,
+    ROI_PLOT_CANVAS_MIN_WIDTH,
     ROI_PLOT_COALESCE_MS,
 )
 ```
@@ -130,27 +131,31 @@ from .consts import (
 _plot_controls_view = View(
     VGroup(
         HGroup(
-            Item("session.plot_stat", label="Plot",
-                 editor=EnumEditor(values=list(PLOT_STATS),
-                                   format_func=PLOT_STAT_LABELS.get)),
+            Item(
+                "session.plot_stat",
+                label="Plot",
+                editor=EnumEditor(
+                    values=list(PLOT_STATS), format_func=PLOT_STAT_LABELS.get
+                ),
+            ),
             Item("figure.x_auto", label="X auto"),
-            Item("figure.x_min", label="min",
-                 enabled_when="not figure.x_auto"),
-            Item("figure.x_max", label="max",
-                 enabled_when="not figure.x_auto"),
+            Item("figure.x_min", label="min", enabled_when="not figure.x_auto"),
+            Item("figure.x_max", label="max", enabled_when="not figure.x_auto"),
         ),
         HGroup(
             Item("figure.y_auto", label="Y auto"),
-            Item("figure.y_min", label="min",
-                 enabled_when="not figure.y_auto"),
-            Item("figure.y_max", label="max",
-                 enabled_when="not figure.y_auto"),
+            Item("figure.y_min", label="min", enabled_when="not figure.y_auto"),
+            Item("figure.y_max", label="max", enabled_when="not figure.y_auto"),
             Item("figure.export_dpi", label="DPI"),
             Item("figure.export_format", label="Format"),
-            UItem("model.save_plot_button", editor=IconButtonEditor(
-                glyph=ICON_SAVE,
-                tooltip="Save the plot to the experiment's analysis "
-                        "folder at the chosen format and DPI")),
+            UItem(
+                "model.save_plot_button",
+                editor=IconButtonEditor(
+                    glyph=ICON_SAVE,
+                    tooltip="Save the plot to the experiment's analysis "
+                    "folder at the chosen format and DPI",
+                ),
+            ),
         ),
     ),
 )
@@ -172,8 +177,7 @@ def create_contents(self, parent):
     widget = QWidget(parent)
     layout = QVBoxLayout(widget)
     self.canvas = RoiPlotCanvas(roi_analysis_model)
-    self.canvas.setMinimumSize(ROI_PLOT_CANVAS_MIN_WIDTH,
-                               ROI_PLOT_CANVAS_MIN_HEIGHT)
+    self.canvas.setMinimumSize(ROI_PLOT_CANVAS_MIN_WIDTH, ROI_PLOT_CANVAS_MIN_HEIGHT)
     layout.addWidget(NavigationToolbar2QT(self.canvas, widget))
     self._controls_ui = self._build_controls(widget)
     layout.addWidget(self._controls_ui.control)
@@ -188,8 +192,7 @@ def create_contents(self, parent):
     layout.addWidget(self._progress_label)
     roi_analysis_model.observe(self._on_session_swapped, "session")
     roi_analysis_model.observe(self._on_save_plot, "save_plot_button")
-    roi_analysis_model.observe(self._on_progress_text_changed,
-                               "progress_text")
+    roi_analysis_model.observe(self._on_progress_text_changed, "progress_text")
     # The pane may be resized below the content's minimum; past that
     # point scrollbars take over instead of the dock pane locking.
     scroll = QScrollArea(parent)
@@ -197,20 +200,27 @@ def create_contents(self, parent):
     scroll.setWidget(widget)
     return scroll
 
+
 def _build_controls(self, parent):
     session = roi_analysis_model.session
     return _plot_controls_view.ui(
-        context={"session": session, "figure": session.figure,
-                 "model": roi_analysis_model},
-        kind="subpanel", parent=parent)
+        context={
+            "session": session,
+            "figure": session.figure,
+            "model": roi_analysis_model,
+        },
+        kind="subpanel",
+        parent=parent,
+    )
+
 
 def _on_session_swapped(self, event):
     old_ui = self._controls_ui
     holder = old_ui.control.parentWidget()
     self._controls_ui = self._build_controls(holder)
-    holder.layout().replaceWidget(old_ui.control,
-                                  self._controls_ui.control)
+    holder.layout().replaceWidget(old_ui.control, self._controls_ui.control)
     old_ui.dispose()
+
 
 def _on_save_plot(self, event):
     _save_figure(self.canvas)
@@ -231,12 +241,11 @@ def destroy(self):
         self.canvas.detach()
         self.table.detach()
         self._controls_ui.dispose()
-        roi_analysis_model.observe(self._on_session_swapped, "session",
-                                   remove=True)
-        roi_analysis_model.observe(self._on_save_plot,
-                                   "save_plot_button", remove=True)
-        roi_analysis_model.observe(self._on_progress_text_changed,
-                                   "progress_text", remove=True)
+        roi_analysis_model.observe(self._on_session_swapped, "session", remove=True)
+        roi_analysis_model.observe(self._on_save_plot, "save_plot_button", remove=True)
+        roi_analysis_model.observe(
+            self._on_progress_text_changed, "progress_text", remove=True
+        )
     super().destroy()
 ```
 

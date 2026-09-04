@@ -2,10 +2,12 @@
 per-mode values and the image viewer's display window survive a restart
 (the models two-way sync with FluorescencePreferences), and the light
 state never persists."""
+
 from apptools.preferences.api import Preferences
 
 from fluorescence_controls_ui.consts import (
-    PERSISTED_CONTROL_TRAITS, PERSISTED_VIEWER_TRAITS,
+    PERSISTED_CONTROL_TRAITS,
+    PERSISTED_VIEWER_TRAITS,
 )
 from fluorescence_controls_ui.image_viewer.model import (
     FluorescenceImageViewerModel,
@@ -15,7 +17,7 @@ from fluorescence_controls_ui.preferences import FluorescencePreferences
 
 
 def _prefs():
-    return FluorescencePreferences(preferences=Preferences())   # in-memory
+    return FluorescencePreferences(preferences=Preferences())  # in-memory
 
 
 def test_every_persisted_trait_exists_on_model_and_preferences():
@@ -35,9 +37,9 @@ def test_every_persisted_trait_exists_on_model_and_preferences():
 def test_control_edits_restore_into_a_fresh_model():
     helper = _prefs()
     first = FluorescenceStatusModel(preferences=helper)
-    first.gain = 123                               # pushed to preferences live
+    first.gain = 123  # pushed to preferences live
 
-    model = FluorescenceStatusModel(preferences=helper)   # "next session"
+    model = FluorescenceStatusModel(preferences=helper)  # "next session"
     assert model.gain == 123
 
 
@@ -52,7 +54,7 @@ def test_viewer_window_round_trip():
     helper = _prefs()
     first = FluorescenceImageViewerModel(preferences=helper)
     first.auto_contrast = False
-    first.window_max = 3200                    # max first: bounds the min
+    first.window_max = 3200  # max first: bounds the min
     first.window_min = 400
 
     model = FluorescenceImageViewerModel(preferences=helper)

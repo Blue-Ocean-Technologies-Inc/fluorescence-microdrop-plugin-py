@@ -4,29 +4,37 @@ import time
 
 from traits.api import Any, Bool, observe
 
-from template_status_and_controls.base_controller import BaseStatusController
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-from microdrop_utils.traitsui_qt_helpers import stretch_group_layouts_horizontally
-from microdrop_application.dialogs.pyface_wrapper import choose
-from logger.logger_service import get_logger
-
-from pluggable_protocol_tree.consts import (
-    protocol_tree_add_step_publisher, protocol_tree_set_cell_publisher,
-)
-
 from fluorescence_protocol_controls.capture_chain import (
-    ChainEntry, chain_label, dump_chain, parse_chain, ticked,
+    ChainEntry,
+    chain_label,
+    dump_chain,
+    parse_chain,
+    ticked,
 )
 from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
+from microdrop_application.dialogs.pyface_wrapper import choose
+from pluggable_protocol_tree.consts import (
+    protocol_tree_add_step_publisher,
+    protocol_tree_set_cell_publisher,
+)
+from template_status_and_controls.base_controller import BaseStatusController
+
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+from microdrop_utils.traitsui_qt_helpers import stretch_group_layouts_horizontally
 
 from .cameras.camera_settings import asi_camera_settings
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .chain_model import FluorescenceChainRow
-from .live_state import fluorescence_live_state
 from .consts import (
-    ALL_LEDS_OFF, EXPOSURE_MS_MAX, EXPOSURE_MS_MIN, SET_LED,
+    ALL_LEDS_OFF,
+    EXPOSURE_MS_MAX,
+    EXPOSURE_MS_MIN,
+    SET_LED,
     SET_LED_FREQUENCY,
 )
+from .live_state import fluorescence_live_state
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,8 +43,17 @@ logger = get_logger(__name__)
 #: existing single-set observers below), a panel edit re-saves them into
 #: the selected row.
 CHAIN_ROW_PARAM_TRAITS = (
-    "image_tag", "wavelength", "intensity", "frequency", "exposure", "gain",
-    "auto_exposure", "auto_gain", "capture_start", "capture_end")
+    "image_tag",
+    "wavelength",
+    "intensity",
+    "frequency",
+    "exposure",
+    "gain",
+    "auto_exposure",
+    "auto_gain",
+    "capture_start",
+    "capture_end",
+)
 CHAIN_ROW_PARAM_TRAITS_EXPRESSION = f"[{','.join(CHAIN_ROW_PARAM_TRAITS)}]"
 
 #: How long after a local chain push a DIFFERING row_selected echo for the
@@ -104,24 +121,25 @@ class FluorescenceControlsController(BaseStatusController):
         on the shared live-state singleton."""
         stretch_group_layouts_horizontally(info.ui.control)
         fluorescence_live_state.observe(
-            self._on_tree_row_selected, "tree_row_selected", dispatch="ui")
+            self._on_tree_row_selected, "tree_row_selected", dispatch="ui"
+        )
         fluorescence_live_state.observe(
-            self._on_protocol_step_applied, "protocol_step_applied",
-            dispatch="ui")
+            self._on_protocol_step_applied, "protocol_step_applied", dispatch="ui"
+        )
         fluorescence_live_state.observe(
-            self._on_protocol_session_active, "protocol_session_active",
-            dispatch="ui")
+            self._on_protocol_session_active, "protocol_session_active", dispatch="ui"
+        )
         return super().init(info)
 
     def closed(self, info, is_ok):
         """Unhook the singleton observers wired in init (the pane can be
         unmounted and remounted at runtime via plugin hot load)."""
         for handler, name in (
-                (self._on_tree_row_selected, "tree_row_selected"),
-                (self._on_protocol_step_applied, "protocol_step_applied"),
-                (self._on_protocol_session_active, "protocol_session_active")):
-            fluorescence_live_state.observe(
-                handler, name, dispatch="ui", remove=True)
+            (self._on_tree_row_selected, "tree_row_selected"),
+            (self._on_protocol_step_applied, "protocol_step_applied"),
+            (self._on_protocol_session_active, "protocol_session_active"),
+        ):
+            fluorescence_live_state.observe(handler, name, dispatch="ui", remove=True)
         return super().closed(info, is_ok)
 
     # ------------------------------------------------------------------ #
@@ -139,8 +157,11 @@ class FluorescenceControlsController(BaseStatusController):
         return payload
 
     def _live(self):
-        return (self.model.stream_active and self.model.light_on
-                and not self.model.protocol_running)
+        return (
+            self.model.stream_active
+            and self.model.light_on
+            and not self.model.protocol_running
+        )
 
     # ------------------------------------------------------------------ #
     # Controller Interface                                                 #
@@ -181,13 +202,15 @@ class FluorescenceControlsController(BaseStatusController):
         if self.model.protocol_running:
             return
         if event.new:
-            self._publish(SET_LED_FREQUENCY, {
-                "led": self.model.led_index,
-                "frequency": self.model.frequency,
-            })
+            self._publish(
+                SET_LED_FREQUENCY,
+                {
+                    "led": self.model.led_index,
+                    "frequency": self.model.frequency,
+                },
+            )
             if self.model.light_on:
-                self._publish(SET_LED,
-                              self._active_led_payload(exclusive=True))
+                self._publish(SET_LED, self._active_led_payload(exclusive=True))
         else:
             # Forcing the toggle off is a stream-session action; one
             # explicit all-off silences the board (the light toggle
@@ -201,14 +224,14 @@ class FluorescenceControlsController(BaseStatusController):
     @observe("model:intensity")
     def _intensity_changed(self, event):
         if self._live():
-            self._publish(SET_LED,
-                          {"led": self.model.led_index, "duty": event.new})
+            self._publish(SET_LED, {"led": self.model.led_index, "duty": event.new})
 
     @observe("model:frequency")
     def _frequency_changed(self, event):
         if self._live():
-            self._publish(SET_LED_FREQUENCY,
-                          {"led": self.model.led_index, "frequency": event.new})
+            self._publish(
+                SET_LED_FREQUENCY, {"led": self.model.led_index, "frequency": event.new}
+            )
 
     @observe("model:wavelength")
     def _wavelength_changed(self, event):
@@ -255,16 +278,17 @@ class FluorescenceControlsController(BaseStatusController):
     def _adopt_auto_value(self, auto_flag_name):
         if auto_flag_name == "auto_exposure":
             exposure_us = asi_camera_settings.auto_current_exposure
-            if exposure_us < 0:   # no camera report yet
+            if exposure_us < 0:  # no camera report yet
                 return
             # The camera runs microseconds; the pane shows milliseconds,
             # clamped to the manual slider's range.
             self.model.exposure = min(
                 max(exposure_us / 1000.0, float(EXPOSURE_MS_MIN)),
-                float(EXPOSURE_MS_MAX))
+                float(EXPOSURE_MS_MAX),
+            )
         else:
             gain = asi_camera_settings.auto_current_gain
-            if gain < 0:   # no camera report yet
+            if gain < 0:  # no camera report yet
                 return
             self.model.gain = int(min(max(gain, ASI_GAIN_MIN), ASI_GAIN_MAX))
 
@@ -351,13 +375,13 @@ class FluorescenceControlsController(BaseStatusController):
         so this is also where derived labels are refreshed."""
         self._relabel_chain()
         if self.model.attached_step_id:
-            entries = [ChainEntry(**r.to_entry_dict())
-                       for r in self.model.chain_rows]
+            entries = [ChainEntry(**r.to_entry_dict()) for r in self.model.chain_rows]
             self._last_local_push = time.monotonic()
             protocol_tree_set_cell_publisher.publish(
                 step_id=self.model.attached_step_id,
                 col_id=FLUORESCENCE_CHAIN_COLUMN_ID,
-                value=dump_chain(entries) or None)
+                value=dump_chain(entries) or None,
+            )
         else:
             self.model.free_chain = list(self.model.chain_rows)
 
@@ -436,12 +460,15 @@ class FluorescenceControlsController(BaseStatusController):
         row = FluorescenceChainRow(
             image_tag=self.model.image_tag,
             wavelength=self.model.wavelength,
-            intensity=self.model.intensity, frequency=self.model.frequency,
-            exposure=self.model.exposure, gain=self.model.gain,
+            intensity=self.model.intensity,
+            frequency=self.model.frequency,
+            exposure=self.model.exposure,
+            gain=self.model.gain,
             auto_exposure=self.model.auto_exposure,
             auto_gain=self.model.auto_gain,
             capture_start=self.model.capture_start,
-            capture_end=self.model.capture_end)
+            capture_end=self.model.capture_end,
+        )
         self.model.chain_rows = self.model.chain_rows + [row]
         self.model.chain_selection = row
         self._push_chain_to_step()
@@ -456,19 +483,21 @@ class FluorescenceControlsController(BaseStatusController):
         path — a tuple in-process, a list off the wire)."""
         name = cells.get("name")
         path = cells.get("id") or ()
-        return (name if isinstance(name, str) else "",
-                ".".join(str(i + 1) for i in path))
+        return (
+            name if isinstance(name, str) else "",
+            ".".join(str(i + 1) for i in path),
+        )
 
     def _attach_to_step(self, step_id, entries, cells):
         """Adopt `entries` (a list[ChainEntry]) as the pane's chain,
         attached to `step_id`, and push the write-back."""
-        (self.model.attached_step_desc,
-         self.model.attached_step_dotted) = self._step_display_context(cells)
+        (self.model.attached_step_desc, self.model.attached_step_dotted) = (
+            self._step_display_context(cells)
+        )
         self.model.attached_step_id = step_id
         self.model.attached_group_id = ""
         self.model.chain_selection = None
-        self.model.chain_rows = [
-            FluorescenceChainRow.from_entry(e) for e in entries]
+        self.model.chain_rows = [FluorescenceChainRow.from_entry(e) for e in entries]
         self._push_chain_to_step()
 
     def _load_step_chain(self, step_id, cells):
@@ -483,25 +512,27 @@ class FluorescenceControlsController(BaseStatusController):
         `chain_selection` survives it."""
         # Display context first — idempotent for the echo case below, and
         # it keeps the burst-folder naming fresh across rebroadcasts.
-        (self.model.attached_step_desc,
-         self.model.attached_step_dotted) = self._step_display_context(cells)
+        (self.model.attached_step_desc, self.model.attached_step_dotted) = (
+            self._step_display_context(cells)
+        )
         entries = parse_chain(cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
         if step_id == self.model.attached_step_id:
-            same = ([e.model_dump() for e in entries]
-                    == [r.to_entry_dict() for r in self.model.chain_rows])
+            same = [e.model_dump() for e in entries] == [
+                r.to_entry_dict() for r in self.model.chain_rows
+            ]
             # A DIFFERING echo right after our own push is a STALE echo
             # of a superseded local edit (rapid edits — slider drags —
             # outrun the tree's async rebroadcasts); reloading from it
             # would clobber the newer value and drop the row selection.
-            recently_pushed = (time.monotonic() - self._last_local_push
-                               < SELF_EDIT_ECHO_WINDOW_S)
+            recently_pushed = (
+                time.monotonic() - self._last_local_push < SELF_EDIT_ECHO_WINDOW_S
+            )
             if same or recently_pushed:
                 return
         self.model.attached_step_id = step_id
         self.model.attached_group_id = ""
         self.model.chain_selection = None
-        self.model.chain_rows = [
-            FluorescenceChainRow.from_entry(e) for e in entries]
+        self.model.chain_rows = [FluorescenceChainRow.from_entry(e) for e in entries]
 
     def _enter_free_mode(self):
         """Group selected, or nothing selected: restore the free-mode
@@ -540,9 +571,11 @@ class FluorescenceControlsController(BaseStatusController):
         # The pane simply mirrors the selection passively until the run
         # ends, and the stash survives (neither `_load_step_chain` nor
         # `_enter_free_mode` touch `free_chain`).
-        free = (list(self.model.free_chain)
-                if self.model.attached_step_id == ""
-                and not self.model.protocol_running else [])
+        free = (
+            list(self.model.free_chain)
+            if self.model.attached_step_id == "" and not self.model.protocol_running
+            else []
+        )
         msg = event.new
         if msg.step_id:
             if free:
@@ -552,31 +585,33 @@ class FluorescenceControlsController(BaseStatusController):
                     f"The free-mode chain holds {n} capture"
                     f"{'s' if n != 1 else ''}. Attach to the selected step?",
                     title="Attach Capture Chain",
-                    choices=["Append", "Replace", "New step"])
+                    choices=["Append", "Replace", "New step"],
+                )
                 if choice is None:
-                    return                       # chain stays unattached
+                    return  # chain stays unattached
                 if choice == "New step":
                     protocol_tree_add_step_publisher.publish(
                         after_step_id=msg.step_id,
-                        cells={FLUORESCENCE_CHAIN_COLUMN_ID:
-                               dump_chain([ChainEntry(**r.to_entry_dict())
-                                           for r in free])},
-                        name="Step (capture chain)")
+                        cells={
+                            FLUORESCENCE_CHAIN_COLUMN_ID: dump_chain(
+                                [ChainEntry(**r.to_entry_dict()) for r in free]
+                            )
+                        },
+                        name="Step (capture chain)",
+                    )
                     self._clear_free_chain()
-                    return                       # pane returns to empty free mode
-                existing = parse_chain(
-                    msg.cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
+                    return  # pane returns to empty free mode
+                existing = parse_chain(msg.cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
                 if choice == "Append":
                     # No collision handling needed: the attach's push
                     # re-derives every label from its merged position.
-                    merged = existing + [ChainEntry(**r.to_entry_dict())
-                                         for r in free]
-                else:                            # Replace
+                    merged = existing + [ChainEntry(**r.to_entry_dict()) for r in free]
+                else:  # Replace
                     merged = [ChainEntry(**r.to_entry_dict()) for r in free]
                 self._attach_to_step(msg.step_id, merged, msg.cells)
                 self._clear_free_chain()
                 return
-            self._load_step_chain(msg.step_id, msg.cells)   # plain selection
+            self._load_step_chain(msg.step_id, msg.cells)  # plain selection
         elif msg.group_id:
             if free:
                 n = len(free)
@@ -586,14 +621,18 @@ class FluorescenceControlsController(BaseStatusController):
                     f"{'s' if n != 1 else ''}. Add it as a new step in "
                     f"this group?",
                     title="Attach Capture Chain",
-                    choices=["New step"])            # group: only New step
+                    choices=["New step"],
+                )  # group: only New step
                 if choice == "New step":
                     protocol_tree_add_step_publisher.publish(
                         group_id=msg.group_id,
-                        cells={FLUORESCENCE_CHAIN_COLUMN_ID:
-                               dump_chain([ChainEntry(**r.to_entry_dict())
-                                           for r in free])},
-                        name="Step (capture chain)")
+                        cells={
+                            FLUORESCENCE_CHAIN_COLUMN_ID: dump_chain(
+                                [ChainEntry(**r.to_entry_dict()) for r in free]
+                            )
+                        },
+                        name="Step (capture chain)",
+                    )
                     self._clear_free_chain()
                     return
             self._enter_free_mode()
@@ -612,20 +651,22 @@ class FluorescenceControlsController(BaseStatusController):
         board. Runs on the GUI thread (live_state observer, dispatch="ui")."""
         payload = event.new
         step_uuid = payload.get("step_uuid", "")
-        rows = [FluorescenceChainRow.from_entry(entry)
-                for entry in parse_chain(payload.get("chain") or [])]
+        rows = [
+            FluorescenceChainRow.from_entry(entry)
+            for entry in parse_chain(payload.get("chain") or [])
+        ]
         # Replace the table only when the executing step's chain changed —
         # don't thrash the TableEditor on every entry of the same step.
-        if (step_uuid != self.model.attached_step_id
-                or [r.to_entry_dict() for r in self.model.chain_rows]
-                != [r.to_entry_dict() for r in rows]):
+        if step_uuid != self.model.attached_step_id or [
+            r.to_entry_dict() for r in self.model.chain_rows
+        ] != [r.to_entry_dict() for r in rows]:
             self.model.attached_step_id = step_uuid
             self.model.attached_group_id = ""
             self.model.chain_rows = rows
         firing_label = payload.get("firing_label", "")
         self.model.chain_selection = next(
-            (r for r in self.model.chain_rows if r.label == firing_label),
-            None)
+            (r for r in self.model.chain_rows if r.label == firing_label), None
+        )
         self.model.light_on = bool(payload.get("light_on"))
 
     def _on_protocol_session_active(self, event):
@@ -661,7 +702,8 @@ class FluorescenceControlsController(BaseStatusController):
         def _run():
             try:
                 capture_service.run_burst(
-                    entries, step_desc=step_desc, dotted_id=dotted_id)
+                    entries, step_desc=step_desc, dotted_id=dotted_id
+                )
             except Exception as e:
                 logger.error(f"Capture burst failed: {e}")
 
@@ -672,7 +714,8 @@ class FluorescenceControlsController(BaseStatusController):
         if self.model.protocol_running:
             return
         entries = ticked(
-            [ChainEntry(**r.to_entry_dict()) for r in self.model.chain_rows])
+            [ChainEntry(**r.to_entry_dict()) for r in self.model.chain_rows]
+        )
         if not entries:
             return
         self._start_burst(entries)
@@ -683,8 +726,7 @@ class FluorescenceControlsController(BaseStatusController):
         row = self.model.chain_selection
         if self.model.protocol_running or row is None:
             return
-        self._start_burst(
-            [ChainEntry(**{**row.to_entry_dict(), "run": True})])
+        self._start_burst([ChainEntry(**{**row.to_entry_dict(), "run": True})])
 
     # ------------------------------------------------------------------ #
     # Reposition — drag-reorder is disabled (TableEditor drops fire        #
@@ -704,7 +746,7 @@ class FluorescenceControlsController(BaseStatusController):
         if not 0 <= j < len(rows):
             return
         rows[i], rows[j] = rows[j], rows[i]
-        self.model.chain_rows = rows          # reassignment: no items event
+        self.model.chain_rows = rows  # reassignment: no items event
         # The table rebuilt from the reassignment and dropped its visual
         # highlight while the trait still holds `row` — a plain re-assign
         # would be a no-change event the editor never sees. Force a real

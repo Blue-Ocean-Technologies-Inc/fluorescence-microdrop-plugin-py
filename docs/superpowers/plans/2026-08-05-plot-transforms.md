@@ -35,8 +35,10 @@
 
 ```python
 def test_normalized_series_stretches_each_roi_to_its_own_range():
-    series = {"a": ("ROI 1", [0.0, 1.0, 2.0], [10.0, 20.0, 30.0]),
-              "b": ("ROI 2", [0.0, 1.0, 2.0], [100.0, 300.0, 500.0])}
+    series = {
+        "a": ("ROI 1", [0.0, 1.0, 2.0], [10.0, 20.0, 30.0]),
+        "b": ("ROI 2", [0.0, 1.0, 2.0], [100.0, 300.0, 500.0]),
+    }
     result = normalized_series(series)
     assert result["a"][2] == [0.0, 50.0, 100.0]
     assert result["b"][2] == [0.0, 50.0, 100.0]
@@ -45,8 +47,7 @@ def test_normalized_series_stretches_each_roi_to_its_own_range():
 
 
 def test_normalized_series_keeps_gaps_as_gaps():
-    series = {"a": ("ROI 1", [0.0, 1.0, 2.0],
-                    [10.0, math.nan, 30.0])}
+    series = {"a": ("ROI 1", [0.0, 1.0, 2.0], [10.0, math.nan, 30.0])}
     values = normalized_series(series)["a"][2]
     assert values[0] == 0.0 and values[2] == 100.0
     assert math.isnan(values[1])
@@ -59,8 +60,7 @@ def test_normalized_series_leaves_a_flat_curve_at_zero():
 
 def test_normalized_series_passes_an_all_nan_curve_through():
     series = {"a": ("ROI 1", [0.0, 1.0], [math.nan, math.nan])}
-    assert all(math.isnan(value)
-               for value in normalized_series(series)["a"][2])
+    assert all(math.isnan(value) for value in normalized_series(series)["a"][2])
 ```
 
 - [ ] **Step 2: Run them and watch them fail**
@@ -82,10 +82,16 @@ def normalized_series(series):
         finite = [value for value in values if value == value]
         low = min(finite) if finite else 0.0
         span = (max(finite) - low) if finite else 0.0
-        scaled[roi_id] = (name, elapsed, [
-            value if value != value
-            else (0.0 if span == 0 else (value - low) / span * 100.0)
-            for value in values])
+        scaled[roi_id] = (
+            name,
+            elapsed,
+            [
+                value
+                if value != value
+                else (0.0 if span == 0 else (value - low) / span * 100.0)
+                for value in values
+            ],
+        )
     return scaled
 ```
 
@@ -150,9 +156,10 @@ Expected: `AttributeError` / `TraitError` on `log_x`.
 Add `"log_x", "log_y", "normalize"` to `_FIGURE_FIELDS` in `roi_store.py`, and the three clauses to the plot-settings observer in `roi_controller.py`:
 
 ```python
-             "analysis_model:session:figure:log_x, "
-             "analysis_model:session:figure:log_y, "
-             "analysis_model:session:figure:normalize, "
+"analysis_model:session:figure:log_x,"
+
+"analysis_model:session:figure:log_y, "
+"analysis_model:session:figure:normalize, "
 ```
 
 - [ ] **Step 4: Apply the normalization and the label** — in `plot_pane.py`, extend the label composer:
@@ -163,18 +170,20 @@ def y_axis_label(plot_stat, scale, normalize=False):
     the stat depends on it and the normalisation noted where it
     applies."""
     template = _Y_LABEL_TEMPLATES.get(plot_stat)
-    label = (PLOT_STAT_LABELS[plot_stat] if template is None
-             else template.format(
-                 unit=area_unit(scale.metres_per_pixel, scale.unit)))
+    label = (
+        PLOT_STAT_LABELS[plot_stat]
+        if template is None
+        else template.format(unit=area_unit(scale.metres_per_pixel, scale.unit))
+    )
     return f"{label} (% of range)" if normalize else label
 ```
 
 its caller in `_refresh_intensity`:
 
 ```python
-        self._axes.set_ylabel(y_axis_label(session.plot_stat,
-                                           session.scale,
-                                           figure_settings.normalize))
+self._axes.set_ylabel(
+    y_axis_label(session.plot_stat, session.scale, figure_settings.normalize)
+)
 ```
 
 and the transform itself in `_refresh`, right after the visibility filter:
@@ -193,27 +202,32 @@ importing `normalized_series` beside `visible_series`.
 - [ ] **Step 5: Add the toggles** — in `_plot_controls_view`, a fourth `HGroup` after the d² row:
 
 ```python
-        HGroup(
-            UItem("figure.log_x",
-                  editor=InPlaceToggleEditor(on_label="Log X",
-                                             off_label="Log X"),
-                  tooltip="Logarithmic time axis. Points at t = 0 "
-                          "cannot be drawn on it and are counted in a "
-                          "note on the figure."),
-            UItem("figure.log_y",
-                  editor=InPlaceToggleEditor(on_label="Log Y",
-                                             off_label="Log Y"),
-                  tooltip="Logarithmic value axis. Zero and negative "
-                          "values cannot be drawn on it and are "
-                          "counted in a note on the figure."),
-            UItem("figure.normalize",
-                  editor=InPlaceToggleEditor(on_label="Normalize",
-                                             off_label="Normalize"),
-                  tooltip="Stretch each ROI to 0-100% of its own "
-                          "range, to compare shape and timing. Fitted "
-                          "midpoints and R² are unchanged; amplitudes "
-                          "become percentages."),
+(
+    HGroup(
+        UItem(
+            "figure.log_x",
+            editor=InPlaceToggleEditor(on_label="Log X", off_label="Log X"),
+            tooltip="Logarithmic time axis. Points at t = 0 "
+            "cannot be drawn on it and are counted in a "
+            "note on the figure.",
         ),
+        UItem(
+            "figure.log_y",
+            editor=InPlaceToggleEditor(on_label="Log Y", off_label="Log Y"),
+            tooltip="Logarithmic value axis. Zero and negative "
+            "values cannot be drawn on it and are "
+            "counted in a note on the figure.",
+        ),
+        UItem(
+            "figure.normalize",
+            editor=InPlaceToggleEditor(on_label="Normalize", off_label="Normalize"),
+            tooltip="Stretch each ROI to 0-100% of its own "
+            "range, to compare shape and timing. Fitted "
+            "midpoints and R² are unchanged; amplitudes "
+            "become percentages.",
+        ),
+    ),
+)
 ```
 
 and add `session:figure:log_x`, `log_y` and `normalize` to `_PLOT_STATE`.
@@ -244,56 +258,63 @@ git commit -m "feat(analysis): add log and normalise plot toggles"
 - [ ] **Step 1: Apply the scales and guard the limits** — replace `_refresh`'s tail (from `self._axes.relim()` to `self.draw_idle()`):
 
 ```python
-        # After the locator reset above (which would fight the log
-        # locators) and before relim, so autoscale sees the final
-        # scale. The bar view keeps linear: its x is ROI names.
-        time_axis = figure_settings.view_mode != "fastest_change"
-        log_x = time_axis and figure_settings.log_x
-        log_y = time_axis and figure_settings.log_y
-        self._axes.set_xscale("log" if log_x else "linear")
-        self._axes.set_yscale("log" if log_y else "linear")
-        self._axes.relim()
-        self._axes.autoscale_view()
-        # A log axis rejects a limit at or below zero, so a manual one
-        # is skipped there and the autoscaled range stands.
-        if (not figure_settings.x_auto and time_axis
-                and not (log_x and figure_settings.x_min <= 0)):
-            self._axes.set_xlim(figure_settings.x_min,
-                                figure_settings.x_max)
-        if (not figure_settings.y_auto
-                and not (log_y and figure_settings.y_min <= 0)):
-            self._axes.set_ylim(figure_settings.y_min,
-                                figure_settings.y_max)
-        self._shade_trimmed_tails(trim_edges)
-        self._note_hidden_points(series, log_x, log_y)
-        self.draw_idle()
+# After the locator reset above (which would fight the log
+# locators) and before relim, so autoscale sees the final
+# scale. The bar view keeps linear: its x is ROI names.
+time_axis = figure_settings.view_mode != "fastest_change"
+log_x = time_axis and figure_settings.log_x
+log_y = time_axis and figure_settings.log_y
+self._axes.set_xscale("log" if log_x else "linear")
+self._axes.set_yscale("log" if log_y else "linear")
+self._axes.relim()
+self._axes.autoscale_view()
+# A log axis rejects a limit at or below zero, so a manual one
+# is skipped there and the autoscaled range stands.
+if (
+    not figure_settings.x_auto
+    and time_axis
+    and not (log_x and figure_settings.x_min <= 0)
+):
+    self._axes.set_xlim(figure_settings.x_min, figure_settings.x_max)
+if not figure_settings.y_auto and not (log_y and figure_settings.y_min <= 0):
+    self._axes.set_ylim(figure_settings.y_min, figure_settings.y_max)
+self._shade_trimmed_tails(trim_edges)
+self._note_hidden_points(series, log_x, log_y)
+self.draw_idle()
 ```
 
 - [ ] **Step 2: Add the note** — beside `_draw_hint`:
 
 ```python
-    def _note_hidden_points(self, series, log_x, log_y):
-        """Matplotlib drops non-positive values on a log axis without a
-        word, and two cases are certain rather than hypothetical:
-        elapsed time starts at 0, and a normalised curve's minimum is
-        exactly 0. Count them instead of letting data vanish."""
-        if not (log_x or log_y):
-            return
-        hidden = 0
-        for _name, elapsed, values in series.values():
-            for time, value in zip(elapsed, values):
-                if value != value:
-                    continue        # already a gap, not a casualty
-                if (log_x and time <= 0) or (log_y and value <= 0):
-                    hidden += 1
-        if not hidden:
-            return
-        self._fit_artists.append(self._axes.text(
-            0.5, 0.02,
+def _note_hidden_points(self, series, log_x, log_y):
+    """Matplotlib drops non-positive values on a log axis without a
+    word, and two cases are certain rather than hypothetical:
+    elapsed time starts at 0, and a normalised curve's minimum is
+    exactly 0. Count them instead of letting data vanish."""
+    if not (log_x or log_y):
+        return
+    hidden = 0
+    for _name, elapsed, values in series.values():
+        for time, value in zip(elapsed, values):
+            if value != value:
+                continue  # already a gap, not a casualty
+            if (log_x and time <= 0) or (log_y and value <= 0):
+                hidden += 1
+    if not hidden:
+        return
+    self._fit_artists.append(
+        self._axes.text(
+            0.5,
+            0.02,
             f"Log axis hides {hidden} non-positive "
             f"{'point' if hidden == 1 else 'points'}",
-            transform=self._axes.transAxes, ha="center",
-            va="bottom", color="gray", fontsize="x-small"))
+            transform=self._axes.transAxes,
+            ha="center",
+            va="bottom",
+            color="gray",
+            fontsize="x-small",
+        )
+    )
 ```
 
 - [ ] **Step 3: Check it offscreen** — a throwaway in the scratchpad that builds a canvas over the demo experiment, sets each toggle, and prints `canvas._axes.get_xscale()`, `get_yscale()` and the hint texts. Confirm: log X alone gives `('log', 'linear')` and a hint counting one point per ROI (t = 0); the fastest-change view stays `('linear', 'linear')` with both toggles on.
@@ -323,31 +344,38 @@ git commit -m "feat(analysis): apply log scales and count hidden points"
 ```python
 def test_write_intensity_csv_adds_the_normalised_column(tmp_path):
     roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
-    rows = [{
-        "filename": f"img{index}_raw.png",
-        "time_utc": "2026_07_20-17_46_24", "elapsed_sec": float(index),
-        "group": "burst_a", "wavelength": "Green 540 nm",
-        "stats": {roi.roi_id: {"mean": mean, "count": 4.0}},
-    } for index, mean in enumerate((10.0, 20.0, 30.0))]
+    rows = [
+        {
+            "filename": f"img{index}_raw.png",
+            "time_utc": "2026_07_20-17_46_24",
+            "elapsed_sec": float(index),
+            "group": "burst_a",
+            "wavelength": "Green 540 nm",
+            "stats": {roi.roi_id: {"mean": mean, "count": 4.0}},
+        }
+        for index, mean in enumerate((10.0, 20.0, 30.0))
+    ]
     csv_path = tmp_path / "out.csv"
     write_intensity_csv(csv_path, rows, [roi], normalize_stat="mean")
     with open(csv_path, newline="", encoding="utf-8") as handle:
         records = list(csv.reader(handle))
 
     column = records[0].index("ROI 1_mean_norm_pct")
-    assert [records[row][column] for row in (1, 2, 3)] == \
-        ["0.0", "50.0", "100.0"]
+    assert [records[row][column] for row in (1, 2, 3)] == ["0.0", "50.0", "100.0"]
 
 
-def test_write_intensity_csv_omits_the_column_when_not_normalising(
-        tmp_path):
+def test_write_intensity_csv_omits_the_column_when_not_normalising(tmp_path):
     roi = Roi(name="ROI 1", kind="box", geometry=[1.0, 1.0, 5.0, 5.0])
-    rows = [{
-        "filename": "img_raw.png", "time_utc": "2026_07_20-17_46_24",
-        "elapsed_sec": 0.0, "group": "burst_a",
-        "wavelength": "Green 540 nm",
-        "stats": {roi.roi_id: {"mean": 10.0, "count": 4.0}},
-    }]
+    rows = [
+        {
+            "filename": "img_raw.png",
+            "time_utc": "2026_07_20-17_46_24",
+            "elapsed_sec": 0.0,
+            "group": "burst_a",
+            "wavelength": "Green 540 nm",
+            "stats": {roi.roi_id: {"mean": 10.0, "count": 4.0}},
+        }
+    ]
     csv_path = tmp_path / "out.csv"
     write_intensity_csv(csv_path, rows, [roi])
     with open(csv_path, newline="", encoding="utf-8") as handle:
@@ -368,15 +396,20 @@ def _normalised_columns(rows, rois, normalize_stat, pixel_area):
     plot's own normaliser so a CSV column and its curve can never
     disagree."""
     series = {
-        roi.roi_id: (roi.name, list(range(len(rows))),
-                     [stat_value(row["stats"].get(roi.roi_id, {}),
-                                 normalize_stat, pixel_area)
-                      for row in rows])
-        for roi in rois}
-    return {roi_id: ["" if value != value else value
-                     for value in values]
-            for roi_id, (_name, _elapsed, values)
-            in normalized_series(series).items()}
+        roi.roi_id: (
+            roi.name,
+            list(range(len(rows))),
+            [
+                stat_value(row["stats"].get(roi.roi_id, {}), normalize_stat, pixel_area)
+                for row in rows
+            ],
+        )
+        for roi in rois
+    }
+    return {
+        roi_id: ["" if value != value else value for value in values]
+        for roi_id, (_name, _elapsed, values) in normalized_series(series).items()
+    }
 ```
 
 and thread it through `write_intensity_csv`:
@@ -396,9 +429,11 @@ with the header addition inside the per-ROI loop:
 before opening the file:
 
 ```python
-    normalised = ({} if normalize_stat is None
-                  else _normalised_columns(rows, rois, normalize_stat,
-                                           pixel_area))
+normalised = (
+    {}
+    if normalize_stat is None
+    else _normalised_columns(rows, rois, normalize_stat, pixel_area)
+)
 ```
 
 and in the row loop, after the derived cells:
@@ -411,11 +446,14 @@ and in the row loop, after the derived cells:
 - [ ] **Step 4: Pass it from the export** — in `roi_controller.py`:
 
 ```python
-            write_intensity_csv(
-                csv_path, rows, session.rois,
-                pixel_area(scale.metres_per_pixel, scale.unit),
-                area_unit(scale.metres_per_pixel, scale.unit),
-                session.plot_stat if session.figure.normalize else None)
+write_intensity_csv(
+    csv_path,
+    rows,
+    session.rois,
+    pixel_area(scale.metres_per_pixel, scale.unit),
+    area_unit(scale.metres_per_pixel, scale.unit),
+    session.plot_stat if session.figure.normalize else None,
+)
 ```
 
 - [ ] **Step 5: Run the store tests and the full controls_ui suite**

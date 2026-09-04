@@ -4,14 +4,15 @@ Same construction as the heater plots pane: a QTimer samples the Qt-free
 model on its own cadence, the Line2D artist is created once and updated
 with set_data, and the timer pauses while the widget is hidden.
 """
+
 import os
 
 os.environ.setdefault("QT_API", "pyside6")
 import matplotlib
+
 matplotlib.use("QtAgg")
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-
 from PySide6.QtCore import QTimer
 
 #: Redraw cadence — matches the capture thread's temperature poll.
@@ -49,8 +50,9 @@ class TemperatureCanvas(FigureCanvasQTAgg):
         if len(history) == self._plotted_count:
             return
         self._plotted_count = len(history)
-        self._line.set_data([point[0] for point in history],
-                            [point[1] for point in history])
+        self._line.set_data(
+            [point[0] for point in history], [point[1] for point in history]
+        )
         self._axes.relim()
         self._axes.autoscale_view()
         self.draw_idle()

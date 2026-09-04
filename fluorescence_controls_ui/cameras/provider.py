@@ -11,23 +11,31 @@ Exposure/gain and the stream checkbox live in the fluorescence controls
 pane only: they are mirrored into the shared ``asi_camera_settings``
 singleton and the running feed observes every change.
 """
+
 import time
 from datetime import datetime
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QImage, QPainter
 
-from logger.logger_service import get_logger
-
 from .asi_thread import (
-    ASIVideoThread, THREAD_APPLIED_SETTINGS, debayered_to_rgb,
-    display_adjust_lut, frame_to_qimage, raw_to_qimage, to_display_8bit,
+    THREAD_APPLIED_SETTINGS,
+    ASIVideoThread,
+    debayered_to_rgb,
+    display_adjust_lut,
+    frame_to_qimage,
+    raw_to_qimage,
+    to_display_8bit,
 )
 from .camera_settings import (
-    ADVANCED_CAMERA_TRAITS, AUTO_SETTING_TRAITS, asi_camera_settings,
+    ADVANCED_CAMERA_TRAITS,
+    AUTO_SETTING_TRAITS,
+    asi_camera_settings,
 )
 from .consts import DEVICE_VIEWER_STREAM_MAX_FPS, DEVICE_VIEWER_STREAM_MAX_WIDTH
 from .zwoasi import default_asi_sdk_dir, list_asi_cameras
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -65,15 +73,19 @@ class AsiCameraFeed(QObject):
         self._display_lut = None
         self._display_lut_key = None
         self._thread = ASIVideoThread(
-            sdk_dir, camera_id,
+            sdk_dir,
+            camera_id,
             exposure=asi_camera_settings.exposure,
             gain=asi_camera_settings.gain,
-            advanced={name: getattr(asi_camera_settings, name)
-                      for name in ADVANCED_CAMERA_TRAITS
-                      if name in THREAD_APPLIED_SETTINGS})
-        self._thread.set_auto_settings(**{
-            name: getattr(asi_camera_settings, name)
-            for name in AUTO_SETTING_TRAITS})
+            advanced={
+                name: getattr(asi_camera_settings, name)
+                for name in ADVANCED_CAMERA_TRAITS
+                if name in THREAD_APPLIED_SETTINGS
+            },
+        )
+        self._thread.set_auto_settings(
+            **{name: getattr(asi_camera_settings, name) for name in AUTO_SETTING_TRAITS}
+        )
         self._thread.change_pixmap_signal.connect(self._on_thread_frame)
         self._thread.camera_caps_signal.connect(self._on_camera_caps)
         self._thread.temperature_signal.connect(self._on_camera_temperature)
@@ -81,12 +93,15 @@ class AsiCameraFeed(QObject):
         self._thread.error_signal.connect(self.error)
         asi_camera_settings.observe(self._on_settings_changed, "exposure")
         asi_camera_settings.observe(self._on_settings_changed, "gain")
-        asi_camera_settings.observe(self._on_stream_setting_changed,
-                                    "device_viewer_stream")
-        asi_camera_settings.observe(self._on_advanced_setting_changed,
-                                    ",".join(ADVANCED_CAMERA_TRAITS))
-        asi_camera_settings.observe(self._on_auto_setting_changed,
-                                    ",".join(AUTO_SETTING_TRAITS))
+        asi_camera_settings.observe(
+            self._on_stream_setting_changed, "device_viewer_stream"
+        )
+        asi_camera_settings.observe(
+            self._on_advanced_setting_changed, ",".join(ADVANCED_CAMERA_TRAITS)
+        )
+        asi_camera_settings.observe(
+            self._on_auto_setting_changed, ",".join(AUTO_SETTING_TRAITS)
+        )
         # Register as the active feed for the burst capture service
         # (current_feed()) — the most recently opened feed wins.
         global _ACTIVE_FEED
@@ -118,8 +133,9 @@ class AsiCameraFeed(QObject):
         stride = max(1, raw.shape[1] // DEVICE_VIEWER_STREAM_MAX_WIDTH)
         if stride > 1:
             preview = raw[::stride, ::stride]
-        image = frame_to_qimage(debayered_to_rgb(
-            self._apply_display_adjustments(to_display_8bit(preview))))
+        image = frame_to_qimage(
+            debayered_to_rgb(self._apply_display_adjustments(to_display_8bit(preview)))
+        )
         if asi_camera_settings.add_timestamp:
             image = self._stamp_timestamp(image)
         self.frame.emit(image)
@@ -127,9 +143,11 @@ class AsiCameraFeed(QObject):
     def _apply_display_adjustments(self, img):
         """Preview-only gamma/contrast/brightness (the pane's display
         trio), via a cached LUT. Raw captures are never touched."""
-        key = (asi_camera_settings.display_gamma,
-               asi_camera_settings.display_contrast,
-               asi_camera_settings.display_brightness)
+        key = (
+            asi_camera_settings.display_gamma,
+            asi_camera_settings.display_contrast,
+            asi_camera_settings.display_brightness,
+        )
         if key == (1.0, 1.0, 1.0):
             return img
         if key != self._display_lut_key:
@@ -158,8 +176,8 @@ class AsiCameraFeed(QObject):
 
     def _on_settings_changed(self, event):
         self._thread.set_camera_settings(
-            exposure=asi_camera_settings.exposure,
-            gain=asi_camera_settings.gain)
+            exposure=asi_camera_settings.exposure, gain=asi_camera_settings.gain
+        )
 
     @staticmethod
     def _stamp_timestamp(image):
@@ -195,8 +213,9 @@ class AsiCameraFeed(QObject):
         # Queued onto the GUI thread: the capture thread's operating
         # values while auto runs. Traits only notify on real changes, so
         # the per-frame report is cheap.
-        asi_camera_settings.trait_set(auto_current_exposure=exposure_us,
-                                      auto_current_gain=gain)
+        asi_camera_settings.trait_set(
+            auto_current_exposure=exposure_us, auto_current_gain=gain
+        )
 
     def _on_camera_caps(self, caps):
         # Queued onto the GUI thread: the advanced pane narrows its
@@ -210,18 +229,19 @@ class AsiCameraFeed(QObject):
         self._thread.start()
 
     def stop(self):
-        asi_camera_settings.observe(self._on_settings_changed, "exposure",
-                                    remove=True)
-        asi_camera_settings.observe(self._on_settings_changed, "gain",
-                                    remove=True)
-        asi_camera_settings.observe(self._on_stream_setting_changed,
-                                    "device_viewer_stream", remove=True)
-        asi_camera_settings.observe(self._on_advanced_setting_changed,
-                                    ",".join(ADVANCED_CAMERA_TRAITS),
-                                    remove=True)
-        asi_camera_settings.observe(self._on_auto_setting_changed,
-                                    ",".join(AUTO_SETTING_TRAITS),
-                                    remove=True)
+        asi_camera_settings.observe(self._on_settings_changed, "exposure", remove=True)
+        asi_camera_settings.observe(self._on_settings_changed, "gain", remove=True)
+        asi_camera_settings.observe(
+            self._on_stream_setting_changed, "device_viewer_stream", remove=True
+        )
+        asi_camera_settings.observe(
+            self._on_advanced_setting_changed,
+            ",".join(ADVANCED_CAMERA_TRAITS),
+            remove=True,
+        )
+        asi_camera_settings.observe(
+            self._on_auto_setting_changed, ",".join(AUTO_SETTING_TRAITS), remove=True
+        )
         self._thread.stop()
         self._thread.wait(3000)
         # Only clear the registry if a newer feed hasn't already taken
@@ -240,16 +260,19 @@ class AsiCameraSourceProvider:
         device viewer's next camera-list refresh."""
         try:
             from apptools.preferences.api import get_default_preferences
+
             from ..preferences import FluorescencePreferences
-            preferences = FluorescencePreferences(
-                preferences=get_default_preferences())
+
+            preferences = FluorescencePreferences(preferences=get_default_preferences())
             return preferences.fluorescence_asi_sdk_dir or default_asi_sdk_dir()
         except Exception:
             return default_asi_sdk_dir()
 
     def list_sources(self) -> list:
-        return [(f"ASI: {name}", camera_id)
-                for camera_id, name in list_asi_cameras(self._sdk_dir())]
+        return [
+            (f"ASI: {name}", camera_id)
+            for camera_id, name in list_asi_cameras(self._sdk_dir())
+        ]
 
     def open(self, camera_id) -> AsiCameraFeed:
         return AsiCameraFeed(self._sdk_dir(), camera_id)

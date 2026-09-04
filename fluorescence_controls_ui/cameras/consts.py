@@ -42,7 +42,11 @@ DEVICE_VIEWER_STREAM_MAX_WIDTH = 960
 # and never applied to the saved raw captures. 1.0 = neutral for all three.
 DISPLAY_GAMMA_MIN, DISPLAY_GAMMA_MAX, DISPLAY_GAMMA_DEFAULT = 0.1, 2.0, 1.0
 DISPLAY_CONTRAST_MIN, DISPLAY_CONTRAST_MAX, DISPLAY_CONTRAST_DEFAULT = 0.0, 10.0, 1.0
-DISPLAY_BRIGHTNESS_MIN, DISPLAY_BRIGHTNESS_MAX, DISPLAY_BRIGHTNESS_DEFAULT = 0.0, 2.0, 1.0
+DISPLAY_BRIGHTNESS_MIN, DISPLAY_BRIGHTNESS_MAX, DISPLAY_BRIGHTNESS_DEFAULT = (
+    0.0,
+    2.0,
+    1.0,
+)
 
 # ROI format choices (see zwoasi.ASI_IMG_TYPES / set_roi): sensor binning,
 # output image type, and a centered crop of the binned field. The label
@@ -51,13 +55,24 @@ DISPLAY_BRIGHTNESS_MIN, DISPLAY_BRIGHTNESS_MAX, DISPLAY_BRIGHTNESS_DEFAULT = 0.0
 ASI_BINNING_CHOICES = (1, 2, 3, 4)
 ASI_BINNING_LABELS = {1: "1x1 (full)", 2: "2x2", 3: "3x3", 4: "4x4"}
 ASI_IMAGE_TYPE_CHOICES = ("raw16", "raw8", "rgb24", "y8")
-ASI_IMAGE_TYPE_LABELS = {"raw16": "RAW 16-bit", "raw8": "RAW 8-bit",
-                         "rgb24": "RGB 24-bit", "y8": "Mono 8-bit"}
+ASI_IMAGE_TYPE_LABELS = {
+    "raw16": "RAW 16-bit",
+    "raw8": "RAW 8-bit",
+    "rgb24": "RGB 24-bit",
+    "y8": "Mono 8-bit",
+}
 # Standard centered-crop resolutions offered alongside "full" (like the
 # ZWO native GUI's list); each pane run filters them to what fits the
 # binned sensor.
 ASI_RESOLUTION_PRESETS = (
-    (3840, 2160), (2560, 1440), (1920, 1080), (1600, 900), (1280, 720),
-    (960, 540), (800, 600), (640, 480), (320, 240),
+    (3840, 2160),
+    (2560, 1440),
+    (1920, 1080),
+    (1600, 900),
+    (1280, 720),
+    (960, 540),
+    (800, 600),
+    (640, 480),
+    (320, 240),
 )
 ASI_FLIP_CHOICES = ("none", "horizontal", "vertical", "both")

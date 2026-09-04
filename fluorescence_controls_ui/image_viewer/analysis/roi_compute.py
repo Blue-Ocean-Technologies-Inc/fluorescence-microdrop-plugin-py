@@ -3,13 +3,16 @@ worker processes): each ROI's interior mask, the background annulus
 outside it, and the summary stats of the masked pixels. Ported from the
 standalone fluorescence app's ROIManager (image_tools.py); the ring is
 this app's own, built by dilation so it never overlaps the shape."""
+
 import os
 
 import cv2
 import numpy as np
 
 from .consts import (
-    MIN_POLYGON_POINTS, OUTLINE_STATS_PREFIX, RING_GAP_PX,
+    MIN_POLYGON_POINTS,
+    OUTLINE_STATS_PREFIX,
+    RING_GAP_PX,
     RING_THICKNESS_PX,
 )
 from .roi_geometry import normalize, outline_of
@@ -51,17 +54,16 @@ def interior_mask(shape, kind, geometry):
             # the call every already-cached statistic was computed
             # with: reopening an experiment cannot shift its numbers,
             # nor leave one series half in each convention.
-            cv2.circle(interior, centre, int(round(radius_x)),
-                       MASK_ON, cv2.FILLED)
+            cv2.circle(interior, centre, int(round(radius_x)), MASK_ON, cv2.FILLED)
         else:
             axes = (int(round(radius_x)), int(round(radius_y)))
-            cv2.ellipse(interior, centre, axes, angle,
-                        *_FULL_SWEEP_DEGREES, MASK_ON, cv2.FILLED)
+            cv2.ellipse(
+                interior, centre, axes, angle, *_FULL_SWEEP_DEGREES, MASK_ON, cv2.FILLED
+            )
     else:
         polygon = outline_of(kind, geometry)
         if len(polygon):
-            cv2.fillPoly(interior, [np.round(polygon).astype(np.int32)],
-                         MASK_ON)
+            cv2.fillPoly(interior, [np.round(polygon).astype(np.int32)], MASK_ON)
     return interior
 
 
@@ -72,8 +74,7 @@ def _disk(radius):
     return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
 
 
-def ring_mask(interior, gap_px=RING_GAP_PX,
-              thickness_px=RING_THICKNESS_PX):
+def ring_mask(interior, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX):
     """The annulus outside ``interior``: the shape dilated by
     gap + thickness, less the shape dilated by gap. With gap 0 the
     inner edge is the shape's own boundary, so the ring can never
@@ -100,25 +101,28 @@ def ring_mask(interior, gap_px=RING_GAP_PX,
     return ring
 
 
-def roi_masks(shape, kind, geometry, gap_px=RING_GAP_PX,
-              thickness_px=RING_THICKNESS_PX):
+def roi_masks(
+    shape, kind, geometry, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX
+):
     """(interior, ring) uint8 masks for one ROI: the shape itself and
     the background annulus outside it."""
     interior = interior_mask(shape, kind, geometry)
     return interior, ring_mask(interior, gap_px, thickness_px)
 
 
-def ring_contours(shape, kind, geometry, gap_px=RING_GAP_PX,
-                  thickness_px=RING_THICKNESS_PX):
+def ring_contours(
+    shape, kind, geometry, gap_px=RING_GAP_PX, thickness_px=RING_THICKNESS_PX
+):
     """The annulus's boundaries as (N, 2) image-pixel arrays — the
     canvas draws these, taken from the very mask that is averaged, so
     the two cannot disagree."""
-    _interior, ring = roi_masks(shape, kind, geometry, gap_px,
-                                thickness_px)
-    found, _hierarchy = cv2.findContours(ring, cv2.RETR_LIST,
-                                         cv2.CHAIN_APPROX_SIMPLE)
-    return [points.reshape(-1, 2).astype(float) for points in found
-            if len(points) >= MIN_POLYGON_POINTS]
+    _interior, ring = roi_masks(shape, kind, geometry, gap_px, thickness_px)
+    found, _hierarchy = cv2.findContours(ring, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    return [
+        points.reshape(-1, 2).astype(float)
+        for points in found
+        if len(points) >= MIN_POLYGON_POINTS
+    ]
 
 
 def _shrink_factor(radius_px):
@@ -149,15 +153,15 @@ def rolling_ball_background(array, radius_px):
     factor = _shrink_factor(radius_px)
     working = array
     if factor > 1:
-        working = cv2.resize(array, None, fx=1.0 / factor,
-                             fy=1.0 / factor,
-                             interpolation=cv2.INTER_AREA)
+        working = cv2.resize(
+            array, None, fx=1.0 / factor, fy=1.0 / factor, interpolation=cv2.INTER_AREA
+        )
     kernel = _disk(max(radius_px // factor, 1))
     background = cv2.morphologyEx(working, cv2.MORPH_OPEN, kernel)
     if factor > 1:
-        background = cv2.resize(background,
-                                (array.shape[1], array.shape[0]),
-                                interpolation=cv2.INTER_LINEAR)
+        background = cv2.resize(
+            background, (array.shape[1], array.shape[0]), interpolation=cv2.INTER_LINEAR
+        )
     return background
 
 
@@ -190,10 +194,13 @@ def masked_stats(array, mask):
     }
 
 
-def compute_image_stats(image_path, effective_rois,
-                        gap_px=RING_GAP_PX,
-                        thickness_px=RING_THICKNESS_PX,
-                        ball_radius_px=0):
+def compute_image_stats(
+    image_path,
+    effective_rois,
+    gap_px=RING_GAP_PX,
+    thickness_px=RING_THICKNESS_PX,
+    ball_radius_px=0,
+):
     """Stats for every ROI on one image — the process-pool work unit.
 
     ``effective_rois``: roi_id -> (kind, geometry tuple), the geometries
@@ -206,12 +213,10 @@ def compute_image_stats(image_path, effective_rois,
     ``ball_radius_px`` above 0 flattens the frame with the rolling-ball
     estimate BEFORE any ROI is measured, so every stat downstream — the
     ring included — is read off the corrected image."""
-    result = {"path": str(image_path), "mtime": 0.0, "stats": {},
-              "error": None}
+    result = {"path": str(image_path), "mtime": 0.0, "stats": {}, "error": None}
     try:
         result["mtime"] = os.path.getmtime(image_path)
-        array = cv2.imread(str(image_path),
-                           cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
+        array = cv2.imread(str(image_path), cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
         if array is None:
             raise ValueError("unreadable image")
         if ball_radius_px:
@@ -219,7 +224,8 @@ def compute_image_stats(image_path, effective_rois,
         interiors, rings = {}, {}
         for roi_id, (kind, geometry) in effective_rois.items():
             interiors[roi_id], rings[roi_id] = roi_masks(
-                array.shape[:2], kind, geometry, gap_px, thickness_px)
+                array.shape[:2], kind, geometry, gap_px, thickness_px
+            )
         union = np.zeros(array.shape[:2], dtype=np.uint8)
         for interior in interiors.values():
             cv2.bitwise_or(union, interior, union)

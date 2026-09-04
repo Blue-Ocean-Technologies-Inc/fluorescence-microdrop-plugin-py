@@ -9,6 +9,7 @@ No real ASI hardware anywhere: `ASIVideoThread` is replaced with a fake
 registry tests, and `run_burst`'s feed is a tiny stub carrying the two
 attributes `wait_for_frame_after` needs (`frame_seq`, `_last_raw`).
 """
+
 import sys
 import time
 
@@ -19,10 +20,15 @@ import fluorescence_controls_ui
 from fluorescence_controller.consts import ALL_LEDS_OFF, LED_WAVELENGTHS
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 
-ENTRY_KW = dict(wavelength=LED_WAVELENGTHS[0], intensity=50, frequency=1000,
-                exposure_ms=10.0, gain=0)
+ENTRY_KW = dict(
+    wavelength=LED_WAVELENGTHS[0],
+    intensity=50,
+    frequency=1000,
+    exposure_ms=10.0,
+    gain=0,
+)
 
-capture_service = None   # populated by _capture_service_module below
+capture_service = None  # populated by _capture_service_module below
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -46,6 +52,7 @@ def _capture_service_module():
     """
     global capture_service
     import fluorescence_controls_ui.capture_service as _capture_service
+
     capture_service = _capture_service
     yield
     if hasattr(fluorescence_controls_ui, "capture_service"):
@@ -59,6 +66,7 @@ def _entry(label, run=True, **overrides):
 
 
 # --- provider registry (_ACTIVE_FEED / current_feed / frame_seq) -------
+
 
 class _FakeSignal:
     def connect(self, *args):
@@ -88,6 +96,7 @@ class _FakeThread:
 @pytest.fixture
 def provider_module(monkeypatch):
     from fluorescence_controls_ui.cameras import provider
+
     monkeypatch.setattr(provider, "ASIVideoThread", _FakeThread)
     return provider
 
@@ -138,6 +147,7 @@ def test_frame_seq_increments_before_last_raw_is_stored(provider_module):
 
 # --- wait_for_frame_after (real method, bound onto a plain stub) -------
 
+
 @pytest.fixture
 def frame_stub_cls(provider_module):
     class _Stub:
@@ -146,6 +156,7 @@ def frame_stub_cls(provider_module):
         def __init__(self, frame_seq=0, raw=None):
             self.frame_seq = frame_seq
             self._last_raw = raw
+
     return _Stub
 
 
@@ -166,6 +177,7 @@ def test_wait_for_frame_after_requires_a_stored_raw_frame(frame_stub_cls):
 
 
 # --- notify_applied / arm_applied / wait_applied ------------------------
+
 
 def test_wait_applied_false_until_notified():
     capture_service.arm_applied()
@@ -197,13 +209,14 @@ def frozen_time(monkeypatch):
 @pytest.fixture
 def experiment_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(
-        capture_service, "get_current_experiment_directory",
-        lambda: tmp_path)
+        capture_service, "get_current_experiment_directory", lambda: tmp_path
+    )
     return tmp_path
 
 
 def test_burst_folder_uses_step_desc_and_dotted_id_when_both_given(
-        experiment_dir, frozen_time):
+    experiment_dir, frozen_time
+):
     folder = capture_service.burst_folder("My Step!", "1.2")
     expected = experiment_dir / "captures" / "My_Step_1.2_2026_07_16-12_30_45"
     assert folder == expected
@@ -211,8 +224,7 @@ def test_burst_folder_uses_step_desc_and_dotted_id_when_both_given(
     assert (folder / "16bit_raw").is_dir()
 
 
-def test_burst_folder_dotted_id_alone_names_the_folder(
-        experiment_dir, frozen_time):
+def test_burst_folder_dotted_id_alone_names_the_folder(experiment_dir, frozen_time):
     folder = capture_service.burst_folder(None, "1.2")
     expected = experiment_dir / "captures" / "1.2_2026_07_16-12_30_45"
     assert folder == expected
@@ -224,14 +236,14 @@ def test_burst_folder_falls_back_to_free_mode(experiment_dir, frozen_time):
     assert folder == expected
 
 
-def test_burst_folder_desc_alone_names_the_folder(
-        experiment_dir, frozen_time):
+def test_burst_folder_desc_alone_names_the_folder(experiment_dir, frozen_time):
     folder = capture_service.burst_folder("Desc", None)
     expected = experiment_dir / "captures" / "Desc_2026_07_16-12_30_45"
     assert folder == expected
 
 
 # --- run_burst -----------------------------------------------------------
+
 
 class _RunFeed:
     """Minimal feed stub for run_burst/save_entry_capture: every
@@ -261,13 +273,20 @@ def publish_recorder(monkeypatch):
     calls = []
 
     def fake_publish(*, light_on, led, duty, frequency, settle_s, **kw):
-        calls.append(dict(light_on=light_on, led=led, duty=duty,
-                          frequency=frequency, settle_s=settle_s))
+        calls.append(
+            dict(
+                light_on=light_on,
+                led=led,
+                duty=duty,
+                frequency=frequency,
+                settle_s=settle_s,
+            )
+        )
         capture_service.notify_applied()
 
     monkeypatch.setattr(
-        capture_service.protocol_set_fluorescence_publisher,
-        "publish", fake_publish)
+        capture_service.protocol_set_fluorescence_publisher, "publish", fake_publish
+    )
     return calls
 
 
@@ -275,27 +294,30 @@ def publish_recorder(monkeypatch):
 def off_calls(monkeypatch):
     calls = []
     monkeypatch.setattr(
-        capture_service, "publish_message",
-        lambda topic, message: calls.append((topic, message)))
+        capture_service,
+        "publish_message",
+        lambda topic, message: calls.append((topic, message)),
+    )
     return calls
 
 
 @pytest.fixture
 def sync_gui(monkeypatch):
     monkeypatch.setattr(
-        capture_service.GUI, "invoke_later",
-        lambda func, *args, **kwargs: func(*args, **kwargs))
+        capture_service.GUI,
+        "invoke_later",
+        lambda func, *args, **kwargs: func(*args, **kwargs),
+    )
 
 
 def test_run_burst_happy_path_saves_only_ticked_entries(
-        experiment_dir, frozen_time, run_feed, publish_recorder, off_calls,
-        sync_gui):
+    experiment_dir, frozen_time, run_feed, publish_recorder, off_calls, sync_gui
+):
     entries = [
         _entry("A"),
         _entry("B", run=False),
     ]
-    folder = capture_service.run_burst(
-        entries, step_desc="My Step", dotted_id="1.1")
+    folder = capture_service.run_burst(entries, step_desc="My Step", dotted_id="1.1")
 
     assert folder.name.startswith("My_Step_1.1_")
     assert len(publish_recorder) == 1
@@ -313,8 +335,8 @@ def test_run_burst_happy_path_saves_only_ticked_entries(
 
 
 def test_run_burst_empty_ticked_chain_still_turns_leds_off(
-        experiment_dir, frozen_time, run_feed, publish_recorder, off_calls,
-        sync_gui):
+    experiment_dir, frozen_time, run_feed, publish_recorder, off_calls, sync_gui
+):
     entries = [_entry("A", run=False)]
     capture_service.run_burst(entries, step_desc=None, dotted_id=None)
     assert publish_recorder == []
@@ -322,19 +344,22 @@ def test_run_burst_empty_ticked_chain_still_turns_leds_off(
 
 
 def test_run_burst_timeout_raises_and_still_turns_leds_off(
-        experiment_dir, frozen_time, run_feed, off_calls, sync_gui,
-        monkeypatch):
+    experiment_dir, frozen_time, run_feed, off_calls, sync_gui, monkeypatch
+):
     # Publisher that never acks -> wait_applied must time out.
     calls = []
     monkeypatch.setattr(
         capture_service.protocol_set_fluorescence_publisher,
-        "publish", lambda **kw: calls.append(kw))
-    capture_service.arm_applied()   # ensure no stray ack from another test
+        "publish",
+        lambda **kw: calls.append(kw),
+    )
+    capture_service.arm_applied()  # ensure no stray ack from another test
 
     entries = [_entry("SlowOne")]
     with pytest.raises(TimeoutError, match="SlowOne"):
         capture_service.run_burst(
-            entries, step_desc=None, dotted_id=None, applied_timeout=0.05)
+            entries, step_desc=None, dotted_id=None, applied_timeout=0.05
+        )
 
     assert len(calls) == 1
     assert off_calls == [(ALL_LEDS_OFF, "")]
@@ -347,6 +372,7 @@ def test_apply_camera_settings_forwards_auto_flags(sync_gui):
     from fluorescence_controls_ui.cameras.camera_settings import (
         asi_camera_settings,
     )
+
     entry = _entry("A")
     entry.auto_exposure = True
     entry.auto_gain = True

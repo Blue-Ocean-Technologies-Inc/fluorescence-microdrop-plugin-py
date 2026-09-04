@@ -6,12 +6,20 @@ copy bundled with the plugin) instead of the working directory, and OpenCV
 is imported lazily only for debayering color sensors (mono cameras never
 need it).
 """
+
 import os
 import platform
 import sys
 import time
 from ctypes import (
-    CDLL, Structure, byref, c_char, c_double, c_float, c_int, c_long,
+    CDLL,
+    Structure,
+    byref,
+    c_char,
+    c_double,
+    c_float,
+    c_int,
+    c_long,
     create_string_buffer,
 )
 from pathlib import Path
@@ -25,38 +33,38 @@ logger = get_logger(__name__)
 
 class ASI_CAMERA_INFO(Structure):
     _fields_ = [
-        ('Name', c_char * 64),
-        ('CameraID', c_int),
-        ('MaxHeight', c_long),
-        ('MaxWidth', c_long),
-        ('IsColorCam', c_int),
-        ('BayerPattern', c_int),
-        ('SupportedBins', c_int * 16),
-        ('SupportedVideoFormat', c_int * 8),
-        ('PixelSize', c_double),  # in um
-        ('MechanicalShutter', c_int),
-        ('ST4Port', c_int),
-        ('IsCoolerCam', c_int),
-        ('IsUSB3Host', c_int),
-        ('IsUSB3Camera', c_int),
-        ('ElecPerADU', c_float),
-        ('BitDepth', c_int),
-        ('IsTriggerCam', c_int),
-        ('Unused', c_char * 16)
+        ("Name", c_char * 64),
+        ("CameraID", c_int),
+        ("MaxHeight", c_long),
+        ("MaxWidth", c_long),
+        ("IsColorCam", c_int),
+        ("BayerPattern", c_int),
+        ("SupportedBins", c_int * 16),
+        ("SupportedVideoFormat", c_int * 8),
+        ("PixelSize", c_double),  # in um
+        ("MechanicalShutter", c_int),
+        ("ST4Port", c_int),
+        ("IsCoolerCam", c_int),
+        ("IsUSB3Host", c_int),
+        ("IsUSB3Camera", c_int),
+        ("ElecPerADU", c_float),
+        ("BitDepth", c_int),
+        ("IsTriggerCam", c_int),
+        ("Unused", c_char * 16),
     ]
 
 
 class ASI_CONTROL_CAPS(Structure):
     _fields_ = [
-        ('Name', c_char * 64),
-        ('Description', c_char * 128),
-        ('MaxValue', c_long),
-        ('MinValue', c_long),
-        ('DefaultValue', c_long),
-        ('IsAutoSupported', c_int),
-        ('IsWritable', c_int),
-        ('ControlType', c_int),
-        ('Unused', c_char * 32),
+        ("Name", c_char * 64),
+        ("Description", c_char * 128),
+        ("MaxValue", c_long),
+        ("MinValue", c_long),
+        ("DefaultValue", c_long),
+        ("IsAutoSupported", c_int),
+        ("IsWritable", c_int),
+        ("ControlType", c_int),
+        ("Unused", c_char * 32),
     ]
 
 
@@ -95,7 +103,7 @@ ASI_WB_B = 4
 ASI_OFFSET = 5
 ASI_BANDWIDTHOVERLOAD = 6
 ASI_OVERCLOCK = 7
-ASI_TEMPERATURE = 8          # read-only, 10 * degrees C
+ASI_TEMPERATURE = 8  # read-only, 10 * degrees C
 ASI_FLIP = 9
 ASI_AUTO_MAX_GAIN = 10
 ASI_AUTO_MAX_EXP = 11
@@ -184,15 +192,19 @@ class ASICamera:
             sdk_path = sdk_dir / "Unix"
             dll_name = "libASICamera2.so.1.37"
 
-        arch = ("mac" if sys.platform == "darwin"
-                else ("x64" if platform.architecture()[0] == '64bit' else "x86"))
+        arch = (
+            "mac"
+            if sys.platform == "darwin"
+            else ("x64" if platform.architecture()[0] == "64bit" else "x86")
+        )
         lib_path = sdk_path / "lib" / arch
 
         if sys.platform == "win32":
             os.environ["PATH"] = str(lib_path) + os.pathsep + os.environ["PATH"]
         else:
             os.environ["LD_LIBRARY_PATH"] = (
-                str(lib_path) + os.pathsep + os.environ.get("LD_LIBRARY_PATH", ""))
+                str(lib_path) + os.pathsep + os.environ.get("LD_LIBRARY_PATH", "")
+            )
 
         library_path = lib_path / dll_name
         if not library_path.exists():
@@ -274,16 +286,17 @@ class ASICamera:
         """{control_type: ASI_CONTROL_CAPS} for every control the connected
         camera reports (the set varies per model)."""
         num_controls = c_int()
-        result = self.asidll.ASIGetNumOfControls(
-            self.camera_id, byref(num_controls))
+        result = self.asidll.ASIGetNumOfControls(self.camera_id, byref(num_controls))
         if result != 0:
             logger.warning(f"Failed to get number of controls: {result}")
             return {}
         caps = {}
         for index in range(num_controls.value):
             control = ASI_CONTROL_CAPS()
-            if self.asidll.ASIGetControlCaps(
-                    self.camera_id, index, byref(control)) == 0:
+            if (
+                self.asidll.ASIGetControlCaps(self.camera_id, index, byref(control))
+                == 0
+            ):
                 caps[control.ControlType] = control
         return caps
 
@@ -324,22 +337,26 @@ class ASICamera:
                 self._warned_unsupported.add(control_type)
                 logger.warning(
                     f"Camera does not support control {control_type}; "
-                    "skipping (warned once)")
+                    "skipping (warned once)"
+                )
             return False
         if not caps.IsWritable:
             if control_type not in self._warned_unsupported:
                 self._warned_unsupported.add(control_type)
                 logger.warning(
                     f"Control {caps.Name.decode(errors='replace')} is "
-                    "read-only; skipping (warned once)")
+                    "read-only; skipping (warned once)"
+                )
             return False
         clamped = max(caps.MinValue, min(caps.MaxValue, int(value)))
         if clamped != int(value):
             logger.warning(
                 f"Control {caps.Name.decode(errors='replace')} value {value} "
-                f"clamped to camera range [{caps.MinValue}, {caps.MaxValue}]")
+                f"clamped to camera range [{caps.MinValue}, {caps.MaxValue}]"
+            )
         result = self.asidll.ASISetControlValue(
-            self.camera_id, control_type, c_long(clamped), 0)
+            self.camera_id, control_type, c_long(clamped), 0
+        )
         if result != 0:
             logger.error(f"Failed to set control {control_type}: {result}")
             return False
@@ -353,7 +370,8 @@ class ASICamera:
         value = c_long()
         auto = c_int()
         result = self.asidll.ASIGetControlValue(
-            self.camera_id, control_type, byref(value), byref(auto))
+            self.camera_id, control_type, byref(value), byref(auto)
+        )
         if result != 0:
             return None
         return value.value
@@ -361,8 +379,7 @@ class ASICamera:
     # ------------------------------------------------------------------ #
     # ROI format (resolution / binning / image type)                        #
     # ------------------------------------------------------------------ #
-    def set_roi(self, binning=1, img_type=ASI_IMG_RAW16, width=None,
-                height=None):
+    def set_roi(self, binning=1, img_type=ASI_IMG_RAW16, width=None, height=None):
         """Set binning, output image type, and a centered crop.
 
         ``width``/``height`` are the requested crop of the binned field of
@@ -376,36 +393,46 @@ class ASICamera:
             logger.warning(
                 f"Camera does not support bin {binning} "
                 f"(supported: {self.supported_bins()}); keeping bin "
-                f"{self.roi_binning}")
+                f"{self.roi_binning}"
+            )
             binning = self.roi_binning
         if img_type not in self.supported_img_types():
             # Nearest supported fallback: Y8 (color-cam mono output) and
             # RGB24 requests degrade to RAW8 when available — the same bit
             # depth, just undebayered — else RAW16.
-            fallback = (ASI_IMG_RAW8
-                        if ASI_IMG_RAW8 in self.supported_img_types()
-                        and img_type in (ASI_IMG_Y8, ASI_IMG_RGB24)
-                        else ASI_IMG_RAW16)
+            fallback = (
+                ASI_IMG_RAW8
+                if ASI_IMG_RAW8 in self.supported_img_types()
+                and img_type in (ASI_IMG_Y8, ASI_IMG_RGB24)
+                else ASI_IMG_RAW16
+            )
             logger.warning(
                 f"Camera does not support image type {img_type} "
                 f"(supported: {self.supported_img_types()}); using "
-                f"{fallback}")
+                f"{fallback}"
+            )
             img_type = fallback
         binned_width = self.camera_info.MaxWidth // binning
         binned_height = self.camera_info.MaxHeight // binning
         width, height = roi_dimensions(
-            self.camera_info.MaxWidth, self.camera_info.MaxHeight,
-            binning, width, height)
+            self.camera_info.MaxWidth,
+            self.camera_info.MaxHeight,
+            binning,
+            width,
+            height,
+        )
         result = self.asidll.ASISetROIFormat(
-            self.camera_id, width, height, binning, img_type)
+            self.camera_id, width, height, binning, img_type
+        )
         if result != 0:
             logger.error(
                 f"Failed to set ROI format {width}x{height} bin {binning} "
-                f"type {img_type}: {result}")
+                f"type {img_type}: {result}"
+            )
             return False
         result = self.asidll.ASISetStartPos(
-            self.camera_id, (binned_width - width) // 2,
-            (binned_height - height) // 2)
+            self.camera_id, (binned_width - width) // 2, (binned_height - height) // 2
+        )
         if result != 0:
             logger.error(f"Failed to set start position: {result}")
             return False
@@ -414,8 +441,8 @@ class ASICamera:
         self.roi_binning = binning
         self.roi_img_type = img_type
         logger.info(
-            f"ASI ROI format: {width}x{height}, bin {binning}, "
-            f"image type {img_type}")
+            f"ASI ROI format: {width}x{height}, bin {binning}, image type {img_type}"
+        )
         return True
 
     # ------------------------------------------------------------------ #
@@ -429,11 +456,15 @@ class ASICamera:
         if result != 0:
             logger.error(f"Failed to set gain: {result}")
             return False
-        result = self.asidll.ASISetControlValue(self.camera_id, ASI_EXPOSURE, exposure, False)
+        result = self.asidll.ASISetControlValue(
+            self.camera_id, ASI_EXPOSURE, exposure, False
+        )
         if result != 0:
             logger.error(f"Failed to set exposure: {result}")
             return False
-        logger.debug(f"Camera settings updated - Gain: {gain}, Exposure: {exposure / 1000} ms")
+        logger.debug(
+            f"Camera settings updated - Gain: {gain}, Exposure: {exposure / 1000} ms"
+        )
         return True
 
     def debayer_image(self, img):
@@ -446,7 +477,8 @@ class ASICamera:
         except ImportError:
             logger.warning(
                 "OpenCV unavailable: showing the color sensor's raw Bayer "
-                "frame as grayscale")
+                "frame as grayscale"
+            )
             return img
         return cv2.cvtColor(img, cv2.COLOR_BayerRG2RGB)
 
@@ -503,7 +535,8 @@ class ASICamera:
                     raise ASIIOError("Camera disconnected!")
                 if exp_status.value == ASI_EXP_WORKING:
                     logger.debug(
-                        f"Exposure still in progress after {step_counter} checks")
+                        f"Exposure still in progress after {step_counter} checks"
+                    )
                     time.sleep(0.1)
                     continue
                 raise ASICaptureError("Exposure timeout", exp_status.value)
@@ -537,8 +570,7 @@ class ASICamera:
         if img_type == ASI_IMG_RGB24:
             # Debayered on-camera; BGR channel order like the debayer path,
             # so the shared display/save swap applies unchanged.
-            return np.frombuffer(buffer, dtype=np.uint8).reshape(
-                (height, width, 3))
+            return np.frombuffer(buffer, dtype=np.uint8).reshape((height, width, 3))
         return np.frombuffer(buffer, dtype=np.uint8).reshape((height, width))
 
 

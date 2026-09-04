@@ -12,18 +12,22 @@ geometry carries forward for free) while the consumer decodes each
 ROI's center in a small pool and chains the found center into the
 next segmented frame.
 """
+
 import queue
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import cv2
+
 from traits.api import Bool, HasTraits, Instance
 
-from logger.logger_service import get_logger
-
 from .sam_detect import (
-    candidate_from_detection, normalize_to_uint8, suppress_with_votes,
+    candidate_from_detection,
+    normalize_to_uint8,
+    suppress_with_votes,
 )
+
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -87,7 +91,8 @@ class SamJobRunner(HasTraits):
         thread = threading.Thread(
             target=self._run_pick,
             args=(refiner, image_id, gray_u16, x, y, results),
-            daemon=True)
+            daemon=True,
+        )
         self._thread = thread
         thread.start()
 
@@ -98,16 +103,15 @@ class SamJobRunner(HasTraits):
             refiner.prepare(image_id, gray_u8)
             detection = refiner.segment_point(image_id, x, y)
             candidate = (
-                candidate_from_detection(
-                    detection, prompt=[x, y], source="click")
-                if detection is not None else None)
+                candidate_from_detection(detection, prompt=[x, y], source="click")
+                if detection is not None
+                else None
+            )
         except Exception as error:
-            results.put(
-                (AI_FAILED, {"stage": "pick", "error": str(error)}))
+            results.put((AI_FAILED, {"stage": "pick", "error": str(error)}))
             logger.warning(f"SAM pick failed: {error}")
             return
-        results.put(
-            (PICK_RESULT, {"image_id": image_id, "candidate": candidate}))
+        results.put((PICK_RESULT, {"image_id": image_id, "candidate": candidate}))
 
     # -- detect-all -------------------------------------------------------
 
@@ -117,7 +121,8 @@ class SamJobRunner(HasTraits):
         thread = threading.Thread(
             target=self._run_detect_all,
             args=(refiner, image_id, gray_u16, capture_time, results),
-            daemon=True)
+            daemon=True,
+        )
         self._thread = thread
         thread.start()
 
@@ -127,30 +132,40 @@ class SamJobRunner(HasTraits):
             gray_u8 = normalize_to_uint8(gray_u16)
             refiner.prepare(image_id, gray_u8)
             triples = refiner.segment_grid(
-                image_id, gray_u8.shape,
+                image_id,
+                gray_u8.shape,
                 progress_cb=lambda done, total: results.put(
-                    (DETECT_PROGRESS, {"done": done, "total": total})))
-            prompt_by_id = {
-                id(detection): prompt for detection, prompt, _ in triples}
+                    (DETECT_PROGRESS, {"done": done, "total": total})
+                ),
+            )
+            prompt_by_id = {id(detection): prompt for detection, prompt, _ in triples}
             kept = suppress_with_votes(
-                [(detection, votes) for detection, _, votes in triples])
+                [(detection, votes) for detection, _, votes in triples]
+            )
             candidates = [
                 candidate
                 for detection, votes in kept
-                if (candidate := candidate_from_detection(
-                    detection, prompt=prompt_by_id[id(detection)],
-                    votes=votes)) is not None
+                if (
+                    candidate := candidate_from_detection(
+                        detection, prompt=prompt_by_id[id(detection)], votes=votes
+                    )
+                )
+                is not None
             ]
         except Exception as error:
-            results.put(
-                (AI_FAILED, {"stage": "detect", "error": str(error)}))
+            results.put((AI_FAILED, {"stage": "detect", "error": str(error)}))
             logger.warning(f"SAM detect failed: {error}")
             return
-        results.put((DETECT_RESULT, {
-            "image_id": image_id,
-            "capture_time": capture_time,
-            "candidates": candidates,
-        }))
+        results.put(
+            (
+                DETECT_RESULT,
+                {
+                    "image_id": image_id,
+                    "capture_time": capture_time,
+                    "candidates": candidates,
+                },
+            )
+        )
 
     # -- track ------------------------------------------------------------
 
@@ -163,19 +178,19 @@ class SamJobRunner(HasTraits):
         self.track_running = True
         thread = threading.Thread(
             target=self._run_track,
-            args=(refiner, frames, start_geometries, interval, cancel,
-                  results),
-            daemon=True)
+            args=(refiner, frames, start_geometries, interval, cancel, results),
+            daemon=True,
+        )
         self._thread = thread
         thread.start()
 
-    def _run_track(self, refiner, frames, start_geometries, interval,
-                   cancel, results):
+    def _run_track(self, refiner, frames, start_geometries, interval, cancel, results):
         total = len(frames)
         frames_done = 0
         step = max(interval, 1)
         segment_indices = sorted(
-            set(range(0, total, step)) | ({total - 1} if total else set()))
+            set(range(0, total, step)) | ({total - 1} if total else set())
+        )
         segment_frames = [frames[index] for index in segment_indices]
         ready = queue.Queue(maxsize=2)
 
@@ -184,18 +199,14 @@ class SamJobRunner(HasTraits):
                 for path, capture_time in segment_frames:
                     if cancel.is_set():
                         return
-                    image = cv2.imread(
-                        path, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
+                    image = cv2.imread(path, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE)
                     if image is None:
-                        ready.put(
-                            ("error", f"could not read frame: {path}"))
+                        ready.put(("error", f"could not read frame: {path}"))
                         return
                     refiner.prepare(path, normalize_to_uint8(image))
                     while not cancel.is_set():
                         try:
-                            ready.put(
-                                ("frame", (path, capture_time)),
-                                timeout=0.2)
+                            ready.put(("frame", (path, capture_time)), timeout=0.2)
                             break
                         except queue.Full:
                             continue
@@ -217,8 +228,7 @@ class SamJobRunner(HasTraits):
                     if kind == "end":
                         break
                     if kind == "error":
-                        results.put((AI_FAILED, {
-                            "stage": "track", "error": payload}))
+                        results.put((AI_FAILED, {"stage": "track", "error": payload}))
                         logger.warning(f"SAM track failed: {payload}")
                         break
                     path, capture_time = payload
@@ -233,29 +243,39 @@ class SamJobRunner(HasTraits):
                     for roi_id, detection in detections.items():
                         candidate = (
                             candidate_from_detection(
-                                detection, prompt=list(centers[roi_id]))
-                            if detection is not None else None)
+                                detection, prompt=list(centers[roi_id])
+                            )
+                            if detection is not None
+                            else None
+                        )
                         candidates[roi_id] = candidate
                         if candidate is not None:
                             centers[roi_id] = (
-                                candidate.ellipse[0], candidate.ellipse[1])
+                                candidate.ellipse[0],
+                                candidate.ellipse[1],
+                            )
                     frames_done += 1
-                    results.put((TRACK_FRAME, {
-                        "capture_time": capture_time,
-                        "candidates": candidates,
-                        # Progress in checked-frame units: done and total
-                        # both count only the frames the tracker segments
-                        # (every interval-th plus the last).
-                        "done": frames_done,
-                        "total": len(segment_frames),
-                    }))
+                    results.put(
+                        (
+                            TRACK_FRAME,
+                            {
+                                "capture_time": capture_time,
+                                "candidates": candidates,
+                                # Progress in checked-frame units: done and total
+                                # both count only the frames the tracker segments
+                                # (every interval-th plus the last).
+                                "done": frames_done,
+                                "total": len(segment_frames),
+                            },
+                        )
+                    )
         except Exception as error:
             results.put((AI_FAILED, {"stage": "track", "error": str(error)}))
             logger.warning(f"SAM track failed: {error}")
         finally:
             cancel.set()
             while True:  # unblock the prefetcher if it is waiting on a
-                         # full queue
+                # full queue
                 try:
                     ready.get_nowait()
                 except queue.Empty:
@@ -267,6 +287,12 @@ class SamJobRunner(HasTraits):
             # track_running here would wrongly report the newer job done.
             if self._cancel is cancel:
                 self.track_running = False
-            results.put((TRACK_FINISHED, {
-                "frames_done": frames_done, "total": total,
-            }))
+            results.put(
+                (
+                    TRACK_FINISHED,
+                    {
+                        "frames_done": frames_done,
+                        "total": total,
+                    },
+                )
+            )

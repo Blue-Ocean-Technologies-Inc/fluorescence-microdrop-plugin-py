@@ -44,6 +44,7 @@ Run:
 Then in MicroDrop: Image Viewer pane -> folder button ->
 select ``<output>/fit_demo_experiment/captures``.
 """
+
 import argparse
 import math
 import sys
@@ -54,7 +55,9 @@ import cv2
 import numpy as np
 
 from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
-    fastest_change_time, fit_series, second_derivative_extrema,
+    fastest_change_time,
+    fit_series,
+    second_derivative_extrema,
     trimmed_note,
 )
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
@@ -64,10 +67,14 @@ from fluorescence_controls_ui.image_viewer.analysis.roi_compute import (
     compute_image_stats,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
-    AnalysisSession, Roi,
+    AnalysisSession,
+    Roi,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
-    load_roi_stats, load_session, save_roi_stats, save_session,
+    load_roi_stats,
+    load_session,
+    save_roi_stats,
+    save_session,
 )
 from fluorescence_controls_ui.image_viewer.discovery import (
     discover_captures,
@@ -75,7 +82,7 @@ from fluorescence_controls_ui.image_viewer.discovery import (
 
 FRAME_COUNT = 20
 FRAME_INTERVAL_S = 10.0
-IMAGE_SHAPE = (400, 420)          # (height, width)
+IMAGE_SHAPE = (400, 420)  # (height, width)
 
 #: The frames are built as background + signal + noise, so every curve
 #: below is the signal ABOVE background: the mean reads BACKGROUND_LEVEL
@@ -97,28 +104,46 @@ PAIR_TOLERANCE = 5.0
 
 #: (name, circle geometry (cx, cy, r), mean_of_t callable, truth text).
 DEMO_ROIS = (
-    ("decay", (60.0, 60.0, 30.0),
-     lambda t: 3000.0 * math.exp(-0.05 * t) + 500.0,
-     "y = 3000·e^(-0.05·t) + 500"),
-    ("cubic", (160.0, 60.0, 30.0),
-     lambda t: 0.001 * t ** 3 - 0.25 * t ** 2 + 15.0 * t + 800.0,
-     "y = 0.001·t^3 - 0.25·t^2 + 15·t + 800"),
-    ("linear", (260.0, 60.0, 30.0),
-     lambda t: 5.0 * t + 600.0,
-     "y = 5·t + 600"),
-    ("sigmoid", (60.0, 170.0, 30.0),
-     lambda t: 3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0,
-     "y = 3000/(1+e^(-0.08·(t-95))) + 500"),
-    ("bleached", (160.0, 170.0, 30.0),
-     lambda t: (3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0)
-     * math.exp(-0.015 * max(t - 120.0, 0.0)),
-     "the same sigmoid, bleaching at 1.5%/s past t=120"),
-    ("plain", (60.0, 320.0, 30.0),
-     lambda t: PAIR_SIGNAL,
-     f"constant {PAIR_SIGNAL:.0f} on plain background"),
-    ("on_glow", (180.0, 320.0, 30.0),
-     lambda t: PAIR_SIGNAL,
-     f"constant {PAIR_SIGNAL:.0f} on background raised by {GLOW_LEVEL}"),
+    (
+        "decay",
+        (60.0, 60.0, 30.0),
+        lambda t: 3000.0 * math.exp(-0.05 * t) + 500.0,
+        "y = 3000·e^(-0.05·t) + 500",
+    ),
+    (
+        "cubic",
+        (160.0, 60.0, 30.0),
+        lambda t: 0.001 * t**3 - 0.25 * t**2 + 15.0 * t + 800.0,
+        "y = 0.001·t^3 - 0.25·t^2 + 15·t + 800",
+    ),
+    ("linear", (260.0, 60.0, 30.0), lambda t: 5.0 * t + 600.0, "y = 5·t + 600"),
+    (
+        "sigmoid",
+        (60.0, 170.0, 30.0),
+        lambda t: 3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0,
+        "y = 3000/(1+e^(-0.08·(t-95))) + 500",
+    ),
+    (
+        "bleached",
+        (160.0, 170.0, 30.0),
+        lambda t: (
+            (3000.0 / (1.0 + math.exp(-0.08 * (t - 95.0))) + 500.0)
+            * math.exp(-0.015 * max(t - 120.0, 0.0))
+        ),
+        "the same sigmoid, bleaching at 1.5%/s past t=120",
+    ),
+    (
+        "plain",
+        (60.0, 320.0, 30.0),
+        lambda t: PAIR_SIGNAL,
+        f"constant {PAIR_SIGNAL:.0f} on plain background",
+    ),
+    (
+        "on_glow",
+        (180.0, 320.0, 30.0),
+        lambda t: PAIR_SIGNAL,
+        f"constant {PAIR_SIGNAL:.0f} on background raised by {GLOW_LEVEL}",
+    ),
 )
 
 #: The two ROIs whose corrected values must match: same signal, one of
@@ -131,8 +156,9 @@ def _background_map():
     under one of the paired disks. Signal is added on top of this, so
     a background correction has something real to remove."""
     background = np.full(IMAGE_SHAPE, float(BACKGROUND_LEVEL))
-    cv2.circle(background, GLOW_CENTRE, GLOW_RADIUS,
-               float(BACKGROUND_LEVEL + GLOW_LEVEL), -1)
+    cv2.circle(
+        background, GLOW_CENTRE, GLOW_RADIUS, float(BACKGROUND_LEVEL + GLOW_LEVEL), -1
+    )
     return background
 
 
@@ -148,14 +174,16 @@ def write_frames(raw_dir):
         elapsed = index * FRAME_INTERVAL_S
         signal = np.zeros(IMAGE_SHAPE, dtype=float)
         for _, (center_x, center_y, radius), mean_of_t, _ in DEMO_ROIS:
-            cv2.circle(signal,
-                       (int(center_x), int(center_y)), int(radius),
-                       float(mean_of_t(elapsed)), -1)
-        noise = np.random.default_rng(index).normal(
-            0.0, NOISE_SIGMA, IMAGE_SHAPE)
+            cv2.circle(
+                signal,
+                (int(center_x), int(center_y)),
+                int(radius),
+                float(mean_of_t(elapsed)),
+                -1,
+            )
+        noise = np.random.default_rng(index).normal(0.0, NOISE_SIGMA, IMAGE_SHAPE)
         frame = np.clip(background + signal + noise, 0, 65535)
-        stamp = time.strftime("%Y_%m_%d-%H_%M_%S",
-                              time.gmtime(base_epoch + elapsed))
+        stamp = time.strftime("%Y_%m_%d-%H_%M_%S", time.gmtime(base_epoch + elapsed))
         path = raw_dir / f"frame{index:02d}_{stamp}_raw.png"
         cv2.imwrite(str(path), frame.astype(np.uint16))
         paths.append(path)
@@ -167,11 +195,15 @@ def build_session(experiment_dir):
     session.rois = [
         # DEMO_ROIS keeps the (cx, cy, r) tuples cv2.circle draws the
         # frames from; the ROI itself takes canonical ellipse geometry.
-        Roi(roi_id=f"demo-{name}", name=name, kind="ellipse",
-            geometry=[geometry[0], geometry[1], geometry[2],
-                      geometry[2], 0.0],
-            base_anchor=0.0)
-        for name, geometry, _, _ in DEMO_ROIS]
+        Roi(
+            roi_id=f"demo-{name}",
+            name=name,
+            kind="ellipse",
+            geometry=[geometry[0], geometry[1], geometry[2], geometry[2], 0.0],
+            base_anchor=0.0,
+        )
+        for name, geometry, _, _ in DEMO_ROIS
+    ]
     # The curves above are signal over background, so the corrected
     # series is the one that reproduces them; plain "mean" reads
     # BACKGROUND_LEVEL higher (and 300 higher again inside the glow).
@@ -191,39 +223,45 @@ def compute_store(session, paths):
     the same worker function and cache keys."""
     store, stat_cache = {}, {}
     for path in paths:
-        effective = {roi.roi_id: (roi.kind, tuple(roi.geometry))
-                     for roi in session.rois}
+        effective = {
+            roi.roi_id: (roi.kind, tuple(roi.geometry)) for roi in session.rois
+        }
         result = compute_image_stats(path, effective)
         if result["error"] is not None:
             sys.exit(f"stats failed for {path}: {result['error']}")
         for roi in session.rois:
-            store[session.cache_key(path, roi, stat_cache)] = \
-                result["stats"][roi.roi_id]
+            store[session.cache_key(path, roi, stat_cache)] = result["stats"][
+                roi.roi_id
+            ]
     return store
 
 
 def _report_pair(session, series):
     """The background-correction check: two disks carrying the same
     signal, one of them in the glow, must correct to the same value."""
-    by_name = {name: (roi_id, values)
-               for roi_id, (name, _elapsed, values) in series.items()}
+    by_name = {
+        name: (roi_id, values) for roi_id, (name, _elapsed, values) in series.items()
+    }
     print()
-    print("Background-correction check (same signal, different "
-          "backgrounds):")
+    print("Background-correction check (same signal, different backgrounds):")
     corrected = {}
     for name in PAIR_NAMES:
         roi_id, values = by_name[name]
-        raw = [session.stats[key].get("mean")
-               for key in session.stats if key[2] == roi_id]
+        raw = [
+            session.stats[key].get("mean") for key in session.stats if key[2] == roi_id
+        ]
         corrected[name] = values[0]
-        print(f"  {name:8s} bg_corrected={values[0]:8.1f}  "
-              f"(raw mean {max(raw):8.1f})")
+        print(f"  {name:8s} bg_corrected={values[0]:8.1f}  (raw mean {max(raw):8.1f})")
     difference = abs(corrected[PAIR_NAMES[0]] - corrected[PAIR_NAMES[1]])
-    print(f"  difference {difference:.1f} counts "
-          f"(signal is {PAIR_SIGNAL:.0f}, tolerance {PAIR_TOLERANCE:.0f})")
+    print(
+        f"  difference {difference:.1f} counts "
+        f"(signal is {PAIR_SIGNAL:.0f}, tolerance {PAIR_TOLERANCE:.0f})"
+    )
     if difference > PAIR_TOLERANCE:
-        sys.exit(f"background correction is off by {difference:.1f} "
-                 f"counts between {PAIR_NAMES[0]} and {PAIR_NAMES[1]}")
+        sys.exit(
+            f"background correction is off by {difference:.1f} "
+            f"counts between {PAIR_NAMES[0]} and {PAIR_NAMES[1]}"
+        )
 
 
 def verify_and_report(experiment_dir):
@@ -231,48 +269,54 @@ def verify_and_report(experiment_dir):
     fitted equations the GUI must reproduce."""
     session = load_session(experiment_dir)
     session.stats = load_roi_stats(experiment_dir)
-    paths = [str(path) for path in
-             discover_captures(experiment_dir / "captures")]
+    paths = [str(path) for path in discover_captures(experiment_dir / "captures")]
     series = derive_series(session, paths)
     if len(series) != len(DEMO_ROIS):
         sys.exit(f"expected {len(DEMO_ROIS)} series, got {len(series)}")
     print(f"\nDemo experiment: {experiment_dir}")
     print(f"Browse to: {experiment_dir / 'captures'}\n")
     _report_pair(session, series)
-    print("Expected results (sigmoid fit and 'Trim poor tail' are "
-          "preselected; switch the Fit dropdown to try the others, and "
-          "the View dropdown for the d² and fastest-change charts):")
+    print(
+        "Expected results (sigmoid fit and 'Trim poor tail' are "
+        "preselected; switch the Fit dropdown to try the others, and "
+        "the View dropdown for the d² and fastest-change charts):"
+    )
     for (name, _, _, truth), (roi_id, (_, elapsed, values)) in zip(
-            DEMO_ROIS, series.items()):
+        DEMO_ROIS, series.items()
+    ):
         gap_count = sum(1 for value in values if math.isnan(value))
         if gap_count:
-            sys.exit(f"{name}: {gap_count} NaN points — cache keys "
-                     f"did not match, the plot would show gaps")
+            sys.exit(
+                f"{name}: {gap_count} NaN points — cache keys "
+                f"did not match, the plot would show gaps"
+            )
         print(f"\n  {name}  (truth: {truth})")
-        for method in ("linear", "poly2", "poly3", "exponential",
-                       "sigmoid"):
-            fit = fit_series(elapsed, values, method,
-                             session.figure.trim_poor_fit)
+        for method in ("linear", "poly2", "poly3", "exponential", "sigmoid"):
+            fit = fit_series(elapsed, values, method, session.figure.trim_poor_fit)
             if fit is None:
                 print(f"    {method:12s}: fit failed")
                 continue
-            line = f"    {method:12s}: {fit.equation}" \
-                   f"{trimmed_note(fit, max(elapsed))}  " \
-                   f"R²={fit.r_squared:.4f}"
-            extrema = second_derivative_extrema(
-                fit, min(elapsed), max(elapsed))
+            line = (
+                f"    {method:12s}: {fit.equation}"
+                f"{trimmed_note(fit, max(elapsed))}  "
+                f"R²={fit.r_squared:.4f}"
+            )
+            extrema = second_derivative_extrema(fit, min(elapsed), max(elapsed))
             if extrema:
                 t_max, y_max = extrema["max"]
                 t_min, y_min = extrema["min"]
-                line += (f"  d²max@({t_max:.3g}, {y_max:.3g})"
-                         f"  d²min@({t_min:.3g}, {y_min:.3g})")
+                line += (
+                    f"  d²max@({t_max:.3g}, {y_max:.3g})"
+                    f"  d²min@({t_min:.3g}, {y_min:.3g})"
+                )
             else:
                 line += "  (flat d² -> no markers)"
-            t_fastest = fastest_change_time(
-                fit, min(elapsed), max(elapsed))
-            line += (f"  fastest@{t_fastest:.3g}s"
-                     if t_fastest is not None
-                     else "  (constant rate -> no bar)")
+            t_fastest = fastest_change_time(fit, min(elapsed), max(elapsed))
+            line += (
+                f"  fastest@{t_fastest:.3g}s"
+                if t_fastest is not None
+                else "  (constant rate -> no bar)"
+            )
             print(line)
 
 
@@ -280,15 +324,17 @@ def main():
     # The report is full of ·, ², ≤; a cp1252 console would die on it.
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(
-        description="Generate the curve-fitting demo experiment.")
+        description="Generate the curve-fitting demo experiment."
+    )
     parser.add_argument(
-        "output_dir", nargs="?",
+        "output_dir",
+        nargs="?",
         default=str(Path.home() / "Documents"),
         help="Folder to create fit_demo_experiment/ in "
-             "(default: your Documents folder)")
+        "(default: your Documents folder)",
+    )
     arguments = parser.parse_args()
-    experiment_dir = (Path(arguments.output_dir).resolve()
-                      / "fit_demo_experiment")
+    experiment_dir = Path(arguments.output_dir).resolve() / "fit_demo_experiment"
     raw_dir = experiment_dir / "captures" / "16bit_raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     for stale in raw_dir.glob("*.png"):

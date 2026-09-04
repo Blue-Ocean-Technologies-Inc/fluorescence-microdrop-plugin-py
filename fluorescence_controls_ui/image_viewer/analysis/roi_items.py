@@ -3,20 +3,29 @@
 angle as a Qt item rotation about its own centre, which keeps every
 grip position and resize computation in unrotated local coordinates,
 and reports its geometry back through the layer's edit callback."""
+
 import math
 
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QBrush, QPainterPath, QPolygonF
 from PySide6.QtWidgets import (
-    QGraphicsEllipseItem, QGraphicsPathItem, QGraphicsPolygonItem,
+    QGraphicsEllipseItem,
+    QGraphicsPathItem,
+    QGraphicsPolygonItem,
     QGraphicsSimpleTextItem,
 )
 
 from .consts import MIN_ROI_SIZE_PX
 from .roi_geometry import centre_of, normalize
 from .roi_handles import (
-    BALL_REFERENCE_PEN, HANDLE_SIZE_PX, ROI_PEN, ROI_SELECTED_PEN,
-    CornerRadiusHandle, NodeHandle, ResizeHandle, RotateHandle,
+    BALL_REFERENCE_PEN,
+    HANDLE_SIZE_PX,
+    ROI_PEN,
+    ROI_SELECTED_PEN,
+    CornerRadiusHandle,
+    NodeHandle,
+    ResizeHandle,
+    RotateHandle,
 )
 
 
@@ -35,8 +44,7 @@ class _RoiItemBase:
         self.setPen(ROI_PEN)
         self._label = QGraphicsSimpleTextItem(name, self)
         self._label.setBrush(QBrush(ROI_PEN.color()))
-        self._label.setFlag(
-            self._label.GraphicsItemFlag.ItemIgnoresTransformations)
+        self._label.setFlag(self._label.GraphicsItemFlag.ItemIgnoresTransformations)
         self._handle = ResizeHandle(self)
         self._rotate_handle = RotateHandle(self)
 
@@ -49,8 +57,9 @@ class _RoiItemBase:
     def angle_to(self, scene_point):
         """Degrees clockwise from the shape's centre to a scene point."""
         centre = self.mapToScene(self.transformOriginPoint())
-        return math.degrees(math.atan2(scene_point.y() - centre.y(),
-                                       scene_point.x() - centre.x()))
+        return math.degrees(
+            math.atan2(scene_point.y() - centre.y(), scene_point.x() - centre.x())
+        )
 
     def set_angle(self, degrees):
         self.setRotation(degrees)
@@ -66,12 +75,11 @@ class _RoiItemBase:
         top-left, label clear of both. All three ignore inherited
         transformations, so they stay upright while their positions
         still ride the rotation."""
-        self._handle.setPos(centre_x + half_width,
-                            centre_y + half_height)
-        self._rotate_handle.setPos(centre_x - half_width,
-                                   centre_y - half_height)
-        self._label.setPos(centre_x - half_width + HANDLE_SIZE_PX,
-                           centre_y - half_height - 2)
+        self._handle.setPos(centre_x + half_width, centre_y + half_height)
+        self._rotate_handle.setPos(centre_x - half_width, centre_y - half_height)
+        self._label.setPos(
+            centre_x - half_width + HANDLE_SIZE_PX, centre_y - half_height - 2
+        )
 
     def set_name(self, name):
         self._label.setText(name)
@@ -106,9 +114,12 @@ def capsule_path(geometry):
     unrotated local coordinates (the item transform adds the angle)."""
     _, values = normalize("capsule", geometry)
     centre_x, centre_y, half_length, radius, _angle = values
-    rectangle = QRectF(centre_x - half_length - radius,
-                       centre_y - radius,
-                       2 * (half_length + radius), 2 * radius)
+    rectangle = QRectF(
+        centre_x - half_length - radius,
+        centre_y - radius,
+        2 * (half_length + radius),
+        2 * radius,
+    )
     path = QPainterPath()
     path.addRoundedRect(rectangle, radius, radius)
     return path
@@ -127,8 +138,9 @@ class EllipseRoiItem(_RoiItemBase, QGraphicsEllipseItem):
         _, values = normalize("ellipse", geometry)
         centre_x, centre_y, radius_x, radius_y, angle = values
         self.setPos(0, 0)
-        self.setRect(centre_x - radius_x, centre_y - radius_y,
-                     2 * radius_x, 2 * radius_y)
+        self.setRect(
+            centre_x - radius_x, centre_y - radius_y, 2 * radius_x, 2 * radius_y
+        )
         self.setTransformOriginPoint(centre_x, centre_y)
         self.setRotation(angle)
         self._place_attachments()
@@ -136,8 +148,13 @@ class EllipseRoiItem(_RoiItemBase, QGraphicsEllipseItem):
     def geometry(self):
         rect = self.rect()
         centre = rect.center() + self.pos()
-        return [centre.x(), centre.y(), rect.width() / 2,
-                rect.height() / 2, self.rotation()]
+        return [
+            centre.x(),
+            centre.y(),
+            rect.width() / 2,
+            rect.height() / 2,
+            self.rotation(),
+        ]
 
     def _apply_size(self, point, uniform):
         centre = self.rect().center()
@@ -145,13 +162,15 @@ class EllipseRoiItem(_RoiItemBase, QGraphicsEllipseItem):
         radius_y = max(abs(point.y() - centre.y()), MIN_ROI_SIZE_PX)
         if uniform:
             radius_x = radius_y = max(radius_x, radius_y)
-        self.setRect(centre.x() - radius_x, centre.y() - radius_y,
-                     2 * radius_x, 2 * radius_y)
+        self.setRect(
+            centre.x() - radius_x, centre.y() - radius_y, 2 * radius_x, 2 * radius_y
+        )
 
     def _place_attachments(self):
         rect = self.rect()
-        self._place_grips(rect.center().x(), rect.center().y(),
-                          rect.width() / 2, rect.height() / 2)
+        self._place_grips(
+            rect.center().x(), rect.center().y(), rect.width() / 2, rect.height() / 2
+        )
 
 
 def box_path(geometry):
@@ -225,10 +244,14 @@ class BoxRoiItem(_RoiItemBase, QGraphicsPathItem):
         self._place_attachments()
 
     def geometry(self):
-        return [self._rect.x() + self.pos().x(),
-                self._rect.y() + self.pos().y(),
-                self._rect.width(), self._rect.height(),
-                self.rotation(), self._corner_radius]
+        return [
+            self._rect.x() + self.pos().x(),
+            self._rect.y() + self.pos().y(),
+            self._rect.width(),
+            self._rect.height(),
+            self.rotation(),
+            self._corner_radius,
+        ]
 
     def set_editable(self, editable):
         super().set_editable(editable)
@@ -248,9 +271,12 @@ class BoxRoiItem(_RoiItemBase, QGraphicsPathItem):
         centre = self._rect.center()
         half_width = max(abs(point.x() - centre.x()), MIN_ROI_SIZE_PX)
         half_height = max(abs(point.y() - centre.y()), MIN_ROI_SIZE_PX)
-        self._rect = QRectF(centre.x() - half_width,
-                            centre.y() - half_height,
-                            2 * half_width, 2 * half_height)
+        self._rect = QRectF(
+            centre.x() - half_width,
+            centre.y() - half_height,
+            2 * half_width,
+            2 * half_height,
+        )
         self._redraw()
 
     def _redraw(self):
@@ -258,18 +284,26 @@ class BoxRoiItem(_RoiItemBase, QGraphicsPathItem):
         the radius the way normalize() would (a resize can shrink the
         box under a radius it already carries). Local coordinates
         throughout: the item's own pos() offsets the result."""
-        _, values = normalize("box", [
-            self._rect.x(), self._rect.y(), self._rect.width(),
-            self._rect.height(), self.rotation(), self._corner_radius])
+        _, values = normalize(
+            "box",
+            [
+                self._rect.x(),
+                self._rect.y(),
+                self._rect.width(),
+                self._rect.height(),
+                self.rotation(),
+                self._corner_radius,
+            ],
+        )
         self._corner_radius = values[5]
         self.setPath(box_path(values))
 
     def _place_attachments(self):
         rect = self._rect
-        self._place_grips(rect.center().x(), rect.center().y(),
-                          rect.width() / 2, rect.height() / 2)
-        self._radius_handle.setPos(rect.right() - self._corner_radius,
-                                   rect.top())
+        self._place_grips(
+            rect.center().x(), rect.center().y(), rect.width() / 2, rect.height() / 2
+        )
+        self._radius_handle.setPos(rect.right() - self._corner_radius, rect.top())
 
 
 class CapsuleRoiItem(_RoiItemBase, QGraphicsPathItem):
@@ -287,8 +321,9 @@ class CapsuleRoiItem(_RoiItemBase, QGraphicsPathItem):
 
     def set_geometry(self, geometry):
         _, values = normalize("capsule", geometry)
-        (self._centre_x, self._centre_y, self._half_length,
-         self._radius, angle) = values
+        (self._centre_x, self._centre_y, self._half_length, self._radius, angle) = (
+            values
+        )
         self.setPos(0, 0)
         self.setPath(capsule_path(values))
         self.setTransformOriginPoint(self._centre_x, self._centre_y)
@@ -296,26 +331,34 @@ class CapsuleRoiItem(_RoiItemBase, QGraphicsPathItem):
         self._place_attachments()
 
     def geometry(self):
-        return [self._centre_x + self.pos().x(),
-                self._centre_y + self.pos().y(),
-                self._half_length, self._radius, self.rotation()]
+        return [
+            self._centre_x + self.pos().x(),
+            self._centre_y + self.pos().y(),
+            self._half_length,
+            self._radius,
+            self.rotation(),
+        ]
 
     def _apply_size(self, point, uniform):
         # The grip rides the bounding corner, so its x distance covers
         # the cap radius as well as the straight half-length.
-        self._radius = max(abs(point.y() - self._centre_y),
-                           MIN_ROI_SIZE_PX)
+        self._radius = max(abs(point.y() - self._centre_y), MIN_ROI_SIZE_PX)
         self._half_length = max(
-            abs(point.x() - self._centre_x) - self._radius,
-            MIN_ROI_SIZE_PX)
-        self.setPath(capsule_path(
-            [self._centre_x, self._centre_y, self._half_length,
-             self._radius, 0.0]))
+            abs(point.x() - self._centre_x) - self._radius, MIN_ROI_SIZE_PX
+        )
+        self.setPath(
+            capsule_path(
+                [self._centre_x, self._centre_y, self._half_length, self._radius, 0.0]
+            )
+        )
 
     def _place_attachments(self):
-        self._place_grips(self._centre_x, self._centre_y,
-                          self._half_length + self._radius,
-                          self._radius)
+        self._place_grips(
+            self._centre_x,
+            self._centre_y,
+            self._half_length + self._radius,
+            self._radius,
+        )
 
 
 class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
@@ -333,10 +376,12 @@ class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
 
     def set_geometry(self, geometry):
         _, values = normalize("polygon", geometry)
-        points = [QPointF(values[index], values[index + 1])
-                  for index in range(0, len(values), 2)]
+        points = [
+            QPointF(values[index], values[index + 1])
+            for index in range(0, len(values), 2)
+        ]
         self.setPos(0, 0)
-        self.setRotation(0)     # a stored contour is already oriented
+        self.setRotation(0)  # a stored contour is already oriented
         self.setPolygon(QPolygonF(points))
         self.setTransformOriginPoint(*centre_of("polygon", values))
         self._rebuild_node_handles()
@@ -345,10 +390,11 @@ class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
     def geometry(self):
         # Through the item transform, so a move or a live rotation
         # lands in the coordinates and never needs storing as an angle.
-        return [value
-                for point in self.polygon()
-                for value in (self.mapToScene(point).x(),
-                              self.mapToScene(point).y())]
+        return [
+            value
+            for point in self.polygon()
+            for value in (self.mapToScene(point).x(), self.mapToScene(point).y())
+        ]
 
     def move_node(self, index, scene_point):
         points = list(self.polygon())
@@ -389,5 +435,9 @@ class PolygonRoiItem(_RoiItemBase, QGraphicsPolygonItem):
 
     def _place_attachments(self):
         bounds = self.polygon().boundingRect()
-        self._place_grips(bounds.center().x(), bounds.center().y(),
-                          bounds.width() / 2, bounds.height() / 2)
+        self._place_grips(
+            bounds.center().x(),
+            bounds.center().y(),
+            bounds.width() / 2,
+            bounds.height() / 2,
+        )

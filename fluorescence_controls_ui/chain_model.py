@@ -6,15 +6,19 @@ Converts to/from Task 1's `ChainEntry` (`fluorescence_protocol_controls
 .capture_chain`), the value contract a chain is stored/loaded under —
 `exposure` here maps to `exposure_ms` there (the row keeps the panel's
 millisecond field name; the stored entry keeps its explicit unit)."""
+
 from traits.api import Bool, Enum, HasTraits, Range, Str
 
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .consts import (
-    EXPOSURE_MS_MAX, EXPOSURE_MS_MIN,
-    LED_DUTY_MAX, LED_DUTY_MIN,
-    LED_FREQUENCY_MAX, LED_FREQUENCY_MIN,
+    EXPOSURE_MS_MAX,
+    EXPOSURE_MS_MIN,
+    LED_DUTY_MAX,
+    LED_DUTY_MIN,
+    LED_FREQUENCY_MAX,
+    LED_FREQUENCY_MIN,
     LED_WAVELENGTHS,
 )
 

@@ -1,10 +1,16 @@
 """Tests for SAM candidate conversion and filtering (no osam needed)."""
+
 import numpy as np
+
 from traits.api import TraitError  # noqa: F401  (import check only)
 
 from fluorescence_controls_ui.image_viewer.analysis.sam_detect import (
-    AI_MODEL_OPTIONS, Candidate, DEFAULT_AI_MODEL, Detection,
-    candidate_from_detection, normalize_to_uint8, sam_available,
+    AI_MODEL_OPTIONS,
+    DEFAULT_AI_MODEL,
+    Detection,
+    candidate_from_detection,
+    normalize_to_uint8,
+    sam_available,
     suppress_with_votes,
 )
 
@@ -30,14 +36,12 @@ def _disk_detection(cx=30.0, cy=30.0, r=10, score=0.9):
     size = 2 * r + 1
     mask = np.zeros((size, size), dtype=bool)
     yy, xx = np.mgrid[0:size, 0:size]
-    mask[(xx - r) ** 2 + (yy - r) ** 2 <= r ** 2] = True
-    return Detection(bbox=[cx - r, cy - r, cx + r, cy + r],
-                     mask=mask, score=score)
+    mask[(xx - r) ** 2 + (yy - r) ** 2 <= r**2] = True
+    return Detection(bbox=[cx - r, cy - r, cx + r, cy + r], mask=mask, score=score)
 
 
 def test_disk_mask_becomes_polygon_and_ellipse_candidate():
-    candidate = candidate_from_detection(_disk_detection(),
-                                         prompt=[30.0, 30.0])
+    candidate = candidate_from_detection(_disk_detection(), prompt=[30.0, 30.0])
     kind, geometry = candidate.geometry_for("ellipse")
     assert kind == "ellipse"
     cx, cy, rx, ry, _angle = geometry
@@ -49,14 +53,16 @@ def test_disk_mask_becomes_polygon_and_ellipse_candidate():
 
 
 def test_duplicate_masks_merge_and_sum_votes():
-    kept = suppress_with_votes([(_disk_detection(score=0.9), 1),
-                                (_disk_detection(score=0.5), 1)])
+    kept = suppress_with_votes(
+        [(_disk_detection(score=0.9), 1), (_disk_detection(score=0.5), 1)]
+    )
     assert len(kept) == 1 and kept[0][1] == 2
 
 
 def test_click_candidates_are_exempt_from_significance():
-    clicked = candidate_from_detection(_disk_detection(),
-                                       prompt=[30.0, 30.0], source="click")
+    clicked = candidate_from_detection(
+        _disk_detection(), prompt=[30.0, 30.0], source="click"
+    )
     swept = candidate_from_detection(_disk_detection(), votes=1)
     assert clicked.passes(min_votes=2, min_size=0, max_size=500)
     assert not swept.passes(min_votes=2, min_size=0, max_size=500)

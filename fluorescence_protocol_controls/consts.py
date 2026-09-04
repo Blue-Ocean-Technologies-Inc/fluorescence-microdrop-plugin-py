@@ -1,5 +1,5 @@
 # This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 #: Capture-chain field (row trait): list of ChainEntry dicts, or None/[].
@@ -25,4 +25,3 @@ CAMERA_WARMUP_S = 2.0
 #: 1-second-granular). The image viewer shows these verbatim.
 PHASE_START_SUFFIX = "_start"
 PHASE_END_SUFFIX = "_end"
-

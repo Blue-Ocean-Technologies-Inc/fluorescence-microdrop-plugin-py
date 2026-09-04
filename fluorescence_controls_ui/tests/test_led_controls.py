@@ -14,28 +14,34 @@ image_tag/wavelength/position on push, never authored), and Run
 Capture's lazy `capture_service` import (Task 6's module, which does not
 exist yet).
 """
+
 import json
 import sys
 import types
 
 import pytest
+
 from apptools.preferences.api import Preferences
 
 import fluorescence_controls_ui.controller as controller_mod
-from fluorescence_controls_ui.controller import FluorescenceControlsController
+from fluorescence_controller.consts import (
+    ALL_LEDS_OFF,
+    LED_WAVELENGTHS,
+    SET_LED,
+    SET_LED_FREQUENCY,
+)
 from fluorescence_controls_ui.chain_model import FluorescenceChainRow
+from fluorescence_controls_ui.controller import FluorescenceControlsController
 from fluorescence_controls_ui.model import FluorescenceStatusModel
 from fluorescence_controls_ui.preferences import FluorescencePreferences
-from fluorescence_controller.consts import (
-    SET_LED, SET_LED_FREQUENCY, ALL_LEDS_OFF, LED_WAVELENGTHS,
-)
 
 
 @pytest.fixture
 def published(monkeypatch):
     sink = []
     monkeypatch.setattr(
-        controller_mod, "publish_message",
+        controller_mod,
+        "publish_message",
         lambda message, topic=None, **k: sink.append((topic, json.loads(message))),
     )
     return sink
@@ -47,7 +53,8 @@ def _controller():
     # peripheral_settings" node, which would otherwise leak wavelength/
     # intensity/etc. edits across tests (and even across pytest runs).
     model = FluorescenceStatusModel(
-        preferences=FluorescencePreferences(preferences=Preferences()))
+        preferences=FluorescencePreferences(preferences=Preferences())
+    )
     return FluorescenceControlsController(model=model), model
 
 
@@ -61,6 +68,7 @@ def _live_controller():
 
 # --- defaults ---------------------------------------------------------------------
 
+
 def test_defaults_match_standalone_config():
     _, model = _controller()
     assert not hasattr(model, "mode")
@@ -72,9 +80,10 @@ def test_defaults_match_standalone_config():
 
 # --- master light toggle ------------------------------------------------------------
 
+
 def test_light_on_drives_the_led(published):
     controller, model = _live_controller()
-    published.clear()          # drop the stream-start SET_LED_FREQUENCY
+    published.clear()  # drop the stream-start SET_LED_FREQUENCY
     model.light_on = True
     assert published == [(SET_LED, {"led": 0, "duty": 50})]
 
@@ -93,10 +102,11 @@ def test_light_on_stages_while_stream_off(published):
     model.observe(lambda event: warned.append(True), "stream_off_edit_warning")
     model.light_on = True
     assert published == []
-    assert warned          # user warned the edit is staged
+    assert warned  # user warned the edit is staged
 
 
 # --- live edits gate on stream + light + idle ----------------------------------------
+
 
 def test_intensity_edit_publishes_live_when_lit(published):
     controller, model = _live_controller()
@@ -108,7 +118,7 @@ def test_intensity_edit_publishes_live_when_lit(published):
 
 def test_intensity_edit_staged_while_light_off(published):
     controller, model = _live_controller()
-    published.clear()          # drop the stream-start SET_LED_FREQUENCY
+    published.clear()  # drop the stream-start SET_LED_FREQUENCY
     model.intensity = 55
     assert published == []
 
@@ -139,11 +149,12 @@ def test_live_edits_gated_off_during_protocol_run(published):
 
 # --- wavelength switch = ONE exclusive request ----------------------------------------
 
+
 def test_wavelength_switch_is_single_exclusive_request(published):
     controller, model = _live_controller()
     model.light_on = True
     published.clear()
-    model.wavelength = LED_WAVELENGTHS[4]      # Red (630 nm)
+    model.wavelength = LED_WAVELENGTHS[4]  # Red (630 nm)
     assert published == [(SET_LED, {"led": 4, "duty": 50, "exclusive": True})]
 
 
@@ -155,16 +166,22 @@ def test_wavelength_switch_staged_while_off(published):
 
 # --- board identity -----------------------------------------------------------------
 
+
 def test_board_id_signal_fills_board_readout():
     from fluorescence_controls_ui.message_handler import FluorescenceMessageHandler
+
     model = FluorescenceStatusModel()
-    handler = FluorescenceMessageHandler(model=model, name="fluorescence_controls_ui_listener")
-    handler._on_board_id_triggered(json.dumps(
-        {"uid": "a1b2c3d4", "device_id": "fluo_board"}))
+    handler = FluorescenceMessageHandler(
+        model=model, name="fluorescence_controls_ui_listener"
+    )
+    handler._on_board_id_triggered(
+        json.dumps({"uid": "a1b2c3d4", "device_id": "fluo_board"})
+    )
     assert model.board_id_text == "fluo_board"
 
 
 # --- chain ops: Add -----------------------------------------------------------------
+
 
 def test_add_capture_appends_row_from_panel_values():
     controller, model = _controller()
@@ -198,24 +215,25 @@ def test_add_capture_uniquifies_colliding_labels():
     controller, model = _controller()
     controller.add_capture()
     controller.add_capture()
-    assert [r.label for r in model.chain_rows] == [
-        "Blue_460_nm_1", "Blue_460_nm_2"]
+    assert [r.label for r in model.chain_rows] == ["Blue_460_nm_1", "Blue_460_nm_2"]
 
 
 def test_add_capture_in_free_mode_stashes_into_free_chain():
     controller, model = _controller()
     controller.add_capture()
     assert model.attached_step_id == ""
-    assert [r.label for r in model.free_chain] == [
-        r.label for r in model.chain_rows]
+    assert [r.label for r in model.free_chain] == [r.label for r in model.chain_rows]
 
 
 def test_add_capture_while_attached_pushes_set_cell(monkeypatch):
     from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
+
     calls = []
     monkeypatch.setattr(
-        controller_mod, "protocol_tree_set_cell_publisher",
-        types.SimpleNamespace(publish=lambda **kw: calls.append(kw)))
+        controller_mod,
+        "protocol_tree_set_cell_publisher",
+        types.SimpleNamespace(publish=lambda **kw: calls.append(kw)),
+    )
     controller, model = _controller()
     model.attached_step_id = "step-1"
     controller.add_capture()
@@ -228,11 +246,17 @@ def test_add_capture_while_attached_pushes_set_cell(monkeypatch):
 
 # --- panel <-> chain-row live binding ---------------------------------------------------
 
+
 def test_row_selection_loads_panel_and_drives_led(published):
     controller, model = _live_controller()
     row = FluorescenceChainRow(
-        image_tag="Cy5", wavelength=LED_WAVELENGTHS[3], intensity=80,
-        frequency=1234, exposure=5.0, gain=10)
+        image_tag="Cy5",
+        wavelength=LED_WAVELENGTHS[3],
+        intensity=80,
+        frequency=1234,
+        exposure=5.0,
+        gain=10,
+    )
     model.chain_rows = [row]
     model.light_on = True
     published.clear()
@@ -249,8 +273,10 @@ def test_row_selection_loads_panel_and_drives_led(published):
 def test_panel_edit_writes_back_into_selected_row_and_pushes(monkeypatch):
     calls = []
     monkeypatch.setattr(
-        controller_mod, "protocol_tree_set_cell_publisher",
-        types.SimpleNamespace(publish=lambda **kw: calls.append(kw)))
+        controller_mod,
+        "protocol_tree_set_cell_publisher",
+        types.SimpleNamespace(publish=lambda **kw: calls.append(kw)),
+    )
     controller, model = _controller()
     model.attached_step_id = "step-1"
     row = FluorescenceChainRow(label="A")
@@ -274,6 +300,7 @@ def test_panel_edit_without_selection_does_not_touch_any_row():
 
 # --- Run Capture: lazy capture_service import --------------------------------------------
 
+
 class _SyncThread:
     """Runs the target synchronously — keeps the Run Capture tests
     deterministic without real threading."""
@@ -288,8 +315,8 @@ class _SyncThread:
 @pytest.fixture
 def sync_thread(monkeypatch):
     monkeypatch.setattr(
-        controller_mod, "threading",
-        types.SimpleNamespace(Thread=_SyncThread))
+        controller_mod, "threading", types.SimpleNamespace(Thread=_SyncThread)
+    )
 
 
 @pytest.fixture
@@ -298,16 +325,18 @@ def fake_capture_service(monkeypatch):
     calls = []
 
     def run_burst(entries, *, step_desc=None, dotted_id=None):
-        calls.append({"entries": entries, "step_desc": step_desc,
-                      "dotted_id": dotted_id})
+        calls.append(
+            {"entries": entries, "step_desc": step_desc, "dotted_id": dotted_id}
+        )
 
     module.run_burst = run_burst
-    monkeypatch.setitem(
-        sys.modules, "fluorescence_controls_ui.capture_service", module)
+    monkeypatch.setitem(sys.modules, "fluorescence_controls_ui.capture_service", module)
     return calls
 
 
-def test_run_capture_calls_run_burst_on_ticked_entries(sync_thread, fake_capture_service):
+def test_run_capture_calls_run_burst_on_ticked_entries(
+    sync_thread, fake_capture_service
+):
     controller, model = _controller()
     model.chain_rows = [
         FluorescenceChainRow(label="A", run=True),
@@ -316,7 +345,7 @@ def test_run_capture_calls_run_burst_on_ticked_entries(sync_thread, fake_capture
     controller.run_capture()
     assert len(fake_capture_service) == 1
     assert [e.label for e in fake_capture_service[0]["entries"]] == ["A"]
-    assert fake_capture_service[0]["step_desc"] is None      # free mode
+    assert fake_capture_service[0]["step_desc"] is None  # free mode
     assert fake_capture_service[0]["dotted_id"] is None
 
 
@@ -336,7 +365,8 @@ def test_run_capture_disabled_during_protocol_run(fake_capture_service):
 
 
 def test_run_capture_on_attached_step_passes_desc_and_dotted(
-        sync_thread, fake_capture_service):
+    sync_thread, fake_capture_service
+):
     """Attached bursts are named like protocol-run bursts: the step's
     description + 1-indexed dotted id (from row_selected's name/id
     cells), never the uuid."""
@@ -351,21 +381,21 @@ def test_run_capture_on_attached_step_passes_desc_and_dotted(
 
 
 def test_capture_selected_bursts_only_that_row_run_forced(
-        sync_thread, fake_capture_service):
+    sync_thread, fake_capture_service
+):
     controller, model = _controller()
     a = FluorescenceChainRow(label="A", run=False)
     b = FluorescenceChainRow(label="B", run=True)
     model.chain_rows = [a, b]
-    model.chain_selection = a                 # unticked on purpose
+    model.chain_selection = a  # unticked on purpose
     controller.capture_selected()
     assert len(fake_capture_service) == 1
     [entry] = fake_capture_service[0]["entries"]
     assert entry.label == "A" and entry.run is True
-    assert a.run is False                     # stored tick untouched
+    assert a.run is False  # stored tick untouched
 
 
-def test_capture_selected_noops_without_selection_or_mid_run(
-        fake_capture_service):
+def test_capture_selected_noops_without_selection_or_mid_run(fake_capture_service):
     controller, model = _controller()
     model.chain_rows = [FluorescenceChainRow(label="A")]
     model.chain_selection = None

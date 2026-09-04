@@ -1,5 +1,6 @@
 """Hardware-free tests for the 16-bit image viewer display helpers and
 capture discovery."""
+
 import os
 
 import numpy as np
@@ -8,12 +9,13 @@ from PySide6.QtGui import QImage
 from fluorescence_controls_ui.cameras.asi_thread import raw_to_qimage
 from fluorescence_controls_ui.image_viewer import discovery
 from fluorescence_controls_ui.image_viewer.display import (
-    qimage_to_array, stretch_to_8bit,
+    qimage_to_array,
+    stretch_to_8bit,
 )
 
 
 def test_16bit_png_round_trip_is_lossless(tmp_path):
-    raw = (np.arange(40 * 30, dtype=np.uint16).reshape(30, 40) * 50)
+    raw = np.arange(40 * 30, dtype=np.uint16).reshape(30, 40) * 50
     path = str(tmp_path / "raw.png")
     assert raw_to_qimage(raw).save(path)
     back = qimage_to_array(QImage(path))
@@ -46,10 +48,10 @@ def test_8bit_grayscale_passthrough_shape():
 def test_manual_window_maps_low_to_black_high_to_white():
     raw = np.array([[100, 200], [300, 400]], dtype=np.uint16)
     out = stretch_to_8bit(raw, auto_contrast=False, window=(200, 400))
-    assert out[0, 0] == 0        # below the window clips to black
-    assert out[0, 1] == 0        # window low edge
-    assert out[1, 1] == 255      # window high edge
-    assert 0 < out[1, 0] < 255   # mid-window stays mid-gray
+    assert out[0, 0] == 0  # below the window clips to black
+    assert out[0, 1] == 0  # window low edge
+    assert out[1, 1] == 255  # window high edge
+    assert 0 < out[1, 0] < 255  # mid-window stays mid-gray
 
 
 def test_manual_window_inverted_renders_black_not_crash():
@@ -62,22 +64,24 @@ def test_manual_window_ignored_while_auto_contrast_on():
     raw = np.full((60, 80), 400, dtype=np.uint16)
     raw[20:30, 30:40] = 3200
     auto = stretch_to_8bit(raw, auto_contrast=True, window=(0, 65535))
-    assert auto.max() == 255     # percentile window, not the manual one
+    assert auto.max() == 255  # percentile window, not the manual one
 
 
 def test_viewer_model_navigation_wraps_and_positions():
     from pathlib import Path
+
     from fluorescence_controls_ui.image_viewer.model import (
         FluorescenceImageViewerModel,
     )
+
     model = FluorescenceImageViewerModel()
-    assert model.relative_path(1) is None          # nothing discovered
+    assert model.relative_path(1) is None  # nothing discovered
     assert model.position_text == ""
 
     model.paths = [Path("a.png"), Path("b.png"), Path("c.png")]
     assert model.relative_path(1) == Path("a.png")  # no current: enter at start
     assert model.relative_path(-1) == Path("c.png")
-    assert model.position_text == "–/3"             # showing an outside image
+    assert model.position_text == "–/3"  # showing an outside image
     assert model.image_names == ["a.png", "b.png", "c.png"]
     assert model.max_image_index == 2
 
@@ -102,27 +106,23 @@ def test_discover_captures_oldest_first_by_save_time(tmp_path):
     assert discovery.discover_captures(tmp_path) == [older, newer]
 
 
-def test_current_captures_directory_returns_captures_folder(tmp_path,
-                                                               monkeypatch):
+def test_current_captures_directory_returns_captures_folder(tmp_path, monkeypatch):
     # The renamed function returns <exp>/captures (not <exp>/captures/16bit_raw).
-    monkeypatch.setattr(discovery, "get_current_experiment_directory",
-                        lambda: tmp_path)
+    monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: tmp_path)
     assert discovery.current_captures_directory() == tmp_path / "captures"
 
 
 def test_current_captures_directory_tolerates_no_experiment(monkeypatch):
     def unavailable():
         raise RuntimeError("no redis")
-    monkeypatch.setattr(discovery, "get_current_experiment_directory",
-                        unavailable)
+
+    monkeypatch.setattr(discovery, "get_current_experiment_directory", unavailable)
     assert discovery.current_captures_directory() is None
 
 
-def test_discover_captures_finds_nested_burst_raw_captures(tmp_path,
-                                                           monkeypatch):
+def test_discover_captures_finds_nested_burst_raw_captures(tmp_path, monkeypatch):
     # Nested burst raw captures: captures/Mix_1.2_x/16bit_raw/GFP_raw.png
-    monkeypatch.setattr(discovery, "get_current_experiment_directory",
-                        lambda: tmp_path)
+    monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: tmp_path)
 
     captures_dir = tmp_path / "captures"
     burst_dir = captures_dir / "Mix_1.2_x" / "16bit_raw"
@@ -137,8 +137,7 @@ def test_discover_captures_finds_nested_burst_raw_captures(tmp_path,
 
 def test_discover_captures_finds_old_flat_layout(tmp_path, monkeypatch):
     # Old flat layout: captures/16bit_raw/old_raw.png
-    monkeypatch.setattr(discovery, "get_current_experiment_directory",
-                        lambda: tmp_path)
+    monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: tmp_path)
 
     captures_dir = tmp_path / "captures"
     flat_dir = captures_dir / "16bit_raw"
@@ -151,13 +150,11 @@ def test_discover_captures_finds_old_flat_layout(tmp_path, monkeypatch):
     assert flat_raw in discovered
 
 
-def test_discover_captures_excludes_display_pngs_at_burst_root(tmp_path,
-                                                               monkeypatch):
+def test_discover_captures_excludes_display_pngs_at_burst_root(tmp_path, monkeypatch):
     # Display PNGs at burst root should NOT be returned.
     # captures/Mix_1.2_x/GFP.png should be excluded,
     # but captures/Mix_1.2_x/16bit_raw/GFP_raw.png should be included.
-    monkeypatch.setattr(discovery, "get_current_experiment_directory",
-                        lambda: tmp_path)
+    monkeypatch.setattr(discovery, "get_current_experiment_directory", lambda: tmp_path)
 
     captures_dir = tmp_path / "captures"
     burst_dir = captures_dir / "Mix_1.2_x"
@@ -181,6 +178,7 @@ def test_discover_captures_excludes_display_pngs_at_burst_root(tmp_path,
 
 # --- burst discovery + wavelength detection (issue #6 viewer rework) -------
 
+
 def _make_raw(directory, name, mtime):
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
@@ -191,17 +189,23 @@ def _make_raw(directory, name, mtime):
 
 def test_discover_bursts_groups_by_folder_oldest_first(tmp_path):
     captures = tmp_path / "captures"
-    b1 = _make_raw(captures / "Mix_1.2_x" / "16bit_raw",
-                   "Blue_460_nm_1_ts_raw.png", 1_000)
-    b2a = _make_raw(captures / "Rinse_2_y" / "16bit_raw",
-                    "Green_540_nm_1_ts_raw.png", 2_000)
-    b2b = _make_raw(captures / "Rinse_2_y" / "16bit_raw",
-                    "Blue_460_nm_2_ts_raw.png", 3_000)
+    b1 = _make_raw(
+        captures / "Mix_1.2_x" / "16bit_raw", "Blue_460_nm_1_ts_raw.png", 1_000
+    )
+    b2a = _make_raw(
+        captures / "Rinse_2_y" / "16bit_raw", "Green_540_nm_1_ts_raw.png", 2_000
+    )
+    b2b = _make_raw(
+        captures / "Rinse_2_y" / "16bit_raw", "Blue_460_nm_2_ts_raw.png", 3_000
+    )
     legacy = _make_raw(captures / "16bit_raw", "old_raw.png", 500)
 
     bursts = discovery.discover_bursts(captures)
     assert [name for name, _ in bursts] == [
-        discovery.UNGROUPED_BURST, "Mix_1.2_x", "Rinse_2_y"]
+        discovery.UNGROUPED_BURST,
+        "Mix_1.2_x",
+        "Rinse_2_y",
+    ]
     as_dict = dict(bursts)
     assert as_dict["Mix_1.2_x"] == [b1]
     assert as_dict["Rinse_2_y"] == [b2a, b2b]
@@ -214,24 +218,26 @@ def test_discover_bursts_empty_and_missing(tmp_path):
 
 
 def test_detect_wavelength_from_derived_labels():
-    assert discovery.detect_wavelength(
-        "gfp_Green_540_nm_2_2026_07_20-17_46_24_raw.png") == "Green (540 nm)"
-    assert discovery.detect_wavelength(
-        "Deep_Red_660_nm_1_ts.png") == "Deep Red (660 nm)"
-    assert discovery.detect_wavelength(
-        "free_mode_2026_07_20-17_50_08_raw.png") == ""
+    assert (
+        discovery.detect_wavelength("gfp_Green_540_nm_2_2026_07_20-17_46_24_raw.png")
+        == "Green (540 nm)"
+    )
+    assert (
+        discovery.detect_wavelength("Deep_Red_660_nm_1_ts.png") == "Deep Red (660 nm)"
+    )
+    assert discovery.detect_wavelength("free_mode_2026_07_20-17_50_08_raw.png") == ""
 
 
 # --- burst/wavelength navigation (controller level, no Qt) -----------------
 
-import types as _types
 
 from fluorescence_controls_ui.image_viewer import controller as viewer_controller_mod
 from fluorescence_controls_ui.image_viewer.controller import (
     FluorescenceImageViewerController,
 )
 from fluorescence_controls_ui.image_viewer.model import (
-    FluorescenceImageViewerModel, WAVELENGTH_FILTER_ALL,
+    WAVELENGTH_FILTER_ALL,
+    FluorescenceImageViewerModel,
 )
 
 
@@ -240,24 +246,29 @@ def _viewer(monkeypatch, tmp_path):
     image loading stubbed out (navigation is under test, not decoding)."""
     captures = tmp_path / "captures"
     paths = {
-        "old_blue": _make_raw(captures / "Mix_1.2_a" / "16bit_raw",
-                              "Blue_460_nm_1_t1_raw.png", 1_000),
-        "old_green": _make_raw(captures / "Mix_1.2_a" / "16bit_raw",
-                               "Green_540_nm_2_t2_raw.png", 1_500),
-        "new_blue": _make_raw(captures / "Rinse_3_b" / "16bit_raw",
-                              "Blue_460_nm_1_t3_raw.png", 2_000),
+        "old_blue": _make_raw(
+            captures / "Mix_1.2_a" / "16bit_raw", "Blue_460_nm_1_t1_raw.png", 1_000
+        ),
+        "old_green": _make_raw(
+            captures / "Mix_1.2_a" / "16bit_raw", "Green_540_nm_2_t2_raw.png", 1_500
+        ),
+        "new_blue": _make_raw(
+            captures / "Rinse_3_b" / "16bit_raw", "Blue_460_nm_1_t3_raw.png", 2_000
+        ),
     }
-    monkeypatch.setattr(viewer_controller_mod, "load_image_array",
-                        lambda path: np.zeros((2, 2), dtype=np.uint16))
+    monkeypatch.setattr(
+        viewer_controller_mod,
+        "load_image_array",
+        lambda path: np.zeros((2, 2), dtype=np.uint16),
+    )
     model = FluorescenceImageViewerModel()
-    model.directory = ""   # follow-the-experiment mode
+    model.directory = ""  # follow-the-experiment mode
     ctrl = FluorescenceImageViewerController(model=model)
     monkeypatch.setattr(ctrl, "_scan_directory", lambda: captures)
     return ctrl, model, paths
 
 
-def test_rescan_follows_newest_burst_and_populates_wavelengths(
-        monkeypatch, tmp_path):
+def test_rescan_follows_newest_burst_and_populates_wavelengths(monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
     assert model.burst_names == ["All", "Mix_1.2_a", "Rinse_3_b"]
@@ -265,7 +276,10 @@ def test_rescan_follows_newest_burst_and_populates_wavelengths(
     assert model.burst_index == 2
     assert model.current_path == str(paths["new_blue"])
     assert model.wavelength_names == [
-        WAVELENGTH_FILTER_ALL, "Blue (460 nm)", "Green (540 nm)"]
+        WAVELENGTH_FILTER_ALL,
+        "Blue (460 nm)",
+        "Green (540 nm)",
+    ]
 
 
 def test_selecting_older_burst_shows_its_first_image(monkeypatch, tmp_path):
@@ -274,7 +288,9 @@ def test_selecting_older_burst_shows_its_first_image(monkeypatch, tmp_path):
     model.selected_burst = "Mix_1.2_a"
     assert model.burst_index == 1
     assert [p.name for p in model.paths] == [
-        "Blue_460_nm_1_t1_raw.png", "Green_540_nm_2_t2_raw.png"]
+        "Blue_460_nm_1_t1_raw.png",
+        "Green_540_nm_2_t2_raw.png",
+    ]
     assert model.current_path == str(paths["old_blue"])
 
 
@@ -287,31 +303,28 @@ def test_burst_slider_drives_selection(monkeypatch, tmp_path):
     assert model.selected_burst == "Mix_1.2_a"
 
 
-def test_wavelength_filter_narrows_and_keeps_surviving_image(
-        monkeypatch, tmp_path):
+def test_wavelength_filter_narrows_and_keeps_surviving_image(monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
-    model.selected_burst = "Mix_1.2_a"   # shows old_blue
+    model.selected_burst = "Mix_1.2_a"  # shows old_blue
     model.selected_wavelength = "Blue (460 nm)"
     assert [p.name for p in model.paths] == ["Blue_460_nm_1_t1_raw.png"]
-    assert model.current_path == str(paths["old_blue"])   # survived
+    assert model.current_path == str(paths["old_blue"])  # survived
 
     model.selected_wavelength = "Green (540 nm)"
     assert [p.name for p in model.paths] == ["Green_540_nm_2_t2_raw.png"]
     assert model.current_path == str(paths["old_green"])  # fell to first
 
 
-def test_parked_user_stays_parked_when_new_burst_lands(
-        monkeypatch, tmp_path):
+def test_parked_user_stays_parked_when_new_burst_lands(monkeypatch, tmp_path):
     ctrl, model, paths = _viewer(monkeypatch, tmp_path)
     ctrl.rescan()
     model.selected_burst = "Mix_1.2_a"
     captures = paths["old_blue"].parent.parent.parent
-    _make_raw(captures / "Zap_4_c" / "16bit_raw",
-              "Red_630_nm_1_t4_raw.png", 3_000)
+    _make_raw(captures / "Zap_4_c" / "16bit_raw", "Red_630_nm_1_t4_raw.png", 3_000)
     ctrl.rescan()
-    assert model.selected_burst == "Mix_1.2_a"            # still parked
-    assert "Zap_4_c" in model.burst_names                 # but discovered
+    assert model.selected_burst == "Mix_1.2_a"  # still parked
+    assert "Zap_4_c" in model.burst_names  # but discovered
     assert "Red (630 nm)" in model.wavelength_names
 
 
@@ -340,13 +353,15 @@ def test_dock_pane_title_names_the_browsed_folder():
     from pathlib import Path
 
     from fluorescence_controls_ui.image_viewer.dock_pane import _title_for
+
     assert _title_for("") == "Image Viewer"
     # Default (experiment) captures dir: the experiment folder names it.
-    assert _title_for(str(Path("Experiments/2026_07_20-17_41_31/captures"))) \
+    assert (
+        _title_for(str(Path("Experiments/2026_07_20-17_41_31/captures")))
         == "Image Viewer\t\t-\t\t2026_07_20-17_41_31"
+    )
     # A user-picked folder shows its own name.
-    assert _title_for(str(Path("D:/some/album"))) \
-        == "Image Viewer\t\t-\t\talbum"
+    assert _title_for(str(Path("D:/some/album"))) == "Image Viewer\t\t-\t\talbum"
 
 
 def test_the_pane_puts_the_analysis_model_in_its_ui_context():
@@ -361,8 +376,7 @@ def test_the_pane_puts_the_analysis_model_in_its_ui_context():
         FluorescenceImageViewerDockPane,
     )
 
-    pane = FluorescenceImageViewerDockPane(
-        model=FluorescenceImageViewerModel())
+    pane = FluorescenceImageViewerDockPane(model=FluorescenceImageViewerModel())
     context = pane.trait_context()
     assert context["object"] is pane.model
     assert context["analysis"] is pane.model.roi_analysis

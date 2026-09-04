@@ -2,6 +2,7 @@
 the older shorter lists migrate onto it, and the polygons cv2 and Qt
 draw from it. Qt-free (numpy only) so the worker processes that compute
 statistics can import it."""
+
 import numpy as np
 
 from .consts import MIN_POLYGON_POINTS
@@ -45,7 +46,7 @@ def normalize(kind, geometry):
     if kind == "polygon":
         # A contour is a vertex list, so it has no fixed length to pad
         # to and no angle: rotating one rewrites its coordinates.
-        return kind, values[:len(values) - len(values) % 2]
+        return kind, values[: len(values) - len(values) % 2]
     if kind == "ellipse" and len(values) == 3:
         values = [values[0], values[1], values[2], values[2], 0.0]
     length = GEOMETRY_LENGTHS.get(kind, GEOMETRY_LENGTH)
@@ -53,8 +54,7 @@ def normalize(kind, geometry):
     if kind == "box":
         # Clamped here so no consumer has to defend against a radius
         # wider than the shape it rounds.
-        values[5] = min(max(values[5], 0.0),
-                        min(abs(values[2]), abs(values[3])) / 2.0)
+        values[5] = min(max(values[5], 0.0), min(abs(values[2]), abs(values[3])) / 2.0)
     return kind, values
 
 
@@ -63,8 +63,10 @@ def translated(kind, geometry, offset_x, offset_y):
     pair for a contour, the anchor point for everything else."""
     kind, values = normalize(kind, geometry)
     if kind == "polygon":
-        return [value + (offset_x if index % 2 == 0 else offset_y)
-                for index, value in enumerate(values)]
+        return [
+            value + (offset_x if index % 2 == 0 else offset_y)
+            for index, value in enumerate(values)
+        ]
     values[0] += offset_x
     values[1] += offset_y
     return values
@@ -94,10 +96,10 @@ def _rotated(points, centre, angle_degrees):
 def _corner_arc(centre_x, centre_y, radius, start_radians):
     """One quarter-circle corner, swept clockwise in image (y-down)
     coordinates from ``start_radians``."""
-    sweep = np.linspace(start_radians, start_radians + np.pi / 2.0,
-                        BOX_CORNER_SAMPLES)
-    return np.column_stack([centre_x + radius * np.cos(sweep),
-                            centre_y + radius * np.sin(sweep)])
+    sweep = np.linspace(start_radians, start_radians + np.pi / 2.0, BOX_CORNER_SAMPLES)
+    return np.column_stack(
+        [centre_x + radius * np.cos(sweep), centre_y + radius * np.sin(sweep)]
+    )
 
 
 def box_polygon(geometry):
@@ -107,17 +109,18 @@ def box_polygon(geometry):
     _, values = normalize("box", geometry)
     x, y, width, height, angle, corner_radius = values
     if corner_radius <= 0.0:
-        points = [(x, y), (x + width, y),
-                  (x + width, y + height), (x, y + height)]
+        points = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
     else:
         right, bottom = x + width, y + height
         inset = corner_radius
-        points = np.vstack([
-            _corner_arc(x + inset, y + inset, inset, np.pi),
-            _corner_arc(right - inset, y + inset, inset, -np.pi / 2.0),
-            _corner_arc(right - inset, bottom - inset, inset, 0.0),
-            _corner_arc(x + inset, bottom - inset, inset, np.pi / 2.0),
-        ])
+        points = np.vstack(
+            [
+                _corner_arc(x + inset, y + inset, inset, np.pi),
+                _corner_arc(right - inset, y + inset, inset, -np.pi / 2.0),
+                _corner_arc(right - inset, bottom - inset, inset, 0.0),
+                _corner_arc(x + inset, bottom - inset, inset, np.pi / 2.0),
+            ]
+        )
     return _rotated(points, centre_of("box", values), angle)
 
 
@@ -127,10 +130,12 @@ def capsule_polygon(geometry, samples=CAPSULE_CAP_SAMPLES):
     _, values = normalize("capsule", geometry)
     centre_x, centre_y, half_length, radius, angle = values
     sweep = np.linspace(-np.pi / 2.0, np.pi / 2.0, samples)
-    right = np.column_stack([half_length + radius * np.cos(sweep),
-                             radius * np.sin(sweep)])
-    left = np.column_stack([-half_length - radius * np.cos(sweep),
-                            -radius * np.sin(sweep)])
+    right = np.column_stack(
+        [half_length + radius * np.cos(sweep), radius * np.sin(sweep)]
+    )
+    left = np.column_stack(
+        [-half_length - radius * np.cos(sweep), -radius * np.sin(sweep)]
+    )
     points = np.vstack([right, left]) + (centre_x, centre_y)
     return _rotated(points, (centre_x, centre_y), angle)
 
