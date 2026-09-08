@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Off-GUI batch computation: a daemon orchestrator thread (the plugin's
 established off-GUI pattern) fans the images out to a lazily-created,
 persistent thread pool and streams results back through a thread-safe
@@ -14,18 +24,25 @@ The pool is created once (module-level, lock-guarded) and reused, so
 it is never shut down. One batch at a time:
 start() cancels any running one and swaps in a fresh queue, so a
 superseded batch's stragglers die with the old queue."""
+
+# Standard library imports.
 import os
 import queue
 import threading
 from concurrent.futures import (
-    BrokenExecutor, ThreadPoolExecutor, as_completed,
+    BrokenExecutor,
+    ThreadPoolExecutor,
+    as_completed,
 )
 
+# Enthought library imports.
 from traits.api import Any, HasTraits
 
-from logger.logger_service import get_logger
-
+# Local imports.
 from .roi_compute import compute_image_stats
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,8 +68,8 @@ def _shared_executor():
     with _executor_lock:
         if _executor is None:
             _executor = ThreadPoolExecutor(
-                max_workers=_pool_workers(),
-                thread_name_prefix="roi-stats")
+                max_workers=_pool_workers(), thread_name_prefix="roi-stats"
+            )
         return _executor
 
 
@@ -101,8 +118,8 @@ class RoiBatchRunner(HasTraits):
         self._cancel = threading.Event()
         cancel, results = self._cancel, self.results
         self._thread = threading.Thread(
-            target=self._run, args=(list(work_items), cancel, results),
-            daemon=True)
+            target=self._run, args=(list(work_items), cancel, results), daemon=True
+        )
         self._thread.start()
 
     def cancel(self):
@@ -114,9 +131,10 @@ class RoiBatchRunner(HasTraits):
         results = self.results
         thread = threading.Thread(
             target=lambda: results.put(
-                (INSTANT_RESULT, compute_image_stats(
-                    path, effective_rois, *correction))),
-            daemon=True)
+                (INSTANT_RESULT, compute_image_stats(path, effective_rois, *correction))
+            ),
+            daemon=True,
+        )
         thread.start()
 
     @staticmethod
@@ -124,9 +142,10 @@ class RoiBatchRunner(HasTraits):
         # No `with`: this is the shared, persistent executor — it must
         # outlive this batch for the next one to reuse it.
         executor = _shared_executor()
-        futures = [executor.submit(compute_image_stats, path, rois,
-                                   *correction)
-                   for path, rois, correction in work_items]
+        futures = [
+            executor.submit(compute_image_stats, path, rois, *correction)
+            for path, rois, correction in work_items
+        ]
         for future in as_completed(futures):
             if cancel.is_set():
                 for pending in futures:
@@ -135,8 +154,7 @@ class RoiBatchRunner(HasTraits):
             try:
                 results.put((BATCH_RESULT, future.result()))
             except BrokenExecutor as error:
-                logger.warning(f"ROI pool broke, rebuilding on next "
-                               f"batch: {error}")
+                logger.warning(f"ROI pool broke, rebuilding on next batch: {error}")
                 _discard_executor(executor)
             except Exception as error:
                 # Pool infrastructure failure (the work unit itself

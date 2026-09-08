@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the single-set camera exposure/gain controls.
 
 The controls pane is the ONLY editor (no device-viewer settings row): the
@@ -5,8 +15,11 @@ single param set's exposure/gain pair is mirrored into the shared
 asi_camera_settings, which a running ASI feed applies to the camera live.
 Reworked for the single param set (issue #6, no more br/fl mode split).
 """
+
+# Enthought library imports.
 from apptools.preferences.api import Preferences
 
+# Microdrop package imports.
 from fluorescence_controls_ui.cameras.camera_settings import asi_camera_settings
 from fluorescence_controls_ui.controller import FluorescenceControlsController
 from fluorescence_controls_ui.model import FluorescenceStatusModel
@@ -18,7 +31,8 @@ def _controller():
     # process-wide "microdrop.peripheral_settings" node, which would
     # otherwise leak exposure/gain edits across tests.
     model = FluorescenceStatusModel(
-        preferences=FluorescencePreferences(preferences=Preferences()))
+        preferences=FluorescencePreferences(preferences=Preferences())
+    )
     controller = FluorescenceControlsController(model=model)
     return controller, model
 
@@ -31,7 +45,7 @@ def test_defaults_match_standalone_config():
 
 def test_pane_edit_reaches_shared_settings_in_microseconds():
     controller, model = _controller()
-    model.exposure = 12                       # ms
+    model.exposure = 12  # ms
     assert asi_camera_settings.exposure == 12_000  # us at the camera
 
 
@@ -64,8 +78,7 @@ def test_running_feed_applies_pane_edits(monkeypatch):
         auto_values_signal = FakeSignal()
         error_signal = FakeSignal()
 
-        def __init__(self, sdk_dir, camera_id, exposure=None, gain=None,
-                     advanced=None):
+        def __init__(self, sdk_dir, camera_id, exposure=None, gain=None, advanced=None):
             pass
 
         def set_camera_settings(self, exposure=None, gain=None):
@@ -85,8 +98,8 @@ def test_running_feed_applies_pane_edits(monkeypatch):
 
     # The feed registers its own observers on construction...
     feed = provider.AsiCameraFeed("sdk", 0)
-    model.exposure = 15                       # ms
-    assert applied[-1][0] == 15_000              # us at the camera
+    model.exposure = 15  # ms
+    assert applied[-1][0] == 15_000  # us at the camera
 
     # ...and stop() unregisters them (and must not raise, or the camera
     # thread would never be stopped and the camera would stay locked).
@@ -98,4 +111,5 @@ def test_running_feed_applies_pane_edits(monkeypatch):
 
 def test_no_device_viewer_settings_row():
     from fluorescence_controls_ui.cameras.provider import AsiCameraFeed
+
     assert not hasattr(AsiCameraFeed, "create_controls")

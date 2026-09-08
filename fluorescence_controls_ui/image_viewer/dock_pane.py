@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Fluorescence image viewer dock pane (thin MVC shell).
 
 Displays 16-bit captures (the raw sensor frames the device viewer saves
@@ -11,22 +21,23 @@ in :class:`FluorescenceImageViewerController`, widgets in ``view.py``.
 This pane only assembles them, owns the Qt timers (the view-injected
 schedulers), and binds the persisted display-window preferences.
 """
+
+# Standard library imports.
 import threading
 from pathlib import Path
 
-from pyface.tasks.api import TraitsDockPane
+# Third-party imports.
 from PySide6.QtCore import QTimer
+
+# Enthought library imports.
+from pyface.tasks.api import TraitsDockPane
 from traits.api import Any, Instance, observe
 
-# Sanctioned cross-plugin channel: device_viewer.consts is the published
-# contract for locating and now NOTICING captures (same pattern as the
-# capture-layout constants imported by the controller).
+# Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME, media_capture_event_model
 
-from logger.logger_service import get_logger
-
-from ..consts import PKG
-from ..consts import DISCOVERY_POLL_INTERVAL_MS, SLIDESHOW_INTERVAL_MS
+# Local imports.
+from ..consts import DISCOVERY_POLL_INTERVAL_MS, PKG, SLIDESHOW_INTERVAL_MS
 from .analysis.ai_controller import AiRoiController
 from .analysis.consts import ANALYSIS_RESULT_DRAIN_INTERVAL_MS
 from .analysis.roi_batch import _shared_executor
@@ -34,6 +45,9 @@ from .analysis.roi_controller import RoiAnalysisController
 from .controller import FluorescenceImageViewerController
 from .model import FluorescenceImageViewerModel
 from .view import ImageViewerView
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,9 +65,11 @@ def _title_for(browsed_directory: str, info_text: str) -> str:
     title = _dock_pane_name
     if browsed_directory:
         folder = Path(browsed_directory)
-        display = (folder.parent.name
-                   if folder.name == CAPTURES_DIR_NAME and folder.parent.name
-                   else folder.name)
+        display = (
+            folder.parent.name
+            if folder.name == CAPTURES_DIR_NAME and folder.parent.name
+            else folder.name
+        )
         title += "\t-\t" + display
     if info_text:
         title += "\t-\t" + info_text
@@ -80,11 +96,11 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         self.model = FluorescenceImageViewerModel()
         self.controller = FluorescenceImageViewerController(model=self.model)
         self.analysis_controller = RoiAnalysisController(
-            viewer_model=self.model,
-            analysis_model=self.model.roi_analysis)
+            viewer_model=self.model, analysis_model=self.model.roi_analysis
+        )
         self.ai_controller = AiRoiController(
-            viewer_model=self.model,
-            analysis_model=self.model.roi_analysis)
+            viewer_model=self.model, analysis_model=self.model.roi_analysis
+        )
         # Warm the process pool off-thread so the first Calculate does
         # not pay the Windows spawn cost (~seconds for cv2 workers).
         threading.Thread(target=_shared_executor, daemon=True).start()
@@ -110,8 +126,9 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
         return context
 
     def destroy(self):
-        media_capture_event_model.observe(self._on_media_captured, "captured",
-                                          remove=True)
+        media_capture_event_model.observe(
+            self._on_media_captured, "captured", remove=True
+        )
         super().destroy()
 
     def _on_media_captured(self, event):
@@ -119,7 +136,8 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
 
     def create_contents(self, parent):
         self.ui = self.edit_traits(
-            kind="subpanel", parent=parent, handler=self.controller)
+            kind="subpanel", parent=parent, handler=self.controller
+        )
         control = self.ui.control
         # Qt schedulers are view-owned: the slideshow tick and the
         # experiment-folder-switch poll (new captures arrive event-driven
@@ -150,8 +168,7 @@ class FluorescenceImageViewerDockPane(TraitsDockPane):
 
     @observe("model:browsed_directory, model:info_text")
     def _update_title(self, event):
-        self.name = _title_for(self.model.browsed_directory,
-                               self.model.info_text)
+        self.name = _title_for(self.model.browsed_directory, self.model.info_text)
 
     @observe("model:playing")
     def _sync_slideshow_timer(self, event):

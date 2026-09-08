@@ -1,8 +1,24 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests for the ASI display helpers and enumeration guard."""
+
+# Third-party imports.
 import numpy as np
 
+# Microdrop package imports.
 from fluorescence_controls_ui.cameras.asi_thread import (
-    debayered_to_rgb, frame_to_qimage, raw_to_qimage, to_display_8bit,
+    debayered_to_rgb,
+    frame_to_qimage,
+    raw_to_qimage,
+    to_display_8bit,
 )
 from fluorescence_controls_ui.cameras.zwoasi import list_asi_cameras
 
@@ -14,7 +30,7 @@ def test_16bit_full_range_scales_by_256():
 
 
 def test_16bit_12bit_data_scales_by_16():
-    img = np.full((4, 4), 4000, dtype=np.uint16)   # within 12-bit range
+    img = np.full((4, 4), 4000, dtype=np.uint16)  # within 12-bit range
     out = to_display_8bit(img)
     assert out.dtype == np.uint8 and out[0, 0] == 4000 // 16
 
@@ -33,7 +49,7 @@ def test_frame_to_qimage_shapes():
 
 def test_debayered_to_rgb_swaps_color_channels():
     bgr = np.zeros((2, 2, 3), dtype=np.uint8)
-    bgr[:, :, 0] = 200                       # blue plane, as the debayer emits
+    bgr[:, :, 0] = 200  # blue plane, as the debayer emits
     assert debayered_to_rgb(bgr)[0, 0, 2] == 200
 
 
@@ -44,7 +60,7 @@ def test_debayered_to_rgb_mono_passthrough():
 
 def test_raw_to_qimage_color_order():
     raw = np.zeros((2, 2, 3), dtype=np.uint16)
-    raw[:, :, 0] = 65535                     # blue plane, as the debayer emits
+    raw[:, :, 0] = 65535  # blue plane, as the debayer emits
     color = raw_to_qimage(raw).pixelColor(0, 0)
     assert (color.red(), color.green(), color.blue()) == (0, 0, 255)
 

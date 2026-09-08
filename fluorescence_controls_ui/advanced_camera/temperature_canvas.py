@@ -1,17 +1,29 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Matplotlib canvas for the Temp tab: sensor temperature over time.
 
 Same construction as the heater plots pane: a QTimer samples the Qt-free
 model on its own cadence, the Line2D artist is created once and updated
 with set_data, and the timer pauses while the widget is hidden.
 """
+
+# Standard library imports.
 import os
 
 os.environ.setdefault("QT_API", "pyside6")
 import matplotlib
+
 matplotlib.use("QtAgg")
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-
 from PySide6.QtCore import QTimer
 
 #: Redraw cadence — matches the capture thread's temperature poll.
@@ -49,8 +61,9 @@ class TemperatureCanvas(FigureCanvasQTAgg):
         if len(history) == self._plotted_count:
             return
         self._plotted_count = len(history)
-        self._line.set_data([point[0] for point in history],
-                            [point[1] for point in history])
+        self._line.set_data(
+            [point[0] for point in history], [point[1] for point in history]
+        )
         self._axes.relim()
         self._axes.autoscale_view()
         self.draw_idle()

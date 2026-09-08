@@ -1,5 +1,8 @@
 # fluorescence-microdrop-plugin
 
+[![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
+[![Template](https://img.shields.io/badge/template-microdrop--plugin--template%40v0.1.1-blue)](https://github.com/Blue-Ocean-Technologies-Inc/microdrop-plugin-template)
+
 MicroDrop fluorescence peripheral plugin: serial board driver
 (`fluorescence_controller`, backend) and status/controls dock pane
 (`fluorescence_controls_ui`, frontend), mirroring the heater/magnet plugin

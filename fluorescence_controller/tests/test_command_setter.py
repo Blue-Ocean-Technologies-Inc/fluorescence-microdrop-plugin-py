@@ -1,9 +1,23 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Hardware-free tests: typed requests -> exact board command lines."""
+
+# Standard library imports.
 import json
 
+# Third-party imports.
 import pytest
 from pydantic import ValidationError
 
+# Microdrop package imports.
 from fluorescence_controller.datamodels import SetLedData, SetLedFrequencyData
 from fluorescence_controller.fluorescence_serial_proxy import FluorescenceSerialProxy
 from fluorescence_controller.services.fluorescence_command_setter_service import (
@@ -55,7 +69,7 @@ def test_payload_bounds_are_enforced():
     with pytest.raises(ValidationError):
         SetLedData(led=0, duty=101)
     with pytest.raises(ValidationError):
-        SetLedData(led=6, duty=50)          # only 6 LEDs (0-5)
+        SetLedData(led=6, duty=50)  # only 6 LEDs (0-5)
     with pytest.raises(ValidationError):
         SetLedFrequencyData(led=0, frequency=0)
 

@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """The capture-chain table's row type: a Qt-free `HasTraits` the
 `TableEditor` binds to directly, holding the same LED/camera params as the
 panel model plus the `run` tick.
@@ -6,15 +16,22 @@ Converts to/from Task 1's `ChainEntry` (`fluorescence_protocol_controls
 .capture_chain`), the value contract a chain is stored/loaded under —
 `exposure` here maps to `exposure_ms` there (the row keeps the panel's
 millisecond field name; the stored entry keeps its explicit unit)."""
+
+# Enthought library imports.
 from traits.api import Bool, Enum, HasTraits, Range, Str
 
+# Microdrop package imports.
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 
+# Local imports.
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .consts import (
-    EXPOSURE_MS_MAX, EXPOSURE_MS_MIN,
-    LED_DUTY_MAX, LED_DUTY_MIN,
-    LED_FREQUENCY_MAX, LED_FREQUENCY_MIN,
+    EXPOSURE_MS_MAX,
+    EXPOSURE_MS_MIN,
+    LED_DUTY_MAX,
+    LED_DUTY_MIN,
+    LED_FREQUENCY_MAX,
+    LED_FREQUENCY_MIN,
     LED_WAVELENGTHS,
 )
 

@@ -1,16 +1,38 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Microdrop package imports.
 from device_viewer.consts import PROTOCOL_RUNNING
-from microdrop_style.colors import ERROR_COLOR, SUCCESS_COLOR, GREY
+from fluorescence_controller.consts import (  # noqa: F401 (re-export)
+    ALL_LEDS_OFF,
+    ALL_LEDS_ON,
+    BOARD_ID,
+    DEVICE_NAME,
+    LED_DUTY_MAX,
+    LED_DUTY_MIN,
+    LED_FREQUENCY_MAX,
+    LED_FREQUENCY_MIN,
+    LED_WAVELENGTHS,
+    SEND_COMMAND,
+    SET_LED,
+    SET_LED_FREQUENCY,
+    START_DEVICE_MONITORING,
+    TELEMETRY,
+)
 from pluggable_protocol_tree.consts import PROTOCOL_TREE_ROW_SELECTED
 
-from fluorescence_controller.consts import (  # noqa: F401 (re-export)
-    DEVICE_NAME, START_DEVICE_MONITORING, SEND_COMMAND, TELEMETRY,
-    SET_LED, SET_LED_FREQUENCY, ALL_LEDS_OFF, ALL_LEDS_ON, BOARD_ID,
-    LED_WAVELENGTHS, LED_DUTY_MIN, LED_DUTY_MAX,
-    LED_FREQUENCY_MIN, LED_FREQUENCY_MAX,
-)
+# Microdrop style imports.
+from microdrop_style.colors import ERROR_COLOR, GREY, SUCCESS_COLOR
 
 # This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ").replace("Ui", "UI")
 listener_name = f"{PKG}_listener"
 
@@ -44,7 +66,16 @@ EXPOSURE_DEFAULT, GAIN_DEFAULT = 10, 0
 # Control-pane values persisted across sessions: model trait ->
 # FluorescencePreferences trait. light_on is deliberately absent — the
 # light always starts OFF regardless of how the last session ended.
-PERSISTED_CONTROL_TRAITS = ["wavelength", "intensity", "frequency", "gain", "exposure", "device_viewer_stream", "auto_exposure", "auto_gain"]
+PERSISTED_CONTROL_TRAITS = [
+    "wavelength",
+    "intensity",
+    "frequency",
+    "gain",
+    "exposure",
+    "device_viewer_stream",
+    "auto_exposure",
+    "auto_gain",
+]
 
 # Image-viewer display-window values persisted across sessions: model trait
 # -> FluorescencePreferences trait. window_max restores BEFORE window_min:
@@ -58,8 +89,10 @@ PERSISTED_VIEWER_TRAITS = {
 
 # ZWO ASI camera driver for Windows (from the standalone app's README): the
 # camera needs this driver installed before it shows up on Windows.
-ASI_DRIVER_URL = ("https://dl.zwoastro.com/software"
-                  "?app=AsiCameraDriver&platform=windows86&region=Overseas")
+ASI_DRIVER_URL = (
+    "https://dl.zwoastro.com/software"
+    "?app=AsiCameraDriver&platform=windows86&region=Overseas"
+)
 
 #: Filename patterns counted as viewable images when browsing a folder.
 IMAGE_PATTERNS = ("*.png", "*.tif", "*.tiff", "*.jpg", "*.jpeg", "*.bmp")

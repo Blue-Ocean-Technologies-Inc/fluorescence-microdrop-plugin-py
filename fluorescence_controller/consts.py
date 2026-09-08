@@ -1,12 +1,27 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
+# Microdrop package imports.
 from peripheral_device_controller_base.consts import (
-    connected_topic, disconnected_topic, searching_topic,
-    upload_firmware_topic, cancel_firmware_upload_topic,
-    firmware_upload_started_topic, firmware_upload_log_topic,
+    cancel_firmware_upload_topic,
+    connected_topic,
+    disconnected_topic,
     firmware_upload_finished_topic,
+    firmware_upload_log_topic,
+    firmware_upload_started_topic,
+    searching_topic,
+    upload_firmware_topic,
 )
 
 # This module's package.
-PKG = '.'.join(__name__.split('.')[:-1])
+PKG = ".".join(__name__.split(".")[:-1])
 PKG_name = PKG.title().replace("_", " ")
 
 DEVICE_NAME = "Fluorescence"
@@ -44,8 +59,12 @@ BOARD_ID = f"{DEVICE_NAME}/signals/board_id"
 # LED channels: combo/index order matches the firmware's PWM channel table
 # (blue..deep_red on consecutive pins), so a UI combo index IS the led index.
 LED_WAVELENGTHS = (
-    "Blue (460 nm)", "Cyan (490 nm)", "Green (540 nm)",
-    "Orange (600 nm)", "Red (630 nm)", "Deep Red (660 nm)",
+    "Blue (460 nm)",
+    "Cyan (490 nm)",
+    "Green (540 nm)",
+    "Orange (600 nm)",
+    "Red (630 nm)",
+    "Deep Red (660 nm)",
 )
 LED_DUTY_MIN, LED_DUTY_MAX = 0, 100
 LED_FREQUENCY_MIN, LED_FREQUENCY_MAX = 20, 100000
@@ -98,4 +117,5 @@ ACTOR_TOPIC_DICT = {
         f"{DEVICE_NAME}/requests/#",
         CONNECTED,
         DISCONNECTED,
-    ]}
+    ]
+}

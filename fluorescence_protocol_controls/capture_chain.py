@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """The capture-chain value contract: a step's (or the free-mode pane's)
 list of named LED/camera captures, stored on the row as a plain list of
 dicts and parsed back into typed `ChainEntry` objects.
@@ -7,18 +17,29 @@ an older chain shape (or hand-edited) must never crash a load. Entries
 that fail validation are skipped and logged; their valid siblings still
 load.
 """
+
+# Third-party imports.
 from pydantic import (
-    BaseModel, ConfigDict, Field, field_validator, model_validator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
 )
 
-from logger.logger_service import get_logger
-
+# Microdrop package imports.
 from fluorescence_controller.consts import (
-    LED_DUTY_MAX, LED_DUTY_MIN, LED_FREQUENCY_MAX, LED_FREQUENCY_MIN,
+    LED_DUTY_MAX,
+    LED_DUTY_MIN,
+    LED_FREQUENCY_MAX,
+    LED_FREQUENCY_MIN,
     LED_WAVELENGTHS,
 )
 from fluorescence_controls_ui.cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from fluorescence_controls_ui.consts import EXPOSURE_MS_MAX, EXPOSURE_MS_MIN
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -100,9 +121,7 @@ def sanitize_label(label: str) -> str:
     """A label reduced to a filename-safe form: alnum plus space/dash/
     underscore are kept, then spaces become underscores (the existing
     device_viewer scheme). An empty result falls back to `"capture"`."""
-    clean = "".join(
-        c for c in label if c.isalnum() or c in (" ", "-", "_")
-    ).strip()
+    clean = "".join(c for c in label if c.isalnum() or c in (" ", "-", "_")).strip()
     clean = clean.replace(" ", "_")
     return clean or "capture"
 
@@ -112,6 +131,7 @@ def chain_label(image_tag: str, wavelength: str, index: int) -> str:
     ``image_tag_wavelength_index``, with the optional tag omitted when
     empty. The index makes labels unique within a chain by construction,
     which is why there is no suffix-on-collision machinery."""
-    parts = ([image_tag, wavelength, str(index)] if image_tag
-             else [wavelength, str(index)])
+    parts = (
+        [image_tag, wavelength, str(index)] if image_tag else [wavelength, str(index)]
+    )
     return sanitize_label("_".join(parts))

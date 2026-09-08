@@ -1,9 +1,22 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Saved fit equations: the built-ins plus whatever the user has added,
 and the JSON they are kept in. App-wide rather than per-experiment — an
 equation that had to be re-typed for every experiment would not be a
 preset. Qt-free."""
+
+# Standard library imports.
 import json
 
+# Local imports.
 from .curve_fit import CUSTOM_METHOD, FIT_LABELS, FIT_METHODS, FIT_TEMPLATES
 from .fit_expression import FitExpressionError, parse_expression
 
@@ -34,8 +47,9 @@ def load_presets(text):
 
 def save_presets(presets):
     """The JSON for ``[(name, expression), ...]``."""
-    return json.dumps([{"name": name, "expression": expression}
-                       for name, expression in presets])
+    return json.dumps(
+        [{"name": name, "expression": expression} for name, expression in presets]
+    )
 
 
 def is_parsable(expression):
@@ -50,8 +64,7 @@ def add_preset(presets, name, expression):
     """``presets`` with ``name`` set to ``expression`` — replacing any
     preset of that name rather than admitting two, since the name is
     what the dropdown offers."""
-    kept = [(existing, text) for existing, text in presets
-            if existing != name]
+    kept = [(existing, text) for existing, text in presets if existing != name]
     return kept + [(name, expression)]
 
 
@@ -60,8 +73,7 @@ def method_keys(presets):
     equations. CUSTOM_METHOD is not among them — it is what the model
     holds while an equation is typed but unsaved, and it appears in the
     dropdown only when that is the case."""
-    return list(FIT_METHODS) + [PRESET_PREFIX + name
-                                for name, _ in presets]
+    return list(FIT_METHODS) + [PRESET_PREFIX + name for name, _ in presets]
 
 
 def choices_for(presets, current=""):
@@ -79,7 +91,7 @@ def choices_for(presets, current=""):
 def method_label(key, presets):
     """The dropdown text for one method key."""
     if key.startswith(PRESET_PREFIX):
-        return key[len(PRESET_PREFIX):]
+        return key[len(PRESET_PREFIX) :]
     return FIT_LABELS.get(key, key)
 
 
@@ -90,7 +102,7 @@ def expression_for(key, presets, custom_expression=""):
     if key == CUSTOM_METHOD:
         return custom_expression
     if key.startswith(PRESET_PREFIX):
-        wanted = key[len(PRESET_PREFIX):]
+        wanted = key[len(PRESET_PREFIX) :]
         for name, expression in presets:
             if name == wanted:
                 return expression
@@ -102,6 +114,7 @@ def method_for_expression(text, presets):
     """The method key that already fits ``text``, or '' when nothing
     does — which is what enables the add-to-presets button. Whitespace
     is ignored so a stray space is not a new equation."""
+
     def squashed(value):
         return "".join(value.split())
 
@@ -128,5 +141,4 @@ def fit_arguments(figure, presets):
     the one place that turns a stored method key into a solve, so every
     caller fits the same thing."""
     key = figure.fit_method
-    return (solving_method(key),
-            expression_for(key, presets, figure.custom_expression))
+    return (solving_method(key), expression_for(key, presets, figure.custom_expression))

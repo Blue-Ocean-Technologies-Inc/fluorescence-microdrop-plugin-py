@@ -6,10 +6,7 @@ packages = ["fluorescence_controller", "fluorescence_controls_ui", "fluorescence
 [[groups]]
 name = "fluorescence_ui"
 label = "Fluorescence UI (status/controls dock-pane + statusbar icon)"
-plugins = [
-    "fluorescence_controls_ui.plugin:FluorescenceControlsUiPlugin",
-    "fluorescence_protocol_controls.plugin:FluorescenceProtocolControlsPlugin",
-]
+plugins = ["fluorescence_controls_ui.plugin:FluorescenceControlsUiPlugin", "fluorescence_protocol_controls.plugin:FluorescenceProtocolControlsPlugin"]
 enabled_key = "plugin_group_enabled.fluorescence_ui"
 
 [[groups]]

@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Burst capture service: fires a capture chain's ticked entries against
 the shared fluorescence hardware and the active ASI feed, off the GUI
 thread. The controls pane's Run Capture button (`controller.run_capture`)
@@ -11,31 +21,41 @@ Two small synchronization primitives live here too:
   * `burst_folder`, the per-burst capture directory naming shared by both
     call sites.
 """
+
+# Standard library imports.
 import threading
 import time
 from pathlib import Path
 
+# Enthought library imports.
 from pyface.gui import GUI
 
-from logger.logger_service import get_logger
-from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
-
+# Microdrop package imports.
 from device_viewer.consts import CAPTURES_DIR_NAME, RAW_CAPTURES_SUBDIR
-from microdrop_application.helpers import get_current_experiment_directory
-
 from fluorescence_controller.consts import ALL_LEDS_OFF
-from .consts import CAPTURE_TIMESTAMP_FORMAT
 from fluorescence_controller.datamodels import (
     protocol_set_fluorescence_publisher,
 )
 from fluorescence_protocol_controls.capture_chain import sanitize_label, ticked
 from fluorescence_protocol_controls.consts import LED_STABILIZATION_S
+from microdrop_application.helpers import get_current_experiment_directory
 
+# Microdrop utils imports.
+from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
+
+# Local imports.
 from .cameras.asi_thread import (
-    debayered_to_rgb, frame_to_qimage, raw_to_qimage, to_display_8bit,
+    debayered_to_rgb,
+    frame_to_qimage,
+    raw_to_qimage,
+    to_display_8bit,
 )
 from .cameras.camera_settings import asi_camera_settings
 from .cameras.provider import current_feed
+from .consts import CAPTURE_TIMESTAMP_FORMAT
+
+# Logger import.
+from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
 
@@ -62,7 +82,8 @@ def wait_applied(timeout: float) -> bool:
     """Block (off the GUI thread) for the next applied ack."""
     return _APPLIED.wait(timeout)
 
-#TODO: check for existing utc time method.
+
+# TODO: check for existing utc time method.
 def utc_stamp() -> str:
     """UTC timestamp in the shared capture-filename format."""
     return time.strftime(CAPTURE_TIMESTAMP_FORMAT, time.gmtime())
@@ -79,8 +100,9 @@ def burst_folder(step_desc: str | None, dotted_id: str | None) -> Path:
     if dotted_id:
         parts.append(dotted_id)
     name = "_".join(parts) or "free_mode"
-    folder = (get_current_experiment_directory() / CAPTURES_DIR_NAME
-             / f"{name}_{utc_stamp()}")
+    folder = (
+        get_current_experiment_directory() / CAPTURES_DIR_NAME / f"{name}_{utc_stamp()}"
+    )
     (folder / RAW_CAPTURES_SUBDIR).mkdir(parents=True, exist_ok=True)
     return folder
 
@@ -94,10 +116,13 @@ def apply_camera_settings(entry) -> None:
     The entry's per-row auto modes ride along: with auto on, the capture
     thread's brightness loop owns exposure/gain during the settle window
     and the stored values are only the starting point."""
-    GUI.invoke_later(asi_camera_settings.trait_set,
-                     exposure=int(entry.exposure_ms * 1000), gain=entry.gain,
-                     auto_exposure=entry.auto_exposure,
-                     auto_gain=entry.auto_gain)
+    GUI.invoke_later(
+        asi_camera_settings.trait_set,
+        exposure=int(entry.exposure_ms * 1000),
+        gain=entry.gain,
+        auto_exposure=entry.auto_exposure,
+        auto_gain=entry.auto_gain,
+    )
 
 
 def save_entry_capture(entry, folder: Path) -> Path:
@@ -114,8 +139,7 @@ def save_entry_capture(entry, folder: Path) -> Path:
     seq = feed.frame_seq
     timeout = entry.exposure_ms / 1000.0 * 2 + 2.0
     if not feed.wait_for_frame_after(seq, timeout):
-        raise TimeoutError(
-            f"No new frame for {entry.label!r} within {timeout}s")
+        raise TimeoutError(f"No new frame for {entry.label!r} within {timeout}s")
     raw = feed._last_raw
     # Per-capture timestamp in every filename — the regular capture
     # pipeline's naming convention, so a file is traceable to its moment
@@ -126,13 +150,13 @@ def save_entry_capture(entry, folder: Path) -> Path:
     raw_to_qimage(raw).save(str(raw_path))
 
     display_path = folder / f"{label}.png"
-    frame_to_qimage(
-        debayered_to_rgb(to_display_8bit(raw))).save(str(display_path))
+    frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))).save(str(display_path))
     return display_path
 
 
-def run_burst(entries, *, step_desc=None, dotted_id=None,
-              applied_timeout: float = 5.0) -> Path:
+def run_burst(
+    entries, *, step_desc=None, dotted_id=None, applied_timeout: float = 5.0
+) -> Path:
     """Fire the chain's ticked entries in order: apply camera settings,
     publish the LED state, wait for the backend's applied ack, capture.
     ALL_LEDS_OFF always fires on the way out — even on error/timeout — so
@@ -143,11 +167,14 @@ def run_burst(entries, *, step_desc=None, dotted_id=None,
             apply_camera_settings(entry)
             arm_applied()
             protocol_set_fluorescence_publisher.publish(
-                light_on=True, led=entry.led_index, duty=entry.intensity,
-                frequency=entry.frequency, settle_s=LED_STABILIZATION_S)
+                light_on=True,
+                led=entry.led_index,
+                duty=entry.intensity,
+                frequency=entry.frequency,
+                settle_s=LED_STABILIZATION_S,
+            )
             if not wait_applied(applied_timeout):
-                raise TimeoutError(
-                    f"LED apply not acknowledged for {entry.label!r}")
+                raise TimeoutError(f"LED apply not acknowledged for {entry.label!r}")
             save_entry_capture(entry, folder)
     finally:
         publish_message(topic=ALL_LEDS_OFF, message="")

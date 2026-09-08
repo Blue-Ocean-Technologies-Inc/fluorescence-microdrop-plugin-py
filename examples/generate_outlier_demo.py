@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Generate a synthetic experiment for testing outlier removal and
 smoothing against known ground truth.
 
@@ -39,31 +49,38 @@ Run:
 Then in MicroDrop: Image Viewer pane -> folder button ->
 select ``<output>/outlier_demo/captures``.
 """
+
+# Standard library imports.
 import argparse
 import math
 import sys
 import time
 from pathlib import Path
 
+# Third-party imports.
 import cv2
 import numpy as np
 
+# Microdrop package imports.
 from device_viewer.consts import RAW_CAPTURES_SUBDIR
-
 from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
     fit_series,
 )
 from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
-    analysed_series, outlier_mask, smoothed_series,
+    analysed_series,
+    outlier_mask,
+    smoothed_series,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_compute import (
     compute_image_stats,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
-    AnalysisSession, Roi,
+    AnalysisSession,
+    Roi,
 )
 from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
-    save_roi_stats, save_session,
+    save_roi_stats,
+    save_session,
 )
 from fluorescence_controls_ui.image_viewer.discovery import (
     discover_captures,
@@ -71,7 +88,7 @@ from fluorescence_controls_ui.image_viewer.discovery import (
 
 FRAME_COUNT = 24
 FRAME_INTERVAL_S = 10.0
-IMAGE_SHAPE = (420, 640)          # (height, width)
+IMAGE_SHAPE = (420, 640)  # (height, width)
 
 BACKGROUND_LEVEL = 200.0
 NOISE_SIGMA = 8.0
@@ -94,18 +111,27 @@ OUTLIER_WINDOW = 5
 
 #: (name, (cx, cy, r), planted frame indices, what it is for)
 DEMO_ROIS = (
-    ("clean", (90.0, 110.0, 20.0), (),
-     "nothing planted: the false-positive check"),
-    ("spike_one", (250.0, 110.0, 20.0), (8,),
-     "one bad frame — the headline case"),
-    ("spike_spread", (410.0, 110.0, 20.0), (3, 12, 21),
-     "three, well separated: all found"),
-    ("spike_cluster", (570.0, 110.0, 20.0), (10, 11, 12),
-     "three inside one window: the documented limit"),
-    ("dropout", (170.0, 300.0, 20.0), (15,),
-     "a frame that fell to background, not rose"),
-    ("noisy", (410.0, 300.0, 20.0), (),
-     "no outliers, heavy noise: the smoothing case"),
+    ("clean", (90.0, 110.0, 20.0), (), "nothing planted: the false-positive check"),
+    ("spike_one", (250.0, 110.0, 20.0), (8,), "one bad frame — the headline case"),
+    (
+        "spike_spread",
+        (410.0, 110.0, 20.0),
+        (3, 12, 21),
+        "three, well separated: all found",
+    ),
+    (
+        "spike_cluster",
+        (570.0, 110.0, 20.0),
+        (10, 11, 12),
+        "three inside one window: the documented limit",
+    ),
+    (
+        "dropout",
+        (170.0, 300.0, 20.0),
+        (15,),
+        "a frame that fell to background, not rose",
+    ),
+    ("noisy", (410.0, 300.0, 20.0), (), "no outliers, heavy noise: the smoothing case"),
 )
 
 DROPOUT_NAMES = ("dropout",)
@@ -115,15 +141,15 @@ NOISY_NAMES = ("noisy",)
 def signal_at(elapsed):
     """The curve every ROI follows, above background."""
     return SIGMOID_LOW + (SIGMOID_HIGH - SIGMOID_LOW) / (
-        1.0 + math.exp(-SIGMOID_RATE * (elapsed - SIGMOID_MIDPOINT_S)))
+        1.0 + math.exp(-SIGMOID_RATE * (elapsed - SIGMOID_MIDPOINT_S))
+    )
 
 
 def _roi_level(name, planted, frame_index, rng):
     """What this ROI's disk reads on this frame, above background."""
     elapsed = frame_index * FRAME_INTERVAL_S
     if frame_index in planted:
-        return (DROPOUT_LEVEL if name in DROPOUT_NAMES
-                else SPIKE_LEVEL)
+        return DROPOUT_LEVEL if name in DROPOUT_NAMES else SPIKE_LEVEL
     level = signal_at(elapsed)
     if name in NOISY_NAMES:
         level += rng.normal(0.0, NOISY_SIGMA)
@@ -136,9 +162,8 @@ def _frame(frame_index, rng):
     y, x = np.mgrid[0:height, 0:width].astype(float)
     frame = np.full(IMAGE_SHAPE, BACKGROUND_LEVEL)
     for name, (cx, cy, radius), planted, _what in DEMO_ROIS:
-        inside = (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2
-        frame = frame + inside * _roi_level(name, planted, frame_index,
-                                            rng)
+        inside = (x - cx) ** 2 + (y - cy) ** 2 <= radius**2
+        frame = frame + inside * _roi_level(name, planted, frame_index, rng)
     frame = frame + rng.normal(0.0, NOISE_SIGMA, IMAGE_SHAPE)
     return np.clip(frame, 0, 65535).astype(np.uint16)
 
@@ -155,8 +180,8 @@ def _write_frames(captures_dir, start_time):
     paths = []
     for index in range(FRAME_COUNT):
         stamp = time.strftime(
-            "%Y_%m_%d-%H_%M_%S",
-            time.localtime(start_time + index * FRAME_INTERVAL_S))
+            "%Y_%m_%d-%H_%M_%S", time.localtime(start_time + index * FRAME_INTERVAL_S)
+        )
         path = raw_dir / f"green_540nm_{stamp}_raw.png"
         cv2.imwrite(str(path), _frame(index, rng))
         paths.append(path)
@@ -166,9 +191,9 @@ def _write_frames(captures_dir, start_time):
 def _session(experiment_dir):
     session = AnalysisSession(directory=str(experiment_dir))
     session.rois = [
-        Roi(name=name, kind="ellipse",
-            geometry=[cx, cy, radius, radius, 0.0])
-        for name, (cx, cy, radius), _planted, _what in DEMO_ROIS]
+        Roi(name=name, kind="ellipse", geometry=[cx, cy, radius, radius, 0.0])
+        for name, (cx, cy, radius), _planted, _what in DEMO_ROIS
+    ]
     session.plot_stat = "mean"
     session.figure.remove_outliers = True
     session.figure.outlier_threshold = OUTLIER_THRESHOLD
@@ -180,26 +205,26 @@ def _session(experiment_dir):
 
 def _stats(session, paths):
     store = {}
-    effective = {roi.roi_id: (roi.kind, tuple(roi.geometry))
-                 for roi in session.rois}
+    effective = {roi.roi_id: (roi.kind, tuple(roi.geometry)) for roi in session.rois}
     for path in paths:
-        result = compute_image_stats(str(path), effective,
-                                     session.ring.gap_px,
-                                     session.ring.thickness_px)
+        result = compute_image_stats(
+            str(path), effective, session.ring.gap_px, session.ring.thickness_px
+        )
         for roi in session.rois:
-            store[session.cache_key(str(path), roi)] = \
-                result["stats"][roi.roi_id]
+            store[session.cache_key(str(path), roi)] = result["stats"][roi.roi_id]
     return store
 
 
 def _series(session, paths):
     """{name: values} straight from the stats, before any cleaning."""
-    from fluorescence_controls_ui.image_viewer.analysis.plot_series \
-        import derive_series
+    from fluorescence_controls_ui.image_viewer.analysis.plot_series import derive_series
 
-    return {name: values for name, values in (
-        (entry[0], entry[2])
-        for entry in derive_series(session, paths).values())}
+    return {
+        name: values
+        for name, values in (
+            (entry[0], entry[2]) for entry in derive_series(session, paths).values()
+        )
+    }
 
 
 def _report(session, paths):
@@ -209,36 +234,41 @@ def _report(session, paths):
     print(f"\n{'ROI':15s} {'planted':>16s} {'found':>16s}   what it shows")
     ok = True
     for name, _geometry, planted, what in DEMO_ROIS:
-        found = tuple(index for index, flag in enumerate(
-            outlier_mask(raw[name], OUTLIER_THRESHOLD, OUTLIER_WINDOW))
-            if flag)
+        found = tuple(
+            index
+            for index, flag in enumerate(
+                outlier_mask(raw[name], OUTLIER_THRESHOLD, OUTLIER_WINDOW)
+            )
+            if flag
+        )
         print(f"{name:15s} {str(planted):>16s} {str(found):>16s}   {what}")
         if name == "clean" and found:
             print("  FAILED: the clean ROI must never be flagged")
             ok = False
-        if name in ("spike_one", "spike_spread", "dropout") \
-                and found != planted:
+        if name in ("spike_one", "spike_spread", "dropout") and found != planted:
             print(f"  FAILED: expected {planted}, found {found}")
             ok = False
 
-    print(f"\nfits of {'spike_one':15s} (true midpoint "
-          f"{SIGMOID_MIDPOINT_S:.0f} s, plateaus "
-          f"{BACKGROUND_LEVEL + SIGMOID_LOW:.0f} and "
-          f"{BACKGROUND_LEVEL + SIGMOID_HIGH:.0f}):")
+    print(
+        f"\nfits of {'spike_one':15s} (true midpoint "
+        f"{SIGMOID_MIDPOINT_S:.0f} s, plateaus "
+        f"{BACKGROUND_LEVEL + SIGMOID_LOW:.0f} and "
+        f"{BACKGROUND_LEVEL + SIGMOID_HIGH:.0f}):"
+    )
     fits = {}
     for remove in (False, True):
         session.figure.remove_outliers = remove
-        series, _flags = analysed_series(session, paths,
-                                         visible_only=False)
-        entry = next(value for value in series.values()
-                     if value[0] == "spike_one")
+        series, _flags = analysed_series(session, paths, visible_only=False)
+        entry = next(value for value in series.values() if value[0] == "spike_one")
         fit = fit_series(entry[1], entry[2], "sigmoid")
         fits[remove] = fit
-        print(f"  outliers {'on ' if remove else 'off'}: "
-              f"R²={fit.r_squared:.4f}  "
-              f"midpoint={fit.params['midpoint']:7.1f}  "
-              f"initial={fit.params['initial']:7.1f}  "
-              f"final={fit.params['final']:7.1f}")
+        print(
+            f"  outliers {'on ' if remove else 'off'}: "
+            f"R²={fit.r_squared:.4f}  "
+            f"midpoint={fit.params['midpoint']:7.1f}  "
+            f"initial={fit.params['initial']:7.1f}  "
+            f"final={fit.params['final']:7.1f}"
+        )
     if abs(fits[True].params["midpoint"] - SIGMOID_MIDPOINT_S) > 5.0:
         print("  FAILED: removal did not recover the midpoint")
         ok = False
@@ -249,25 +279,23 @@ def _report(session, paths):
     # Smoothing must change the picture, and the numbers show why it
     # must not change the fit.
     session.figure.remove_outliers = True
-    series, _flags = analysed_series(session, paths,
-                                     visible_only=False)
-    noisy = next(key for key, value in series.items()
-                 if value[0] == "noisy")
+    series, _flags = analysed_series(session, paths, visible_only=False)
+    noisy = next(key for key, value in series.items() if value[0] == "noisy")
     smoothed = smoothed_series(series, "savgol", 7, 2)
     raw_fit = fit_series(series[noisy][1], series[noisy][2], "sigmoid")
-    smooth_fit = fit_series(smoothed[noisy][1], smoothed[noisy][2],
-                            "sigmoid")
+    smooth_fit = fit_series(smoothed[noisy][1], smoothed[noisy][2], "sigmoid")
     # nan-aware: an outlier dropped from this curve leaves a gap.
     spread_raw = float(np.nanstd(np.diff(series[noisy][2])))
     spread_smooth = float(np.nanstd(np.diff(smoothed[noisy][2])))
     print("")
     print(f"smoothing the {'noisy':15s} curve (Savitzky-Golay 7/2):")
-    print(f"  point-to-point scatter {spread_raw:7.1f} -> "
-          f"{spread_smooth:7.1f}")
+    print(f"  point-to-point scatter {spread_raw:7.1f} -> {spread_smooth:7.1f}")
     print(f"  the app fits the RAW curve: R²={raw_fit.r_squared:.4f}")
-    print(f"  fitting the smoothed one would read "
-          f"R²={smooth_fit.r_squared:.4f} — the same data, flattered by "
-          f"a display setting")
+    print(
+        f"  fitting the smoothed one would read "
+        f"R²={smooth_fit.r_squared:.4f} — the same data, flattered by "
+        f"a display setting"
+    )
     if spread_smooth >= spread_raw:
         print("  FAILED: smoothing did not settle the curve")
         ok = False
@@ -276,15 +304,17 @@ def _report(session, paths):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output", nargs="?", default=".",
-                        help="where to create outlier_demo/")
+    parser.add_argument(
+        "output", nargs="?", default=".", help="where to create outlier_demo/"
+    )
     arguments = parser.parse_args()
     experiment_dir = Path(arguments.output).resolve() / "outlier_demo"
     captures_dir = experiment_dir / "captures"
-    paths = _write_frames(captures_dir,
-                          time.time() - FRAME_COUNT * FRAME_INTERVAL_S)
-    print(f"wrote {len(paths)} frames of {IMAGE_SHAPE[1]}x"
-          f"{IMAGE_SHAPE[0]} uint16 to {captures_dir}")
+    paths = _write_frames(captures_dir, time.time() - FRAME_COUNT * FRAME_INTERVAL_S)
+    print(
+        f"wrote {len(paths)} frames of {IMAGE_SHAPE[1]}x"
+        f"{IMAGE_SHAPE[0]} uint16 to {captures_dir}"
+    )
     session = _session(experiment_dir)
     discovered = [str(path) for path in discover_captures(captures_dir)]
     # On the session as well as on disk: the report below reads the

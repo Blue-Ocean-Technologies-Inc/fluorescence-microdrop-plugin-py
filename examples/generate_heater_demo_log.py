@@ -1,3 +1,13 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Generate a synthetic heater log covering an existing captures
 folder, for testing the temperature x-axis against known ground truth.
 
@@ -30,12 +40,15 @@ Run:
 (the sibling the plot pane looks in by default when the captures live
 in ``<experiment>/captures/<subdir>``).
 """
+
+# Standard library imports.
 import json
 import random
 import sys
 from datetime import datetime
 from pathlib import Path
 
+# Microdrop package imports.
 from fluorescence_controls_ui.image_viewer.discovery import (
     capture_timestamp,
 )
@@ -64,54 +77,65 @@ def temperature_profile(elapsed, span):
     hold, linear ramp, hold."""
     ramp_span = max(span - 2 * HOLD_SECONDS, 1.0)
     into_ramp = min(max(elapsed - HOLD_SECONDS, 0.0), ramp_span)
-    return (HOLD_START_C
-            + (HOLD_END_C - HOLD_START_C) * into_ramp / ramp_span)
+    return HOLD_START_C + (HOLD_END_C - HOLD_START_C) * into_ramp / ramp_span
 
 
 def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
     captures_dir = Path(sys.argv[1])
-    output_dir = (Path(sys.argv[2]) if len(sys.argv) > 2
-                  else captures_dir.parent.parent / "heater_logs")
+    output_dir = (
+        Path(sys.argv[2])
+        if len(sys.argv) > 2
+        else captures_dir.parent.parent / "heater_logs"
+    )
     times = sorted(
         stamp
         for pattern in IMAGE_PATTERNS
         for path in captures_dir.glob(pattern)
-        if (stamp := capture_timestamp(path)) > 0)
+        if (stamp := capture_timestamp(path)) > 0
+    )
     if not times:
         raise SystemExit(f"No stamped captures in {captures_dir}")
     start, end = times[0] - 30.0, times[-1] + 30.0
     span = end - start
-    random.seed(0)      # the same log every run, diffable
-    dead = [(span * fraction, span * fraction + seconds)
-            for fraction, seconds in GAPS]
+    random.seed(0)  # the same log every run, diffable
+    dead = [(span * fraction, span * fraction + seconds) for fraction, seconds in GAPS]
     lines = []
     second = 0
     while start + second <= end:
         if any(low <= second < high for low, high in dead):
             second += 1
-            continue        # the logger "stopped" here
+            continue  # the logger "stopped" here
         epoch = start + second + random.gauss(0.0, JITTER_S)
         truth = temperature_profile(second, span)
         thermistor1 = round(truth + random.gauss(0.0, NOISE_C), 2)
-        thermistor2 = round(thermistor1 - SENSOR_OFFSET_C
-                            + random.gauss(0.0, NOISE_C / 2), 2)
-        lines.append(json.dumps({
-            "timestamp": datetime.fromtimestamp(epoch).isoformat(),
-            "temperatures": {"thermistor2": thermistor2,
-                             "thermistor1": thermistor1},
-            "_frame": "TEMP",
-            "board_timestamp": round(float(second), 2),
-        }))
+        thermistor2 = round(
+            thermistor1 - SENSOR_OFFSET_C + random.gauss(0.0, NOISE_C / 2), 2
+        )
+        lines.append(
+            json.dumps(
+                {
+                    "timestamp": datetime.fromtimestamp(epoch).isoformat(),
+                    "temperatures": {
+                        "thermistor2": thermistor2,
+                        "thermistor1": thermistor1,
+                    },
+                    "_frame": "TEMP",
+                    "board_timestamp": round(float(second), 2),
+                }
+            )
+        )
         second += 1
     output_dir.mkdir(parents=True, exist_ok=True)
     name = datetime.fromtimestamp(start).strftime("%Y%m%d_%H%M%S")
     log_path = output_dir / f"{name}.jsonl"
     log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"{log_path}: {len(lines)} TEMP lines covering "
-          f"{span:.0f} s over {len(times)} captures "
-          f"({HOLD_START_C:g} -> {HOLD_END_C:g} degC)")
+    print(
+        f"{log_path}: {len(lines)} TEMP lines covering "
+        f"{span:.0f} s over {len(times)} captures "
+        f"({HOLD_START_C:g} -> {HOLD_END_C:g} degC)"
+    )
 
 
 if __name__ == "__main__":

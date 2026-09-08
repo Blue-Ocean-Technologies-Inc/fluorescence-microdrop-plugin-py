@@ -1,10 +1,26 @@
+# (C) Copyright 2024-2026 Blue Ocean Technologies, Inc., Toronto, ON
+# All rights reserved.
+#
+# This software is provided without warranty under the terms of the AGPL-3.0
+# license included in LICENSE and may be redistributed only under the
+# conditions described in the aforementioned license. The license is also
+# available online at https://www.gnu.org/licenses/agpl-3.0.txt
+#
+# Thanks for using Microdrop open source!
+
 """Unit tests for the Qt-free curve-fitting core."""
+
+# Standard library imports.
 import math
 
+# Third-party imports.
 import numpy as np
 
+# Microdrop package imports.
 from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
-    fastest_change_time, fit_series, second_derivative_extrema,
+    fastest_change_time,
+    fit_series,
+    second_derivative_extrema,
     trimmed_note,
 )
 
@@ -20,11 +36,11 @@ def test_linear_fit_recovers_slope_and_intercept():
 
 def test_quadratic_and_cubic_recover_coefficients():
     t = np.linspace(-5.0, 5.0, 30)
-    quadratic = fit_series(t, 2.0 * t ** 2 - 3.0 * t + 1.0, "poly2")
+    quadratic = fit_series(t, 2.0 * t**2 - 3.0 * t + 1.0, "poly2")
     assert abs(quadratic.params["c2"] - 2.0) < 1e-6
     assert abs(quadratic.params["c1"] + 3.0) < 1e-6
     assert abs(quadratic.params["c0"] - 1.0) < 1e-6
-    cubic = fit_series(t, 0.5 * t ** 3 + t, "poly3")
+    cubic = fit_series(t, 0.5 * t**3 + t, "poly3")
     assert abs(cubic.params["c3"] - 0.5) < 1e-6
     assert abs(cubic.params["c1"] - 1.0) < 1e-6
 
@@ -62,13 +78,13 @@ def test_flat_second_derivative_yields_no_extrema():
 
 def test_cubic_second_derivative_extrema_at_span_edges():
     t = np.linspace(-2.0, 2.0, 40)
-    fit = fit_series(t, t ** 3, "poly3")
+    fit = fit_series(t, t**3, "poly3")
     extrema = second_derivative_extrema(fit, -2.0, 2.0)
     t_max, y_max = extrema["max"]
     t_min, y_min = extrema["min"]
-    assert abs(t_max - 2.0) < 1e-6      # d2 = 6t: max at right edge
-    assert abs(t_min + 2.0) < 1e-6      # ...min at left edge
-    assert abs(y_max - 8.0) < 1e-3      # y on the fitted curve (t^3)
+    assert abs(t_max - 2.0) < 1e-6  # d2 = 6t: max at right edge
+    assert abs(t_min + 2.0) < 1e-6  # ...min at left edge
+    assert abs(y_max - 8.0) < 1e-3  # y on the fitted curve (t^3)
     assert abs(y_min + 8.0) < 1e-3
 
 
@@ -113,8 +129,7 @@ def test_first_derivative_linear_is_slope():
 
 def test_first_derivative_exponential():
     t = np.arange(0.0, 200.0, 10.0)
-    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0,
-                     "exponential")
+    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0, "exponential")
     # dy/dt at 0 is A*k = -150
     assert abs(float(fit.first_derivative(0.0)) + 150.0) < 5.0
 
@@ -164,8 +179,8 @@ def test_bleached_tail_biases_the_inflection_when_kept():
     t, y = _bleached_series()
     fit = fit_series(t, y, "sigmoid")
     assert fit.r_squared < 0.99
-    assert fit.params["midpoint"] < 90.0        # dragged early
-    assert fit.fitted_end == t[-1]              # nothing dropped
+    assert fit.params["midpoint"] < 90.0  # dragged early
+    assert fit.fitted_end == t[-1]  # nothing dropped
 
 
 def test_trim_tail_refits_on_the_leading_slice():
@@ -206,6 +221,5 @@ def test_trimmed_note_reports_the_domain_actually_fitted():
 
 def test_fastest_change_exponential_decay_at_start():
     t = np.arange(0.0, 200.0, 10.0)
-    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0,
-                     "exponential")
+    fit = fit_series(t, 3000.0 * np.exp(-0.05 * t) + 500.0, "exponential")
     assert abs(fastest_change_time(fit, 0.0, 190.0)) < 1.0
