@@ -1,3 +1,18 @@
+## [v3.0.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.0.0) (2026-09-29)
+
+### BREAKING CHANGE
+
+- requires a Microdrop release that includes the
+image_viewer plugin; the panes and their preferences now come from it. ([`d56e5a8`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/d56e5a8ba1c07083d40abf69649516e680c7e6c7))
+
+### Feat
+
+- contribute a Wavelength filter to the core image viewer ([`6f66e48`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/6f66e48414a192ba61c677c658800e596e8a016a))
+
+### Refactor
+
+- **BREAKING**: move the image viewer out to core Microdrop ([`d56e5a8`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/d56e5a8ba1c07083d40abf69649516e680c7e6c7))
+
 ## [v2.5.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v2.5.0) (2026-08-11)
 
 ### Feat
