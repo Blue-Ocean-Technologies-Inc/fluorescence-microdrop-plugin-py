@@ -9,7 +9,9 @@
 # Thanks for using Microdrop open source!
 
 """FluorescenceProtocolControlsPlugin — contributes the fluorescence
-per-step settings column to the pluggable protocol tree.
+per-step settings column to the pluggable protocol tree, and the
+Wavelength filter to the core image viewer (the capture chain names the
+files it classifies).
 
 Sibling plugin to fluorescence_controls_ui (column declarations are a UI
 concern; the board request handlers stay in fluorescence_controller).
@@ -21,6 +23,7 @@ from envisage.plugin import Plugin
 from traits.api import Instance, List
 
 # Microdrop package imports.
+from image_viewer.consts import IMAGE_FILTERS
 from pluggable_protocol_tree.consts import PROTOCOL_COLUMNS
 from pluggable_protocol_tree.interfaces.i_column import IColumn
 
@@ -43,5 +46,14 @@ class FluorescenceProtocolControlsPlugin(Plugin):
         contributes_to=PROTOCOL_COLUMNS,
     )
 
+    #: Filename filter for the core image viewer: LED wavelength, read
+    #: from the labels the capture chain derives.
+    image_filters = List(contributes_to=IMAGE_FILTERS)
+
     def _contributed_protocol_columns_default(self):
         return [make_fluorescence_chain_column()]
+
+    def _image_filters_default(self):
+        from .image_filters import WavelengthImageFilter
+
+        return [WavelengthImageFilter()]

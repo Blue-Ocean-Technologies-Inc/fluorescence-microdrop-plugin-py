@@ -42,10 +42,11 @@ section-order = [
 known-first-party = [
     "device_viewer", "dropbot_controller", "dropbot_preferences_ui",
     "dropbot_protocol_controls", "dropbot_status_and_controls",
-    "dropbot_tools_menu", "electrode_controller", "manual_controls",
-    "message_router", "microdrop_application", "microdrop_status_bar",
-    "peripheral_device_controller_base", "pluggable_protocol_tree",
-    "plugin_management", "template_status_and_controls",
+    "dropbot_tools_menu", "electrode_controller", "image_viewer",
+    "manual_controls", "message_router", "microdrop_application",
+    "microdrop_status_bar", "peripheral_device_controller_base",
+    "pluggable_protocol_tree", "plugin_management",
+    "template_status_and_controls",
 ]
 
 [lint.isort.sections]
