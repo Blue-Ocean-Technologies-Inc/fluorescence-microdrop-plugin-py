@@ -60,7 +60,7 @@ from traitsui.api import (
 )
 
 # Microdrop package imports.
-from fluorescence_controls_ui.image_viewer.analysis.consts import (
+from image_viewer.analysis.consts import (
     BUTTER_CUTOFF_BOUNDS,
     BUTTER_ORDER_BOUNDS,
     OUTLIER_THRESHOLD_BOUNDS_MAD,
@@ -70,11 +70,11 @@ from fluorescence_controls_ui.image_viewer.analysis.consts import (
     VIEW_MODE_LABELS,
     VIEW_MODES,
 )
-from fluorescence_controls_ui.image_viewer.analysis.plot_pane import (
+from image_viewer.analysis.plot_pane import (
     PLOT_STAT_LABELS,
     _fit_method_label,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
+from image_viewer.analysis.roi_model import (
     PLOT_STATS,
     RoiAnalysisModel,
 )

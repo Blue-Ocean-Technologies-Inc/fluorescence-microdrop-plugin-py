@@ -76,19 +76,12 @@ class FluorescenceControlsUiPlugin(BaseStatusPlugin):
         return FluorescenceStatusDockPane
 
     def _get_extra_dock_pane_classes(self) -> list:
-        # Extra dock panes: 16-bit-aware viewer for captured images, ROI
-        # intensity plot, and advanced ASI capture settings.
+        # Extra dock pane: advanced ASI capture settings. The Image Viewer
+        # and ROI Intensities panes now ship with the core image_viewer
+        # plugin.
         from .advanced_camera.dock_pane import AdvancedCameraDockPane
-        from .image_viewer.analysis.plot_pane import (
-            FluorescenceRoiPlotDockPane,
-        )
-        from .image_viewer.dock_pane import FluorescenceImageViewerDockPane
 
-        return [
-            FluorescenceImageViewerDockPane,
-            FluorescenceRoiPlotDockPane,
-            AdvancedCameraDockPane,
-        ]
+        return [AdvancedCameraDockPane]
 
     def _get_actor_topic_dict(self) -> dict:
         return ACTOR_TOPIC_DICT

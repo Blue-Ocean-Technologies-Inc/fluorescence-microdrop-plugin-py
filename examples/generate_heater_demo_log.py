@@ -49,7 +49,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Microdrop package imports.
-from fluorescence_controls_ui.image_viewer.discovery import (
+from image_viewer.discovery import (
     capture_timestamp,
 )
 

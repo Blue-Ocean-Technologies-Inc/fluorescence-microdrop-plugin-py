@@ -77,16 +77,6 @@ PERSISTED_CONTROL_TRAITS = [
     "auto_gain",
 ]
 
-# Image-viewer display-window values persisted across sessions: model trait
-# -> FluorescencePreferences trait. window_max restores BEFORE window_min:
-# window_min's upper bound rides window_max, so the reverse order could
-# reject a stored min above the not-yet-restored max.
-PERSISTED_VIEWER_TRAITS = {
-    "auto_contrast": "fluorescence_viewer_auto_contrast",
-    "window_max": "fluorescence_viewer_window_max",
-    "window_min": "fluorescence_viewer_window_min",
-}
-
 # ZWO ASI camera driver for Windows (from the standalone app's README): the
 # camera needs this driver installed before it shows up on Windows.
 ASI_DRIVER_URL = (
@@ -94,26 +84,7 @@ ASI_DRIVER_URL = (
     "?app=AsiCameraDriver&platform=windows86&region=Overseas"
 )
 
-#: Filename patterns counted as viewable images when browsing a folder.
-IMAGE_PATTERNS = ("*.png", "*.tif", "*.tiff", "*.jpg", "*.jpeg", "*.bmp")
-#: Rescan cadence for newly landed captures / experiment switches (ms).
-DISCOVERY_POLL_INTERVAL_MS = 2_000
-#: Auto-advance cadence while the slideshow is playing (ms).
-SLIDESHOW_INTERVAL_MS = 1_500
-
 #: strftime format of the UTC stamp embedded in capture filenames
-#: (capture_service.utc_stamp writes it; discovery.capture_timestamp
-#: parses it back).
+#: (capture_service.utc_stamp writes it; the core image_viewer plugin's
+#: discovery.capture_timestamp parses it back).
 CAPTURE_TIMESTAMP_FORMAT = "%Y_%m_%d-%H_%M_%S"
-
-
-#: Decoded frames kept in the viewer's navigation cache. Full 16-bit
-#: frames run ~20 MB decoded, so this bounds the cache near 160 MB while
-#: making back-and-forth seeking over recent frames instant.
-IMAGE_CACHE_FRAMES = 8
-
-#: One wheel notch's zoom on the image canvas: default factor going in
-#: (going out is its reciprocal) and the range the Advanced setting
-#: allows. 1.05 is barely perceptible per notch; 2.0 doubles per notch.
-IMAGE_ZOOM_STEP_DEFAULT = 1.25
-IMAGE_ZOOM_STEP_BOUNDS = (1.05, 2.0)

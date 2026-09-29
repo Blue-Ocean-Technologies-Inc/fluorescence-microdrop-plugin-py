@@ -63,26 +63,26 @@ import numpy as np
 
 # Microdrop package imports.
 from device_viewer.consts import RAW_CAPTURES_SUBDIR
-from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
+from image_viewer.analysis.curve_fit import (
     fit_series,
 )
-from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
+from image_viewer.analysis.plot_series import (
     analysed_series,
     outlier_mask,
     smoothed_series,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_compute import (
+from image_viewer.analysis.roi_compute import (
     compute_image_stats,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
+from image_viewer.analysis.roi_model import (
     AnalysisSession,
     Roi,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
+from image_viewer.analysis.roi_store import (
     save_roi_stats,
     save_session,
 )
-from fluorescence_controls_ui.image_viewer.discovery import (
+from image_viewer.discovery import (
     discover_captures,
 )
 
@@ -217,7 +217,7 @@ def _stats(session, paths):
 
 def _series(session, paths):
     """{name: values} straight from the stats, before any cleaning."""
-    from fluorescence_controls_ui.image_viewer.analysis.plot_series import derive_series
+    from image_viewer.analysis.plot_series import derive_series
 
     return {
         name: values
