@@ -64,18 +64,18 @@ import numpy as np
 
 # Microdrop package imports.
 from device_viewer.consts import RAW_CAPTURES_SUBDIR
-from fluorescence_controls_ui.image_viewer.analysis.roi_compute import (
+from image_viewer.analysis.roi_compute import (
     compute_image_stats,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
+from image_viewer.analysis.roi_model import (
     AnalysisSession,
     Roi,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
+from image_viewer.analysis.roi_store import (
     save_roi_stats,
     save_session,
 )
-from fluorescence_controls_ui.image_viewer.discovery import (
+from image_viewer.discovery import (
     discover_captures,
 )
 

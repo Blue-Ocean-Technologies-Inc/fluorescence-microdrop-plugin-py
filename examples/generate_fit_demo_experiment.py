@@ -67,29 +67,29 @@ import cv2
 import numpy as np
 
 # Microdrop package imports.
-from fluorescence_controls_ui.image_viewer.analysis.curve_fit import (
+from image_viewer.analysis.curve_fit import (
     fastest_change_time,
     fit_series,
     second_derivative_extrema,
     trimmed_note,
 )
-from fluorescence_controls_ui.image_viewer.analysis.plot_series import (
+from image_viewer.analysis.plot_series import (
     derive_series,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_compute import (
+from image_viewer.analysis.roi_compute import (
     compute_image_stats,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_model import (
+from image_viewer.analysis.roi_model import (
     AnalysisSession,
     Roi,
 )
-from fluorescence_controls_ui.image_viewer.analysis.roi_store import (
+from image_viewer.analysis.roi_store import (
     load_roi_stats,
     load_session,
     save_roi_stats,
     save_session,
 )
-from fluorescence_controls_ui.image_viewer.discovery import (
+from image_viewer.discovery import (
     discover_captures,
 )
 
