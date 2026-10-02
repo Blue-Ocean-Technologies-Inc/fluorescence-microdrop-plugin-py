@@ -42,6 +42,10 @@ from .consts import (
     LED_DUTY_MIN,
     LED_FREQUENCY_MAX,
     LED_FREQUENCY_MIN,
+    LED_PROPORTION_DEFAULT,
+    LED_PROPORTION_MAX,
+    LED_PROPORTION_MIN,
+    LED_PROPORTION_TRAITS,
     LED_WAVELENGTHS,
     PERSISTED_CONTROL_TRAITS,
     connected_color,
@@ -54,6 +58,15 @@ from .preferences import FluorescencePreferences
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def scaled_duty(intensity, proportion):
+    """Return the duty of a channel at ``proportion`` % of ``intensity`` %.
+
+    Rounds half up in integer arithmetic, so 0 in either argument is exactly
+    0 (the channel stays off) and no float error creeps into the duty.
+    """
+    return (intensity * proportion + 50) // 100
 
 
 class FluorescenceStatusModel(BaseStatusModel):
@@ -173,6 +186,15 @@ class FluorescenceStatusModel(BaseStatusModel):
     def led_index(self) -> int:
         return LED_WAVELENGTHS.index(self.wavelength)
 
+    def led_intensities(self):
+        """Return the Multi-Channel mix: led index -> duty at the current
+        intensity, every channel listed (0 = off) so a mix applied after a
+        single-channel set leaves nothing else glowing."""
+        return {
+            index: scaled_duty(self.intensity, getattr(self, name))
+            for index, name in enumerate(LED_PROPORTION_TRAITS)
+        }
+
     # ------------------------------------------------------------------ #
     # Capture-chain state                                                  #
     # ------------------------------------------------------------------ #
@@ -232,3 +254,19 @@ class FluorescenceStatusModel(BaseStatusModel):
                 f"values into model: {event}"
             )
             self.trait_set(**{event.name: event.new})
+
+
+# Multi-Channel proportions, one Range trait per LED channel (generated from
+# LED_PROPORTION_TRAITS so they follow the channel list); persisted through
+# PERSISTED_CONTROL_TRAITS like the other control values.
+for _index, _name in enumerate(LED_PROPORTION_TRAITS):
+    FluorescenceStatusModel.add_class_trait(
+        _name,
+        Range(
+            LED_PROPORTION_MIN,
+            LED_PROPORTION_MAX,
+            value=LED_PROPORTION_DEFAULT,
+            mode="slider",
+            desc=f"share of the intensity driving {LED_WAVELENGTHS[_index]} (%)",
+        ),
+    )
