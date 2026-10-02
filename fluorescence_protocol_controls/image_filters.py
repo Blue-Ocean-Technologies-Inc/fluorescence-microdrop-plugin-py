@@ -16,15 +16,19 @@ capture filenames."""
 from pathlib import Path
 
 # Microdrop package imports.
-from fluorescence_controller.consts import LED_WAVELENGTHS
+from fluorescence_controller.consts import LED_WAVELENGTHS, MULTI_CHANNEL
 
 # Local imports.
-from .capture_chain import sanitize_label
+from .capture_chain import MULTI_CHANNEL_TOKEN, sanitize_label
 
-#: sanitized-token -> display name for the six LED wavelengths; derived
-#: labels embed the sanitized form (e.g. "Green_540_nm"), which is how a
-#: file's wavelength is detected.
-WAVELENGTH_TOKENS = {sanitize_label(name): name for name in LED_WAVELENGTHS}
+#: sanitized-token -> display name for the six LED wavelengths, plus the
+#: Multi-Channel mix; derived labels embed the sanitized form (e.g.
+#: "Green_540_nm", "Multi_B100_G60_3"), which is how a file's wavelength is
+#: detected.
+WAVELENGTH_TOKENS = {
+    **{sanitize_label(name): name for name in LED_WAVELENGTHS},
+    f"{MULTI_CHANNEL_TOKEN}_": MULTI_CHANNEL,
+}
 
 
 class WavelengthImageFilter:

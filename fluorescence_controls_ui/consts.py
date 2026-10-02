@@ -20,6 +20,7 @@ from fluorescence_controller.consts import (  # noqa: F401 (re-export)
     LED_FREQUENCY_MAX,
     LED_FREQUENCY_MIN,
     LED_WAVELENGTHS,
+    MULTI_CHANNEL,
     SEND_COMMAND,
     SET_LED,
     SET_LED_FREQUENCY,
@@ -67,10 +68,8 @@ LED_PROPORTION_TRAITS = tuple(
 LED_PROPORTION_MIN, LED_PROPORTION_MAX = 0, 100
 LED_PROPORTION_DEFAULT = 0
 
-# Panel-only wavelength choice that drives the proportion mix above instead
-# of one LED. Never stored on a capture-chain row: rows (and the protocol
-# column) stay single-wavelength, so the row Enum keeps LED_WAVELENGTHS.
-MULTI_CHANNEL = "Multi-Channel"
+# The pane's and a chain row's wavelength choices: one LED, or the
+# MULTI_CHANNEL proportion mix above.
 WAVELENGTH_CHOICES = (*LED_WAVELENGTHS, MULTI_CHANNEL)
 
 # Camera defaults (the standalone config values, shown in ms — the camera

@@ -18,7 +18,7 @@ Converts to/from Task 1's `ChainEntry` (`fluorescence_protocol_controls
 millisecond field name; the stored entry keeps its explicit unit)."""
 
 # Enthought library imports.
-from traits.api import Bool, Enum, HasTraits, Range, Str
+from traits.api import Bool, Dict, Enum, HasTraits, Int, Range, Str
 
 # Microdrop package imports.
 from fluorescence_protocol_controls.capture_chain import ChainEntry
@@ -32,7 +32,8 @@ from .consts import (
     LED_DUTY_MIN,
     LED_FREQUENCY_MAX,
     LED_FREQUENCY_MIN,
-    LED_WAVELENGTHS,
+    MULTI_CHANNEL,
+    WAVELENGTH_CHOICES,
 )
 
 
@@ -41,7 +42,8 @@ class FluorescenceChainRow(HasTraits):
     free-mode stash): the LED/camera params to apply plus whether it runs."""
 
     label = Str()
-    wavelength = Enum(*LED_WAVELENGTHS)
+    #: One LED, or MULTI_CHANNEL to fire the `proportions` mix.
+    wavelength = Enum(*WAVELENGTH_CHOICES)
     intensity = Range(LED_DUTY_MIN, LED_DUTY_MAX, value=50)
     frequency = Range(LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=40000)
     exposure = Range(float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=10.0)
@@ -56,6 +58,9 @@ class FluorescenceChainRow(HasTraits):
     # Start/End toggles edit these via the live binding).
     capture_start = Bool(True)
     capture_end = Bool(False)
+    #: Multi-Channel shares (led index -> % of `intensity`); stored on the
+    #: entry only while `wavelength` is MULTI_CHANNEL.
+    proportions = Dict(Int, Int)
 
     def to_entry_dict(self) -> dict:
         """This row's params as a `ChainEntry`-shaped dict (`exposure` ->
@@ -73,6 +78,9 @@ class FluorescenceChainRow(HasTraits):
             "image_tag": self.image_tag,
             "capture_start": self.capture_start,
             "capture_end": self.capture_end,
+            "proportions": (
+                dict(self.proportions) if self.wavelength == MULTI_CHANNEL else None
+            ),
         }
 
     @classmethod
@@ -91,4 +99,5 @@ class FluorescenceChainRow(HasTraits):
             image_tag=entry.image_tag,
             capture_start=entry.capture_start,
             capture_end=entry.capture_end,
+            proportions=entry.proportions or {},
         )
