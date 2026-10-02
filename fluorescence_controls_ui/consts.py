@@ -58,6 +58,15 @@ halted_color = ERROR_COLOR
 # values — the single param set uses these regardless of wavelength).
 INTENSITY_DEFAULT, FREQUENCY_DEFAULT = 50, 40000
 
+# Multi-Channel mix: one proportion (% of the master intensity) per LED
+# channel, trait names in LED_WAVELENGTHS order. Default 0 keeps every
+# channel dark until the operator dials a mix in.
+LED_PROPORTION_TRAITS = tuple(
+    f"led_proportion_{index}" for index in range(len(LED_WAVELENGTHS))
+)
+LED_PROPORTION_MIN, LED_PROPORTION_MAX = 0, 100
+LED_PROPORTION_DEFAULT = 0
+
 # Camera defaults (the standalone config values, shown in ms — the camera
 # itself takes microseconds; the controller converts).
 EXPOSURE_MS_MIN, EXPOSURE_MS_MAX = 0.032, 60_000
@@ -82,6 +91,7 @@ PERSISTED_CONTROL_TRAITS = [
     "device_viewer_stream",
     "auto_exposure",
     "auto_gain",
+    *LED_PROPORTION_TRAITS,
 ]
 
 # ZWO ASI camera driver for Windows (from the standalone app's README): the
