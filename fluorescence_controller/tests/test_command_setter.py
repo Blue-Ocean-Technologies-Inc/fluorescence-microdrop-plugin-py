@@ -19,14 +19,18 @@ import pytest
 from pydantic import ValidationError
 
 # Microdrop package imports.
-from fluorescence_controller.consts import SET_LED_INTENSITIES
+from fluorescence_controller.consts import FLUORESCENCE_APPLIED, SET_LED_INTENSITIES
 from fluorescence_controller.datamodels import (
+    ProtocolSetFluorescenceData,
     SetLedData,
     SetLedFrequencyData,
     SetLedIntensitiesData,
     set_led_intensities_publisher,
 )
 from fluorescence_controller.fluorescence_serial_proxy import FluorescenceSerialProxy
+from fluorescence_controller.services import (
+    fluorescence_command_setter_service as setter_module,
+)
 from fluorescence_controller.services.fluorescence_command_setter_service import (
     FluorescenceCommandSetterService,
 )
@@ -139,3 +143,64 @@ def test_set_led_intensities_publisher_round_trips_to_the_handler(service, monke
 
     service.on_set_led_intensities_request(message)
     assert service.proxy.sent == ["led_1_0", "led_2_30"]
+
+
+# --- protocol step with a Multi-Channel mix (#31) ----------------------------
+
+
+@pytest.fixture
+def acks(monkeypatch):
+    sink = []
+    monkeypatch.setattr(
+        setter_module,
+        "publish_message",
+        lambda topic, message, **kw: sink.append((topic, message)),
+    )
+    monkeypatch.setattr(setter_module.time, "sleep", lambda seconds: None)
+    return sink
+
+
+def test_protocol_mix_sets_every_frequency_then_every_duty_then_acks(service, acks):
+    body = json.dumps(
+        {
+            "light_on": True,
+            "intensities": {"0": 80, "1": 0, "2": 48},
+            "frequency": 1000,
+            "settle_s": 0.2,
+        }
+    )
+    service.on_protocol_set_fluorescence_request(body)
+
+    assert service.proxy.sent == [
+        *[f"ledf_{led}_1000" for led in range(6)],
+        "led_0_80",
+        "led_1_0",
+        "led_2_48",
+    ]
+    assert acks == [(FLUORESCENCE_APPLIED, "1")]
+
+
+def test_protocol_single_led_is_unchanged(service, acks):
+    body = json.dumps(
+        {"light_on": True, "led": 2, "duty": 15, "frequency": 1000, "settle_s": 0}
+    )
+    service.on_protocol_set_fluorescence_request(body)
+
+    assert service.proxy.sent == ["ledf_2_1000", "led_off", "led_2_15"]
+    assert acks == [(FLUORESCENCE_APPLIED, "1")]
+
+
+def test_protocol_light_on_needs_an_led_or_a_mix():
+    with pytest.raises(ValidationError):
+        ProtocolSetFluorescenceData(light_on=True, frequency=1000, settle_s=0)
+
+    # Light off needs neither.
+    ProtocolSetFluorescenceData(light_on=False, frequency=1000, settle_s=0)
+
+
+@pytest.mark.parametrize("intensities", [{0: 101}, {6: 10}])
+def test_protocol_mix_bounds_are_enforced(intensities):
+    with pytest.raises(ValidationError):
+        ProtocolSetFluorescenceData(
+            light_on=True, intensities=intensities, frequency=1000, settle_s=0
+        )

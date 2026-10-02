@@ -24,7 +24,7 @@ import pytest
 from apptools.preferences.api import Preferences
 
 # Microdrop package imports.
-from fluorescence_controller.consts import LED_WAVELENGTHS
+from fluorescence_controller.consts import LED_WAVELENGTHS, MULTI_CHANNEL
 from fluorescence_controls_ui.chain_model import FluorescenceChainRow
 from fluorescence_controls_ui.consts import (
     LED_PROPORTION_TRAITS,
@@ -298,3 +298,34 @@ def test_camera_lead_time_round_trips_between_row_and_entry():
 
     back = FluorescenceChainRow.from_entry(ChainEntry(**d))
     assert back.camera_lead_time_ms == 2500
+
+
+# --- Multi-Channel rows (#31) -----------------------------------------------------
+
+#: Blue 100 %, Green 60 %, Red 25 %.
+MIX = {0: 100, 2: 60, 4: 25}
+
+
+def _mix_entry():
+    return ChainEntry(
+        label="mix",
+        wavelength=MULTI_CHANNEL,
+        intensity=80,
+        frequency=40000,
+        exposure_ms=10.0,
+        gain=0,
+        proportions=MIX,
+    )
+
+
+def test_mix_entry_round_trips_through_a_chain_row():
+    row = FluorescenceChainRow.from_entry(_mix_entry())
+
+    assert row.proportions == MIX
+    assert ChainEntry(**row.to_entry_dict()) == _mix_entry()
+
+
+def test_single_row_stores_no_proportions():
+    row = FluorescenceChainRow(wavelength=LED_WAVELENGTHS[0], proportions=MIX)
+
+    assert row.to_entry_dict()["proportions"] is None
