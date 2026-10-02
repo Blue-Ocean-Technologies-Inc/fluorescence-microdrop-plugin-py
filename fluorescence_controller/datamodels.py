@@ -12,7 +12,7 @@
 from typing import Annotated
 
 # Third-party imports.
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Microdrop package imports.
 from peripheral_device_controller_base.firmware_upload_datamodels import (
@@ -90,13 +90,25 @@ class SetLedIntensitiesData(BaseModel):
 
 class ProtocolSetFluorescenceData(_LedCommand):
     """One protocol step's LED state, applied atomically then settled then
-    acked. ``led``/``duty``/``frequency`` are ignored when ``light_on`` is
-    False (the step turns the light off)."""
+    acked. The light is one LED (``led`` at ``duty``) or a Multi-Channel
+    mix (``intensities``: led index -> duty, every channel listed);
+    ``frequency`` applies to whichever LEDs are lit. All of it is ignored
+    when ``light_on`` is False (the step turns the light off)."""
 
     light_on: bool
-    duty: int = Field(ge=0, le=LED_DUTY_MAX)
+    led: LedIndex | None = None
+    duty: LedDuty | None = None
+    intensities: dict[LedIndex, LedDuty] | None = None
     frequency: int = Field(ge=LED_FREQUENCY_MIN, le=LED_FREQUENCY_MAX)
     settle_s: float = Field(ge=0.0, le=60.0)
+
+    @model_validator(mode="after")
+    def _one_light_source(self):
+        single = self.led is not None and self.duty is not None
+        if self.light_on and not (single or self.intensities):
+            raise ValueError("light_on needs led + duty, or intensities")
+
+        return self
 
 
 # Firmware-upload payload + publisher are shared (peripheral base); this
@@ -115,12 +127,23 @@ class ProtocolSetFluorescencePublisher(ValidatedTopicPublisher):
 
     validator_class = ProtocolSetFluorescenceData
 
-    def publish(self, *, light_on, led, duty, frequency, settle_s, **kw):
+    def publish(
+        self,
+        *,
+        light_on,
+        frequency,
+        settle_s,
+        led=None,
+        duty=None,
+        intensities=None,
+        **kw,
+    ):
         super().publish(
             {
                 "light_on": light_on,
                 "led": led,
                 "duty": duty,
+                "intensities": intensities,
                 "frequency": frequency,
                 "settle_s": settle_s,
             },

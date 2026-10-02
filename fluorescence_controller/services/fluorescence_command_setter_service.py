@@ -19,7 +19,7 @@ from traits.api import HasTraits, Instance, provides
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 
 # Local imports.
-from ..consts import FLUORESCENCE_APPLIED
+from ..consts import FLUORESCENCE_APPLIED, LED_WAVELENGTHS
 from ..datamodels import (
     ProtocolSetFluorescenceData,
     SetLedData,
@@ -90,7 +90,9 @@ class FluorescenceCommandSetterService(HasTraits):
     def on_protocol_set_fluorescence_request(self, body):
         """Protocol step apply: frequency + exclusive off->on LED set (or
         all off) in ONE handler call, then the requested settle, then the
-        FLUORESCENCE_APPLIED ack — the protocol's wait_for unblocks only
+        FLUORESCENCE_APPLIED ack. A Multi-Channel mix sets every channel's
+        frequency, then every channel's duty (the mix lists them all, so
+        no off is needed first). The protocol's wait_for unblocks only
         once the light is stable enough to capture. On any failure the ack
         is withheld so the protocol's wait times out and the step fails
         (the magnet backend's error contract)."""
@@ -99,7 +101,9 @@ class FluorescenceCommandSetterService(HasTraits):
             # Lock keeps the sequence contiguous on the wire; the settle
             # sleeps OUTSIDE it so the port isn't held for the wait.
             with self.proxy.transaction_lock:
-                if data.light_on:
+                if data.light_on and data.intensities:
+                    self._send_mix(data.intensities, data.frequency)
+                elif data.light_on:
                     self.proxy.send_command(f"ledf_{data.led}_{data.frequency}")
                     self.proxy.send_command("led_off")
                     self.proxy.send_command(f"led_{data.led}_{data.duty}")
@@ -110,3 +114,12 @@ class FluorescenceCommandSetterService(HasTraits):
             logger.exception("protocol_set_fluorescence failed; ack withheld")
             return
         publish_message(topic=FLUORESCENCE_APPLIED, message=str(int(data.light_on)))
+
+    def _send_mix(self, intensities, frequency):
+        """Every channel's PWM frequency, then each listed channel's duty
+        (callers hold the transaction lock)."""
+        for led in range(len(LED_WAVELENGTHS)):
+            self.proxy.send_command(f"ledf_{led}_{frequency}")
+
+        for led, duty in sorted(intensities.items()):
+            self.proxy.send_command(f"led_{led}_{duty}")
