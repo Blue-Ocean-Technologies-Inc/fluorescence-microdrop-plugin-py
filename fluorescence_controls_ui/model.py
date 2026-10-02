@@ -24,6 +24,7 @@ from traits.api import (
 from traits.observation.api import parse
 
 # Microdrop package imports.
+from fluorescence_controller.datamodels import scaled_duty
 from template_status_and_controls.base_model import BaseStatusModel
 
 # Microdrop utils imports.
@@ -64,15 +65,6 @@ from .preferences import FluorescencePreferences
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
-
-
-def scaled_duty(intensity, proportion):
-    """Return the duty of a channel at ``proportion`` % of ``intensity`` %.
-
-    Rounds half up in integer arithmetic, so 0 in either argument is exactly
-    0 (the channel stays off) and no float error creeps into the duty.
-    """
-    return (intensity * proportion + 50) // 100
 
 
 class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
@@ -215,7 +207,14 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
         intensity, every channel listed (0 = off) so a mix applied after a
         single-channel set leaves nothing else glowing."""
         return {
-            index: scaled_duty(self.intensity, getattr(self, name))
+            index: scaled_duty(self.intensity, proportion)
+            for index, proportion in self.led_proportions().items()
+        }
+
+    def led_proportions(self):
+        """Return the Multi-Channel shares: led index -> proportion (%)."""
+        return {
+            index: getattr(self, name)
             for index, name in enumerate(LED_PROPORTION_TRAITS)
         }
 
