@@ -38,6 +38,17 @@ from .consts import (
 LedIndex = Annotated[int, Field(ge=0, le=len(LED_WAVELENGTHS) - 1)]
 #: An LED duty percentage.
 LedDuty = Annotated[int, Field(ge=LED_DUTY_MIN, le=LED_DUTY_MAX)]
+#: A channel's share of the intensity in a Multi-Channel mix (%).
+LedProportion = Annotated[int, Field(ge=0, le=100)]
+
+
+def scaled_duty(intensity, proportion):
+    """Return the duty of a channel at ``proportion`` % of ``intensity`` %.
+
+    Rounds half up in integer arithmetic, so 0 in either argument is exactly
+    0 (the channel stays off) and no float error creeps into the duty.
+    """
+    return (intensity * proportion + 50) // 100
 
 
 class _LedCommand(BaseModel):
