@@ -22,6 +22,9 @@ from microdrop_utils.traitsui_qt_helpers import (
     ObjectColumn,
 )
 
+# Local imports.
+from .consts import LED_PROPORTION_TRAITS, LED_WAVELENGTHS
+
 # Every section is collapsible: an arrow glyph acts as the section header and
 # the bordered group below it is shown only while its `show_*` trait is
 # ticked (same structure as the heater controls pane).
@@ -61,6 +64,25 @@ control_group = VGroup(
     show_border=True,
 )
 
+# Multi-Channel mix: one share per LED channel, shown only while the
+# wavelength choice is Multi-Channel. Same Range widgets as the intensity
+# knob, which stays the single brightness control for the whole mix.
+MULTI_CHANNEL_TOOLTIP = (
+    "Share of the Intensity this LED runs at: duty = Intensity x share / 100, "
+    "rounded; 0 keeps it off. The board has no total-output limit, so the "
+    "mix is applied as set."
+)
+
+multi_channel_group = VGroup(
+    *[
+        Item(name, label=f"{wavelength} (%)", tooltip=MULTI_CHANNEL_TOOLTIP)
+        for name, wavelength in zip(LED_PROPORTION_TRAITS, LED_WAVELENGTHS)
+    ],
+    label="Multi-Channel Mix",
+    visible_when="multi_channel",
+    show_border=True,
+)
+
 # Single LED/camera param set (issue #6): replaces the old brightfield_group
 # / fluorescence_group per-mode split. Doubles as the editor for whichever
 # capture-chain row is selected (see the controller's panel<->row binding).
@@ -75,8 +97,14 @@ params_group = VGroup(
         tooltip="Optional tag prefixed to the derived capture label "
         "(tag_wavelength_index); leave empty for none",
     ),
-    Item("wavelength", label="Wavelength"),
+    Item(
+        "wavelength",
+        label="Wavelength",
+        tooltip="One LED, or Multi-Channel to light several at once "
+        "(live lighting only — captures stay single-wavelength)",
+    ),
     Item("intensity", label="Intensity (%)"),
+    multi_channel_group,
     Item("frequency", label="Frequency (Hz)"),
     HGroup(
         Item("exposure", label="Exposure (ms)", enabled_when="not auto_exposure"),
@@ -169,8 +197,11 @@ chain_group = VGroup(
             UItem(
                 "add_capture_button",
                 editor=IconButtonEditor(
-                    glyph="add", tooltip="Add a capture from the panel's params"
+                    glyph="add",
+                    tooltip="Add a capture from the panel's params (unavailable "
+                    "in Multi-Channel: captures are single-wavelength)",
                 ),
+                enabled_when="not multi_channel",
             ),
             UItem(
                 "delete_capture_button",
@@ -202,9 +233,11 @@ chain_group = VGroup(
                 "capture_selected_button",
                 editor=IconButtonEditor(
                     glyph="photo_camera",
-                    tooltip="Capture the selected row now (ticked or not)",
+                    tooltip="Capture the selected row now, ticked or not "
+                    "(unavailable in Multi-Channel: captures are "
+                    "single-wavelength)",
                 ),
-                enabled_when="connected and not protocol_running",
+                enabled_when="connected and not protocol_running and not multi_channel",
             ),
             UItem(
                 "run_capture_button",
