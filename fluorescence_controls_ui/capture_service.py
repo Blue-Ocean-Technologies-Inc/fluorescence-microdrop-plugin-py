@@ -168,10 +168,9 @@ def run_burst(
             arm_applied()
             protocol_set_fluorescence_publisher.publish(
                 light_on=True,
-                led=entry.led_index,
-                duty=entry.intensity,
                 frequency=entry.frequency,
                 settle_s=LED_STABILIZATION_S,
+                **entry.led_request(),
             )
             if not wait_applied(applied_timeout):
                 raise TimeoutError(f"LED apply not acknowledged for {entry.label!r}")

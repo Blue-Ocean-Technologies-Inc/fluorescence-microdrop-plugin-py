@@ -124,8 +124,7 @@ class FluorescenceStatusModel(BaseStatusModel):
     #: One LED, or MULTI_CHANNEL to drive the per-channel proportion mix.
     wavelength = Enum(*WAVELENGTH_CHOICES)
 
-    #: True while the panel drives the Multi-Channel mix (a live-lighting
-    #: mode only — it never reaches a capture-chain row).
+    #: True while the panel drives (and edits rows as) the Multi-Channel mix.
     multi_channel = Property(Bool, observe="wavelength")
     intensity = Range(
         LED_DUTY_MIN,
