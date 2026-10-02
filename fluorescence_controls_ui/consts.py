@@ -67,6 +67,12 @@ LED_PROPORTION_TRAITS = tuple(
 LED_PROPORTION_MIN, LED_PROPORTION_MAX = 0, 100
 LED_PROPORTION_DEFAULT = 0
 
+# Panel-only wavelength choice that drives the proportion mix above instead
+# of one LED. Never stored on a capture-chain row: rows (and the protocol
+# column) stay single-wavelength, so the row Enum keeps LED_WAVELENGTHS.
+MULTI_CHANNEL = "Multi-Channel"
+WAVELENGTH_CHOICES = (*LED_WAVELENGTHS, MULTI_CHANNEL)
+
 # Camera defaults (the standalone config values, shown in ms — the camera
 # itself takes microseconds; the controller converts).
 EXPOSURE_MS_MIN, EXPOSURE_MS_MAX = 0.032, 60_000

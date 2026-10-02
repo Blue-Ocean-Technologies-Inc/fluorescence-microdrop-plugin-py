@@ -16,6 +16,7 @@ from traits.api import (
     Event,
     Instance,
     List,
+    Property,
     Range,
     Str,
     observe,
@@ -50,7 +51,9 @@ from .consts import (
     LED_PROPORTION_MIN,
     LED_PROPORTION_TRAITS,
     LED_WAVELENGTHS,
+    MULTI_CHANNEL,
     PERSISTED_CONTROL_TRAITS,
+    WAVELENGTH_CHOICES,
     connected_color,
     disconnected_color,
     halted_color,
@@ -127,7 +130,12 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
     # Chain-row labels are DERIVED (image_tag_wavelength_index, read-only
     # in the table); the panel edits only this optional tag.
     image_tag = Str("")
-    wavelength = Enum(*LED_WAVELENGTHS)
+    #: One LED, or MULTI_CHANNEL to drive the per-channel proportion mix.
+    wavelength = Enum(*WAVELENGTH_CHOICES)
+
+    #: True while the panel drives the Multi-Channel mix (a live-lighting
+    #: mode only — it never reaches a capture-chain row).
+    multi_channel = Property(Bool, observe="wavelength")
     intensity = Range(
         LED_DUTY_MIN,
         LED_DUTY_MAX,
@@ -191,6 +199,9 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
     show_status = Bool(True, desc="Expand the Status section")
     show_control = Bool(True, desc="Expand the Control section")
     show_params = Bool(True, desc="Expand the LED/camera params section")
+
+    def _get_multi_channel(self):
+        return self.wavelength == MULTI_CHANNEL
 
     @property
     def led_index(self) -> int:
