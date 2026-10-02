@@ -23,6 +23,7 @@ are recorded fakes.
 # Standard library imports.
 import json
 import sys
+import threading
 
 # Third-party imports.
 import pytest
@@ -32,9 +33,19 @@ import fluorescence_controls_ui
 from fluorescence_controller.consts import (
     ALL_LEDS_OFF,
     FLUORESCENCE_APPLIED,
+    LED_WAVELENGTHS,
+    MULTI_CHANNEL,
+    PROTOCOL_SET_FLUORESCENCE,
     PROTOCOL_STEP_FLUORESCENCE,
 )
-from fluorescence_protocol_controls.capture_chain import ChainEntry
+from fluorescence_controller.fluorescence_serial_proxy import FluorescenceSerialProxy
+from fluorescence_controller.services import (
+    fluorescence_command_setter_service as setter_module,
+)
+from fluorescence_controller.services.fluorescence_command_setter_service import (
+    FluorescenceCommandSetterService,
+)
+from fluorescence_protocol_controls.capture_chain import ChainEntry, dump_chain
 from fluorescence_protocol_controls.consts import LED_STABILIZATION_S
 from fluorescence_protocol_controls.protocol_columns import (
     chain_column as column_module,
@@ -473,3 +484,76 @@ def test_burst_light_off_fires_even_when_a_capture_raises(
         FluorescenceChainHandler().on_pre_step(row, _Ctx())
 
     assert ALL_LEDS_OFF in [topic for topic, _msg in published]
+
+
+# --- Multi-Channel row -> stub board (#31) ----------------------------------
+
+
+class StubProxy(FluorescenceSerialProxy):
+    """Records command lines; skips the serial-port constructor."""
+
+    def __init__(self):
+        self.sent = []
+        self.transaction_lock = threading.RLock()
+
+    def send_command(self, command):
+        self.sent.append(command)
+
+
+class _AckCtx:
+    """Fake StepContext: `wait_for` checks the backend's ack already went
+    out (the stub routes publishes synchronously)."""
+
+    def __init__(self, acks):
+        self.protocol = type("Protocol", (), {"preview_mode": False})()
+        self._acks = acks
+
+    def wait_for(self, topic, timeout):
+        assert topic == FLUORESCENCE_APPLIED
+        assert self._acks.pop(0) == "1"
+
+
+def test_mix_row_drives_every_channel_then_acks(
+    monkeypatch, row_type, fake_capture_service
+):
+    service = FluorescenceCommandSetterService(proxy=StubProxy())
+    acks = []
+
+    def route(message, topic, **kw):
+        """The message router, collapsed: requests reach the backend."""
+        if topic == PROTOCOL_SET_FLUORESCENCE:
+            service.on_protocol_set_fluorescence_request(message)
+
+    monkeypatch.setattr(dramatiq_pub_sub_helpers, "publish_message", route)
+    monkeypatch.setattr(column_module, "publish_message", route)
+    monkeypatch.setattr(
+        setter_module,
+        "publish_message",
+        lambda topic, message, **kw: acks.append(message),
+    )
+    monkeypatch.setattr(setter_module.time, "sleep", lambda seconds: None)
+
+    Row, col = row_type
+    row = Row()
+    row.name = "Mix step"
+    mix = _entry(
+        "mix",
+        wavelength=MULTI_CHANNEL,
+        intensity=80,
+        proportions={0: 100, 2: 60, 4: 25},
+    )
+    col.model.set_value(row, dump_chain([mix]))
+
+    FluorescenceChainHandler().on_pre_step(row, _AckCtx(acks))
+
+    channels = range(len(LED_WAVELENGTHS))
+    assert service.proxy.sent == [
+        *[f"ledf_{led}_40000" for led in channels],
+        "led_0_80",
+        "led_1_0",
+        "led_2_48",
+        "led_3_0",
+        "led_4_20",
+        "led_5_0",
+    ]
+    assert acks == []  # the one ack was consumed by wait_for
