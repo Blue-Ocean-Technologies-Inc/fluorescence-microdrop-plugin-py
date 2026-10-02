@@ -25,9 +25,18 @@ from microdrop_utils.traitsui_qt_helpers import (
 # Local imports.
 from .consts import LED_PROPORTION_TRAITS, LED_WAVELENGTHS
 
+
 # Every section is collapsible: an arrow glyph acts as the section header and
 # the bordered group below it is shown only while its `show_*` trait is
 # ticked (same structure as the heater controls pane).
+def _collapse_header(trait, label):
+    """A section header row: a Material arrow glyph that expands / collapses
+    the section by toggling ``trait``, followed by the section's label."""
+    return HGroup(
+        UItem(trait, editor=IconToggleEditor()),
+        Label(label),
+    )
+
 
 # Connection / board identity / last board ack.
 status_group = VGroup(
@@ -74,13 +83,16 @@ MULTI_CHANNEL_TOOLTIP = (
 )
 
 multi_channel_group = VGroup(
-    *[
-        Item(name, label=f"{wavelength} (%)", tooltip=MULTI_CHANNEL_TOOLTIP)
-        for name, wavelength in zip(LED_PROPORTION_TRAITS, LED_WAVELENGTHS)
-    ],
-    label="Multi-Channel Mix",
+    _collapse_header("show_multi_channel", "Multi-Channel Mix"),
+    VGroup(
+        *[
+            Item(name, label=f"{wavelength} (%)", tooltip=MULTI_CHANNEL_TOOLTIP)
+            for name, wavelength in zip(LED_PROPORTION_TRAITS, LED_WAVELENGTHS)
+        ],
+        visible_when="show_multi_channel",
+        show_border=True,
+    ),
     visible_when="multi_channel",
-    show_border=True,
 )
 
 # Single LED/camera param set (issue #6): replaces the old brightfield_group
@@ -246,15 +258,6 @@ chain_group = VGroup(
     UItem("chain_rows", editor=chain_table_editor),
     show_border=True,
 )
-
-
-def _collapse_header(trait, label):
-    """A section header row: a Material arrow glyph that expands / collapses
-    the section by toggling ``trait``, followed by the section's label."""
-    return HGroup(
-        UItem(trait, editor=IconToggleEditor()),
-        Label(label),
-    )
 
 
 UnifiedView = View(
