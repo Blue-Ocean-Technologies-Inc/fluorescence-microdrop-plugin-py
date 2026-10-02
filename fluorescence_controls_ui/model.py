@@ -199,6 +199,9 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
     show_status = Bool(True, desc="Expand the Status section")
     show_control = Bool(True, desc="Expand the Control section")
     show_params = Bool(True, desc="Expand the LED/camera params section")
+    #: Session-only like the other sections: expanded the first time the
+    #: mode is entered, then left as the operator last set it.
+    show_multi_channel = Bool(True, desc="Expand the Multi-Channel mix section")
 
     def _get_multi_channel(self):
         return self.wavelength == MULTI_CHANNEL
