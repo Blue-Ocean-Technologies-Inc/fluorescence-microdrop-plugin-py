@@ -20,7 +20,10 @@ it round-trips against Task 1's `ChainEntry` (`exposure` <-> `exposure_ms`).
 # Microdrop package imports.
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_controls_ui.chain_model import FluorescenceChainRow
-from fluorescence_controls_ui.consts import PERSISTED_CONTROL_TRAITS
+from fluorescence_controls_ui.consts import (
+    LED_PROPORTION_TRAITS,
+    PERSISTED_CONTROL_TRAITS,
+)
 from fluorescence_controls_ui.model import FluorescenceStatusModel
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 
@@ -178,6 +181,7 @@ def test_persisted_control_traits_is_the_new_single_set():
         "device_viewer_stream",
         "auto_exposure",
         "auto_gain",
+        *LED_PROPORTION_TRAITS,
     ]
 
 

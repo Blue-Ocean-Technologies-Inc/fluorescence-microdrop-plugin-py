@@ -16,6 +16,7 @@ from traits.api import (
     Event,
     Instance,
     List,
+    Property,
     Range,
     Str,
     observe,
@@ -42,8 +43,14 @@ from .consts import (
     LED_DUTY_MIN,
     LED_FREQUENCY_MAX,
     LED_FREQUENCY_MIN,
+    LED_PROPORTION_DEFAULT,
+    LED_PROPORTION_MAX,
+    LED_PROPORTION_MIN,
+    LED_PROPORTION_TRAITS,
     LED_WAVELENGTHS,
+    MULTI_CHANNEL,
     PERSISTED_CONTROL_TRAITS,
+    WAVELENGTH_CHOICES,
     connected_color,
     disconnected_color,
     halted_color,
@@ -54,6 +61,15 @@ from .preferences import FluorescencePreferences
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+
+def scaled_duty(intensity, proportion):
+    """Return the duty of a channel at ``proportion`` % of ``intensity`` %.
+
+    Rounds half up in integer arithmetic, so 0 in either argument is exactly
+    0 (the channel stays off) and no float error creeps into the duty.
+    """
+    return (intensity * proportion + 50) // 100
 
 
 class FluorescenceStatusModel(BaseStatusModel):
@@ -113,7 +129,12 @@ class FluorescenceStatusModel(BaseStatusModel):
     # enabled_when guards keep at least one on.
     capture_start = Bool(True)
     capture_end = Bool(False)
-    wavelength = Enum(*LED_WAVELENGTHS)
+    #: One LED, or MULTI_CHANNEL to drive the per-channel proportion mix.
+    wavelength = Enum(*WAVELENGTH_CHOICES)
+
+    #: True while the panel drives the Multi-Channel mix (a live-lighting
+    #: mode only — it never reaches a capture-chain row).
+    multi_channel = Property(Bool, observe="wavelength")
     intensity = Range(
         LED_DUTY_MIN,
         LED_DUTY_MAX,
@@ -168,10 +189,25 @@ class FluorescenceStatusModel(BaseStatusModel):
     show_status = Bool(True, desc="Expand the Status section")
     show_control = Bool(True, desc="Expand the Control section")
     show_params = Bool(True, desc="Expand the LED/camera params section")
+    #: Session-only like the other sections: expanded the first time the
+    #: mode is entered, then left as the operator last set it.
+    show_multi_channel = Bool(True, desc="Expand the Multi-Channel mix section")
+
+    def _get_multi_channel(self):
+        return self.wavelength == MULTI_CHANNEL
 
     @property
     def led_index(self) -> int:
         return LED_WAVELENGTHS.index(self.wavelength)
+
+    def led_intensities(self):
+        """Return the Multi-Channel mix: led index -> duty at the current
+        intensity, every channel listed (0 = off) so a mix applied after a
+        single-channel set leaves nothing else glowing."""
+        return {
+            index: scaled_duty(self.intensity, getattr(self, name))
+            for index, name in enumerate(LED_PROPORTION_TRAITS)
+        }
 
     # ------------------------------------------------------------------ #
     # Capture-chain state                                                  #
@@ -232,3 +268,19 @@ class FluorescenceStatusModel(BaseStatusModel):
                 f"values into model: {event}"
             )
             self.trait_set(**{event.name: event.new})
+
+
+# Multi-Channel proportions, one Range trait per LED channel (generated from
+# LED_PROPORTION_TRAITS so they follow the channel list); persisted through
+# PERSISTED_CONTROL_TRAITS like the other control values.
+for _index, _name in enumerate(LED_PROPORTION_TRAITS):
+    FluorescenceStatusModel.add_class_trait(
+        _name,
+        Range(
+            LED_PROPORTION_MIN,
+            LED_PROPORTION_MAX,
+            value=LED_PROPORTION_DEFAULT,
+            mode="slider",
+            desc=f"share of the intensity driving {LED_WAVELENGTHS[_index]} (%)",
+        ),
+    )

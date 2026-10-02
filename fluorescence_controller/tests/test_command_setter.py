@@ -12,13 +12,20 @@
 
 # Standard library imports.
 import json
+import threading
 
 # Third-party imports.
 import pytest
 from pydantic import ValidationError
 
 # Microdrop package imports.
-from fluorescence_controller.datamodels import SetLedData, SetLedFrequencyData
+from fluorescence_controller.consts import SET_LED_INTENSITIES
+from fluorescence_controller.datamodels import (
+    SetLedData,
+    SetLedFrequencyData,
+    SetLedIntensitiesData,
+    set_led_intensities_publisher,
+)
 from fluorescence_controller.fluorescence_serial_proxy import FluorescenceSerialProxy
 from fluorescence_controller.services.fluorescence_command_setter_service import (
     FluorescenceCommandSetterService,
@@ -31,6 +38,7 @@ class FakeProxy(FluorescenceSerialProxy):
 
     def __init__(self):
         self.sent = []
+        self.transaction_lock = threading.RLock()
 
     def send_command(self, command):
         self.sent.append(command)
@@ -77,3 +85,57 @@ def test_payload_bounds_are_enforced():
 def test_raw_passthrough(service):
     service.on_send_command_request("led_help")
     assert service.proxy.sent == ["led_help"]
+
+
+def test_set_led_intensities_sets_every_listed_channel_in_order(service):
+    # JSON object keys arrive as strings; the schema coerces them to indices.
+    body = json.dumps({"intensities": {"3": 0, "0": 40, "5": 100}})
+    service.on_set_led_intensities_request(body)
+    assert service.proxy.sent == ["led_0_40", "led_3_0", "led_5_100"]
+
+
+def test_set_led_intensities_holds_the_transaction_lock(service):
+    held = []
+    service.proxy.send_command = lambda command: held.append(
+        service.proxy.transaction_lock._is_owned()
+    )
+    service.on_set_led_intensities_request(json.dumps({"intensities": {0: 10, 1: 20}}))
+    assert held == [True, True]
+
+
+@pytest.mark.parametrize(
+    "intensities",
+    [
+        {0: 101},  # duty above 100 %
+        {0: -1},  # duty below 0 %
+        {6: 50},  # only 6 LEDs (0-5)
+        {-1: 50},
+        {},  # nothing to apply
+    ],
+)
+def test_set_led_intensities_bounds_are_enforced(intensities):
+    with pytest.raises(ValidationError):
+        SetLedIntensitiesData(intensities=intensities)
+
+
+def test_set_led_intensities_rejects_extra_fields():
+    with pytest.raises(ValidationError):
+        SetLedIntensitiesData(intensities={0: 1}, exclusive=True)
+
+
+def test_set_led_intensities_publisher_round_trips_to_the_handler(service, monkeypatch):
+    import microdrop_utils.dramatiq_pub_sub_helpers as helpers
+
+    sent = []
+    monkeypatch.setattr(
+        helpers,
+        "publish_message",
+        lambda message, topic, **kw: sent.append((topic, message)),
+    )
+    set_led_intensities_publisher.publish(intensities={2: 30, 1: 0})
+
+    [(topic, message)] = sent
+    assert topic == SET_LED_INTENSITIES
+
+    service.on_set_led_intensities_request(message)
+    assert service.proxy.sent == ["led_1_0", "led_2_30"]
