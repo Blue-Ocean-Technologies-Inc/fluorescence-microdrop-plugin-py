@@ -30,7 +30,7 @@ from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
 # Local imports.
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
-from .chain_model import FluorescenceChainRow
+from .chain_model import CapturePhases, FluorescenceChainRow
 from .consts import (
     EXPOSURE_DEFAULT,
     EXPOSURE_MS_MAX,
@@ -56,13 +56,16 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class FluorescenceStatusModel(BaseStatusModel):
+class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
     """Model for fluorescence LED controls (port of the standalone app's
     per-mode brightfield/fluorescence LED state).
 
     A single LED/camera param set now drives whichever chain row is being
     edited (the mode/br_/fl_ split is gone — see the capture-chain design);
     the master light toggle applies it directly, with no mode gating.
+    The protocol phase(s) a capture fires in (`capture_start` /
+    `capture_end`, edited per row like every other param) come from
+    `CapturePhases`, which keeps at least one of them on.
     """
 
     DISCONNECTED_COLOR = Str(disconnected_color)
@@ -108,11 +111,6 @@ class FluorescenceStatusModel(BaseStatusModel):
     # Chain-row labels are DERIVED (image_tag_wavelength_index, read-only
     # in the table); the panel edits only this optional tag.
     image_tag = Str("")
-    # Protocol phase(s) a capture fires in (per-row, edited via the panel
-    # like every other param): step start, step end, or both. The view's
-    # enabled_when guards keep at least one on.
-    capture_start = Bool(True)
-    capture_end = Bool(False)
     wavelength = Enum(*LED_WAVELENGTHS)
     intensity = Range(
         LED_DUTY_MIN,

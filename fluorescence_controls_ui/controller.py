@@ -320,9 +320,14 @@ class FluorescenceControlsController(BaseStatusController):
         row = event.new
         if row is None:
             return
+
         self._loading_row = True
         try:
             self.model.image_tag = row.image_tag
+            # Start then End: for every valid row/panel pair the only
+            # transient both-off state is start switching off ahead of
+            # end, which the model's phase invariant resolves by turning
+            # end on — exactly the row's value, set next anyway.
             self.model.capture_start = row.capture_start
             self.model.capture_end = row.capture_end
             # Auto flags FIRST: an auto OFF-transition adopts the camera's

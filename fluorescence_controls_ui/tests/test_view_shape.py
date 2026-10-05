@@ -119,30 +119,33 @@ def test_chain_table_has_right_click_delete_menu():
     assert "delete_chain_row" in actions
 
 
-def test_capture_phase_toggles_present_with_last_one_on_guards():
+def _find(node, name):
+    """The first `Item` named ``name`` under a Group node, or None."""
+
+    if isinstance(node, Item) and node.name == name:
+        return node
+
+    if isinstance(node, Group):
+        for child in node.content:
+            found = _find(child, name)
+
+            if found is not None:
+                return found
+
+    return None
+
+
+def test_capture_phase_toggles_present():
     names = _all_item_names()
     assert "capture_start" in names
     assert "capture_end" in names
 
 
-def test_capture_phase_toggles_cannot_switch_off_the_last_phase():
-    """Each toggle disables exactly when it is the sole phase on, so it
-    can always be turned on but never switched off last."""
+def test_capture_phase_toggles_are_always_clickable():
+    """No enabled_when guard: a disabled toggle renders grey even while on
+    (the editor's :disabled style), and the sole lit phase must still be
+    clickable to swap phases. The model holds the at-least-one-on rule."""
     from fluorescence_controls_ui.view import params_group
 
-    def _find(node, name):
-        from traitsui.api import Group, Item
-
-        if isinstance(node, Item) and node.name == name:
-            return node
-        if isinstance(node, Group):
-            for child in node.content:
-                found = _find(child, name)
-                if found is not None:
-                    return found
-        return None
-
-    start = _find(params_group, "capture_start")
-    end = _find(params_group, "capture_end")
-    assert start.enabled_when == "capture_end or not capture_start"
-    assert end.enabled_when == "capture_start or not capture_end"
+    assert _find(params_group, "capture_start").enabled_when == ""
+    assert _find(params_group, "capture_end").enabled_when == ""

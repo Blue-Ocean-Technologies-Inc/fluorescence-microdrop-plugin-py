@@ -70,7 +70,8 @@ class ChainEntry(BaseModel):
     # on_post_step — the same hooks the regular capture column picks
     # between; this entry may fire in both). At least one is always on:
     # both-False input is coerced to the step-start default rather than
-    # rejected, so a hand-edited protocol file still loads.
+    # rejected, so a hand-edited protocol file still loads. The pane holds
+    # the same invariant live (fluorescence_controls_ui CapturePhases).
     capture_start: bool = True
     capture_end: bool = False
 
