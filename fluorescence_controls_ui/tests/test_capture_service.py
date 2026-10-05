@@ -378,6 +378,49 @@ def test_run_burst_timeout_raises_and_still_turns_leds_off(
     assert off_calls == [(ALL_LEDS_OFF, "")]
 
 
+@pytest.fixture
+def capture_order(monkeypatch):
+    """One ordered log of run_burst's ack wait, lead-time sleep, and frame
+    grab: the ack auto-succeeds, the sleep returns at once (patched on
+    capture_service's `time`, as `frozen_time` patches gmtime), and the
+    grab is recorded instead of saved."""
+    order = []
+
+    def wait_applied(timeout):
+        order.append("ack")
+
+        return True
+
+    monkeypatch.setattr(capture_service, "wait_applied", wait_applied)
+    monkeypatch.setattr(
+        capture_service.time, "sleep", lambda seconds: order.append(("lead", seconds))
+    )
+    monkeypatch.setattr(
+        capture_service,
+        "save_entry_capture",
+        lambda entry, folder: order.append(("grab", entry.label)),
+    )
+
+    return order
+
+
+def test_run_burst_waits_camera_lead_time_after_the_ack_before_the_grab(
+    experiment_dir, frozen_time, publish_recorder, off_calls, sync_gui, capture_order
+):
+    entries = [_entry("A", camera_lead_time_ms=2000), _entry("B")]
+
+    capture_service.run_burst(entries)
+
+    # The entry stores milliseconds; time.sleep takes seconds.
+    assert capture_order == [
+        "ack",
+        ("lead", 2.0),
+        ("grab", "A"),
+        "ack",
+        ("grab", "B"),
+    ]
+
+
 def test_apply_camera_settings_forwards_auto_flags(sync_gui):
     """Per-row auto modes ride into the shared ASI settings alongside
     exposure/gain (with auto on, the capture thread's brightness loop

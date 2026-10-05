@@ -49,3 +49,32 @@ def test_preference_edits_pull_into_a_live_control_model():
     model = FluorescenceStatusModel(preferences=helper)
     helper.frequency = 12345
     assert model.frequency == 12345
+
+
+def test_camera_lead_time_saves_and_restores_into_a_fresh_model():
+    helper = _prefs()
+    first = FluorescenceStatusModel(preferences=helper)
+
+    first.camera_lead_time_ms = 2500  # pushed to preferences live
+    assert helper.camera_lead_time_ms == 2500
+
+    model = FluorescenceStatusModel(preferences=helper)  # "next session"
+    assert model.camera_lead_time_ms == 2500
+
+
+def test_row_load_persists_the_rows_camera_lead_time_like_exposure():
+    """Loading a chain row onto the panel persists its values as the
+    panel's — the same for the lead time as for exposure and gain."""
+    from fluorescence_controls_ui.chain_model import FluorescenceChainRow
+    from fluorescence_controls_ui.controller import FluorescenceControlsController
+
+    helper = _prefs()
+    model = FluorescenceStatusModel(preferences=helper)
+    FluorescenceControlsController(model=model)
+    row = FluorescenceChainRow(label="A", exposure=25.0, camera_lead_time_ms=4000)
+    model.chain_rows = [row]
+
+    model.chain_selection = row
+
+    assert helper.exposure == 25.0
+    assert helper.camera_lead_time_ms == 4000

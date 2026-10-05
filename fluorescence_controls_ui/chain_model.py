@@ -26,6 +26,9 @@ from fluorescence_protocol_controls.capture_chain import ChainEntry
 # Local imports.
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .consts import (
+    CAMERA_LEAD_TIME_MS_DEFAULT,
+    CAMERA_LEAD_TIME_MS_MAX,
+    CAMERA_LEAD_TIME_MS_MIN,
     EXPOSURE_MS_MAX,
     EXPOSURE_MS_MIN,
     LED_DUTY_MAX,
@@ -74,6 +77,11 @@ class FluorescenceChainRow(CapturePhases):
     frequency = Range(LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=40000)
     exposure = Range(float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=10.0)
     gain = Range(ASI_GAIN_MIN, ASI_GAIN_MAX, value=0)
+    camera_lead_time_ms = Range(
+        CAMERA_LEAD_TIME_MS_MIN,
+        CAMERA_LEAD_TIME_MS_MAX,
+        value=CAMERA_LEAD_TIME_MS_DEFAULT,
+    )
     run = Bool(True)
     auto_exposure = Bool(False)
     auto_gain = Bool(False)
@@ -91,6 +99,7 @@ class FluorescenceChainRow(CapturePhases):
             "frequency": self.frequency,
             "exposure_ms": self.exposure,
             "gain": self.gain,
+            "camera_lead_time_ms": self.camera_lead_time_ms,
             "run": self.run,
             "auto_exposure": self.auto_exposure,
             "auto_gain": self.auto_gain,
@@ -109,6 +118,7 @@ class FluorescenceChainRow(CapturePhases):
             frequency=entry.frequency,
             exposure=entry.exposure_ms,
             gain=entry.gain,
+            camera_lead_time_ms=entry.camera_lead_time_ms,
             run=entry.run,
             auto_exposure=entry.auto_exposure,
             auto_gain=entry.auto_gain,

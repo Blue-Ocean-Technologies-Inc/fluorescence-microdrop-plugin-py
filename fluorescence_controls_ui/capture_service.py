@@ -158,9 +158,11 @@ def run_burst(
     entries, *, step_desc=None, dotted_id=None, applied_timeout: float = 5.0
 ) -> Path:
     """Fire the chain's ticked entries in order: apply camera settings,
-    publish the LED state, wait for the backend's applied ack, capture.
-    ALL_LEDS_OFF always fires on the way out — even on error/timeout — so
-    a failed burst can never leave a light on."""
+    publish the LED state, wait for the backend's applied ack, wait out the
+    entry's camera lead time, capture. Runs on the pane's burst worker
+    thread, so the lead-time sleep never blocks the GUI. ALL_LEDS_OFF
+    always fires on the way out — even on error/timeout — so a failed
+    burst can never leave a light on."""
     folder = burst_folder(step_desc, dotted_id)
     try:
         for entry in ticked(entries):
@@ -173,8 +175,13 @@ def run_burst(
                 frequency=entry.frequency,
                 settle_s=LED_STABILIZATION_S,
             )
+
             if not wait_applied(applied_timeout):
                 raise TimeoutError(f"LED apply not acknowledged for {entry.label!r}")
+
+            if entry.camera_lead_time_ms:
+                time.sleep(entry.camera_lead_time_ms / 1000.0)
+
             save_entry_capture(entry, folder)
     finally:
         publish_message(topic=ALL_LEDS_OFF, message="")

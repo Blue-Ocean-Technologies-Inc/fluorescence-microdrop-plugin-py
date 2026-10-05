@@ -86,6 +86,12 @@ params_group = VGroup(
         Item("gain", label="Gain", enabled_when="not auto_gain"),
         Item("auto_gain", label="Auto"),
     ),
+    Item(
+        "camera_lead_time_ms",
+        label="Camera Lead Time (ms)",
+        tooltip="Wait after the camera settings and LED settle, before the "
+        "frame is grabbed, so exposure and gain have settled",
+    ),
     # Protocol phase(s) the selected/added chain row captures in. Both may
     # be on (capture twice per step). Both toggles stay clickable: the
     # model keeps at least one on, so switching off the sole phase swaps

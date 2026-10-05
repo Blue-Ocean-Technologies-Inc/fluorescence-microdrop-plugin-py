@@ -372,6 +372,30 @@ def test_switching_off_the_sole_phase_swaps_it_in_the_selected_row():
     assert (row.capture_start, row.capture_end) == (False, True)
 
 
+# --- camera lead time: panel <-> row --------------------------------------------------
+
+
+def test_add_capture_seeds_camera_lead_time_from_the_panel():
+    controller, model = _controller()
+    model.camera_lead_time_ms = 1500
+
+    controller.add_capture()
+
+    assert model.chain_rows[0].camera_lead_time_ms == 1500
+
+
+def test_camera_lead_time_loads_from_and_writes_back_to_the_selected_row():
+    controller, model = _controller()
+    row = FluorescenceChainRow(label="A", camera_lead_time_ms=3000)
+    model.chain_rows = [row]
+
+    model.chain_selection = row
+    assert model.camera_lead_time_ms == 3000
+
+    model.camera_lead_time_ms = 500
+    assert row.camera_lead_time_ms == 500
+
+
 # --- Run Capture: lazy capture_service import -----------------------------------------
 
 

@@ -41,6 +41,7 @@ from .cameras.consts import (
     DISPLAY_GAMMA_DEFAULT,
 )
 from .consts import (
+    CAMERA_LEAD_TIME_MS_DEFAULT,
     EXPOSURE_DEFAULT,
     FREQUENCY_DEFAULT,
     GAIN_DEFAULT,
@@ -92,6 +93,9 @@ class FluorescencePreferences(PreferencesHelper):
     frequency = Int(FREQUENCY_DEFAULT, desc="LED PWM frequency (Hz)")
     exposure = Float(EXPOSURE_DEFAULT, desc="camera exposure (ms)")
     gain = Int(GAIN_DEFAULT, desc="camera gain")
+    camera_lead_time_ms = Int(
+        CAMERA_LEAD_TIME_MS_DEFAULT, desc="wait before the frame grab (ms)"
+    )
     device_viewer_stream = Bool(
         True, desc="Render the live ASI feed in the device viewer"
     )

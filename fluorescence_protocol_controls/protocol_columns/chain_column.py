@@ -196,8 +196,10 @@ class FluorescenceChainHandler(BaseColumnHandler):
         order, into one folder per phase: apply camera settings, publish
         the LED state, block on the EXECUTOR's own applied-ack mailbox
         (`ctx.wait_for` — not capture_service's Event, which is for
-        pane-driven bursts only), then save the frame. Each phase's folder
-        carries its own marker (``folder_suffix`` — `_start` / `_end`) so a
+        pane-driven bursts only), wait out the entry's camera lead time
+        (`ctx.sleep` — a Stop mid-wait raises AbortError, like
+        `ctx.wait_for`), then save the frame. Each phase's folder carries
+        its own marker (``folder_suffix`` — `_start` / `_end`) so a
         sub-second both-phases step can never overwrite its start
         captures — `burst_folder`'s timestamp alone is only
         1-second-granular. Any raise (TimeoutError from the wait,
@@ -239,6 +241,12 @@ class FluorescenceChainHandler(BaseColumnHandler):
                     settle_s=LED_STABILIZATION_S,
                 )
                 ctx.wait_for(FLUORESCENCE_APPLIED, timeout=self.ack_time_s)
+
+                # Camera lead time, on top of the LED settle; ctx.sleep keeps
+                # Stop responsive and the wait out of the step timers.
+                if entry.camera_lead_time_ms:
+                    ctx.sleep(entry.camera_lead_time_ms / 1000.0)
+
                 capture_service.save_entry_capture(entry, folder)
         finally:
             # Lights out the moment the burst is done — the LED is needed only

@@ -32,6 +32,9 @@ from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .chain_model import CapturePhases, FluorescenceChainRow
 from .consts import (
+    CAMERA_LEAD_TIME_MS_DEFAULT,
+    CAMERA_LEAD_TIME_MS_MAX,
+    CAMERA_LEAD_TIME_MS_MIN,
     EXPOSURE_DEFAULT,
     EXPOSURE_MS_MAX,
     EXPOSURE_MS_MIN,
@@ -138,6 +141,15 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
         value=GAIN_DEFAULT,
         mode="slider",
         desc="camera gain",
+    )
+    # Same arrowed range-shifting slider as `frequency` (xslider): the
+    # arrows step the visible window by decades across 0-60000 ms.
+    camera_lead_time_ms = Range(
+        CAMERA_LEAD_TIME_MS_MIN,
+        CAMERA_LEAD_TIME_MS_MAX,
+        value=CAMERA_LEAD_TIME_MS_DEFAULT,
+        mode="xslider",
+        desc="wait before the frame grab, for exposure/gain to settle (ms)",
     )
 
     preferences = Instance(FluorescencePreferences, FluorescencePreferences())

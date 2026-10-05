@@ -43,6 +43,7 @@ from fluorescence_protocol_controls.protocol_columns.chain_column import (
     FluorescenceChainHandler,
     make_fluorescence_chain_column,
 )
+from pluggable_protocol_tree.execution.exceptions import AbortError
 from pluggable_protocol_tree.models.row import BaseRow, build_row_type
 
 # Microdrop utils imports.
@@ -78,19 +79,32 @@ class _Ctx:
     NO `preview_mode` of its own (that lives on `ctx.protocol` — a
     `ProtocolContext`), only `wait_for` and a `.protocol` back-reference.
     Records `wait_for` calls, raises whatever `next_error` is queued for
-    the current call (or nothing)."""
+    the current call (or nothing). `sleep` (the Stop-aware settle wait)
+    records its seconds, raising `sleep_error` when one is given; `log`
+    holds both kinds of call in order."""
 
-    def __init__(self, preview_mode=False, errors=None):
+    def __init__(self, preview_mode=False, errors=None, sleep_error=None):
         self.protocol = _Protocol(preview_mode=preview_mode)
         self.wait_for_calls = []
+        self.sleep_calls = []
+        self.log = []
         self._errors = list(errors or [])
+        self._sleep_error = sleep_error
 
     def wait_for(self, topic, timeout):
         self.wait_for_calls.append((topic, timeout))
+        self.log.append(("wait_for", topic))
         if self._errors:
             error = self._errors.pop(0)
             if error is not None:
                 raise error
+
+    def sleep(self, seconds):
+        self.sleep_calls.append(seconds)
+        self.log.append(("sleep", seconds))
+
+        if self._sleep_error is not None:
+            raise self._sleep_error
 
 
 @pytest.fixture
@@ -472,4 +486,75 @@ def test_burst_light_off_fires_even_when_a_capture_raises(
     with pytest.raises(RuntimeError):
         FluorescenceChainHandler().on_pre_step(row, _Ctx())
 
+    assert ALL_LEDS_OFF in [topic for topic, _msg in published]
+
+
+# --- camera lead time ------------------------------------------------------
+
+
+def _log_saves_into(ctx, monkeypatch):
+    """Route the fake capture service's frame grabs into ``ctx.log`` so the
+    test can read the ack / lead-time / grab order off one list."""
+    monkeypatch.setattr(
+        sys.modules["fluorescence_controls_ui.capture_service"],
+        "save_entry_capture",
+        lambda entry, folder: ctx.log.append(("save", entry.label)),
+    )
+
+
+def test_camera_lead_time_waits_after_the_ack_before_the_frame_grab(
+    row_type, fake_capture_service, publisher_calls, monkeypatch
+):
+    Row, col = row_type
+    row = Row()
+    col.model.set_value(row, [_entry("a", camera_lead_time_ms=1500).model_dump()])
+    ctx = _Ctx()
+    _log_saves_into(ctx, monkeypatch)
+
+    FluorescenceChainHandler().on_pre_step(row, ctx)
+
+    # The entry stores milliseconds; ctx.sleep takes seconds.
+    assert ctx.log == [
+        ("wait_for", FLUORESCENCE_APPLIED),
+        ("sleep", 1.5),
+        ("save", "a"),
+    ]
+
+
+def test_zero_camera_lead_time_grabs_straight_after_the_ack(
+    row_type, fake_capture_service, publisher_calls
+):
+    Row, col = row_type
+    row = Row()
+    col.model.set_value(row, [_entry("a").model_dump()])
+    ctx = _Ctx()
+
+    FluorescenceChainHandler().on_pre_step(row, ctx)
+
+    assert ctx.sleep_calls == []
+    assert [e.label for e, _folder in fake_capture_service["save"]] == ["a"]
+
+
+def test_stop_during_camera_lead_time_aborts_without_a_grab(
+    row_type, fake_capture_service, publisher_calls, published
+):
+    """The lead-time wait goes through ctx.sleep, so a protocol Stop
+    raises AbortError there: no frame is grabbed, the next entry never
+    starts, and the phase's finally still turns the light off."""
+    Row, col = row_type
+    row = Row()
+    col.model.set_value(
+        row,
+        [
+            _entry("a", camera_lead_time_ms=30_000).model_dump(),
+            _entry("b").model_dump(),
+        ],
+    )
+    ctx = _Ctx(sleep_error=AbortError("stopped"))
+
+    with pytest.raises(AbortError):
+        FluorescenceChainHandler().on_pre_step(row, ctx)
+
+    assert fake_capture_service["save"] == []
+    assert [e.label for e in fake_capture_service["apply"]] == ["a"]
     assert ALL_LEDS_OFF in [topic for topic, _msg in published]

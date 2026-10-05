@@ -149,3 +149,22 @@ def test_capture_phase_toggles_are_always_clickable():
 
     assert _find(params_group, "capture_start").enabled_when == ""
     assert _find(params_group, "capture_end").enabled_when == ""
+
+
+def test_camera_lead_time_item_sits_with_the_camera_params():
+    from fluorescence_controls_ui.view import params_group
+
+    item = _find(params_group, "camera_lead_time_ms")
+    assert item is not None
+    assert item.label == "Camera Lead Time (ms)"
+
+
+def test_camera_lead_time_uses_the_frequency_range_shifting_slider():
+    """Same default editor as Frequency: the `xslider` mode (traitsui's
+    LargeRangeSliderEditor, whose arrows shift the slider's window)."""
+    from fluorescence_controls_ui.model import FluorescenceStatusModel
+
+    class_traits = FluorescenceStatusModel.class_traits()
+
+    assert class_traits["frequency"].handler.mode == "xslider"
+    assert class_traits["camera_lead_time_ms"].handler.mode == "xslider"
