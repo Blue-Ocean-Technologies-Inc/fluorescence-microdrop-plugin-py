@@ -30,8 +30,11 @@ from microdrop_utils.traitsui_qt_helpers import RangeWithViewHints
 
 # Local imports.
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
-from .chain_model import FluorescenceChainRow
+from .chain_model import CapturePhases, FluorescenceChainRow
 from .consts import (
+    CAMERA_LEAD_TIME_MS_DEFAULT,
+    CAMERA_LEAD_TIME_MS_MAX,
+    CAMERA_LEAD_TIME_MS_MIN,
     EXPOSURE_DEFAULT,
     EXPOSURE_MS_MAX,
     EXPOSURE_MS_MIN,
@@ -56,13 +59,16 @@ from logger.logger_service import get_logger
 logger = get_logger(__name__)
 
 
-class FluorescenceStatusModel(BaseStatusModel):
+class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
     """Model for fluorescence LED controls (port of the standalone app's
     per-mode brightfield/fluorescence LED state).
 
     A single LED/camera param set now drives whichever chain row is being
     edited (the mode/br_/fl_ split is gone — see the capture-chain design);
     the master light toggle applies it directly, with no mode gating.
+    The protocol phase(s) a capture fires in (`capture_start` /
+    `capture_end`, edited per row like every other param) come from
+    `CapturePhases`, which keeps at least one of them on.
     """
 
     DISCONNECTED_COLOR = Str(disconnected_color)
@@ -108,11 +114,6 @@ class FluorescenceStatusModel(BaseStatusModel):
     # Chain-row labels are DERIVED (image_tag_wavelength_index, read-only
     # in the table); the panel edits only this optional tag.
     image_tag = Str("")
-    # Protocol phase(s) a capture fires in (per-row, edited via the panel
-    # like every other param): step start, step end, or both. The view's
-    # enabled_when guards keep at least one on.
-    capture_start = Bool(True)
-    capture_end = Bool(False)
     wavelength = Enum(*LED_WAVELENGTHS)
     intensity = Range(
         LED_DUTY_MIN,
@@ -140,6 +141,15 @@ class FluorescenceStatusModel(BaseStatusModel):
         value=GAIN_DEFAULT,
         mode="slider",
         desc="camera gain",
+    )
+    # Same arrowed range-shifting slider as `frequency` (xslider): the
+    # arrows step the visible window by decades across 0-60000 ms.
+    camera_lead_time_ms = Range(
+        CAMERA_LEAD_TIME_MS_MIN,
+        CAMERA_LEAD_TIME_MS_MAX,
+        value=CAMERA_LEAD_TIME_MS_DEFAULT,
+        mode="xslider",
+        desc="wait before the frame grab, for exposure/gain to settle (ms)",
     )
 
     preferences = Instance(FluorescencePreferences, FluorescencePreferences())

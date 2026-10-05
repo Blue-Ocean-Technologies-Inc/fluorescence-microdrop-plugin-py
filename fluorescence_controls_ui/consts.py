@@ -63,6 +63,12 @@ INTENSITY_DEFAULT, FREQUENCY_DEFAULT = 50, 40000
 EXPOSURE_MS_MIN, EXPOSURE_MS_MAX = 0.032, 60_000
 EXPOSURE_DEFAULT, GAIN_DEFAULT = 10, 0
 
+# Camera lead time (ms): the wait between the camera settings + LED settle
+# and the frame grab, so exposure/gain have settled. On top of the LED
+# settle (LED_STABILIZATION_S); 0 grabs straight after the LED ack.
+CAMERA_LEAD_TIME_MS_MIN, CAMERA_LEAD_TIME_MS_MAX = 0, 60_000
+CAMERA_LEAD_TIME_MS_DEFAULT = 0
+
 # Control-pane values persisted across sessions: model trait ->
 # FluorescencePreferences trait. light_on is deliberately absent — the
 # light always starts OFF regardless of how the last session ended.
@@ -72,6 +78,7 @@ PERSISTED_CONTROL_TRAITS = [
     "frequency",
     "gain",
     "exposure",
+    "camera_lead_time_ms",
     "device_viewer_stream",
     "auto_exposure",
     "auto_gain",

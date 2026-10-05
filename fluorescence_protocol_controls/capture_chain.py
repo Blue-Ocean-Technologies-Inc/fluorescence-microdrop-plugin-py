@@ -36,7 +36,13 @@ from fluorescence_controller.consts import (
     LED_WAVELENGTHS,
 )
 from fluorescence_controls_ui.cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
-from fluorescence_controls_ui.consts import EXPOSURE_MS_MAX, EXPOSURE_MS_MIN
+from fluorescence_controls_ui.consts import (
+    CAMERA_LEAD_TIME_MS_DEFAULT,
+    CAMERA_LEAD_TIME_MS_MAX,
+    CAMERA_LEAD_TIME_MS_MIN,
+    EXPOSURE_MS_MAX,
+    EXPOSURE_MS_MIN,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -56,6 +62,14 @@ class ChainEntry(BaseModel):
     frequency: int = Field(ge=LED_FREQUENCY_MIN, le=LED_FREQUENCY_MAX)
     exposure_ms: float = Field(ge=EXPOSURE_MS_MIN, le=EXPOSURE_MS_MAX)
     gain: int = Field(ge=ASI_GAIN_MIN, le=ASI_GAIN_MAX)
+    # Milliseconds between the LED applied-and-settled ack and the frame
+    # grab, for exposure/gain to settle. Defaulted so chains saved before
+    # it existed still load (and capture exactly as they did).
+    camera_lead_time_ms: int = Field(
+        default=CAMERA_LEAD_TIME_MS_DEFAULT,
+        ge=CAMERA_LEAD_TIME_MS_MIN,
+        le=CAMERA_LEAD_TIME_MS_MAX,
+    )
     run: bool = True
     # Per-row auto camera modes: when on, the capture thread's brightness
     # loop owns exposure/gain and the stored values are only the starting
@@ -70,7 +84,8 @@ class ChainEntry(BaseModel):
     # on_post_step — the same hooks the regular capture column picks
     # between; this entry may fire in both). At least one is always on:
     # both-False input is coerced to the step-start default rather than
-    # rejected, so a hand-edited protocol file still loads.
+    # rejected, so a hand-edited protocol file still loads. The pane holds
+    # the same invariant live (fluorescence_controls_ui CapturePhases).
     capture_start: bool = True
     capture_end: bool = False
 

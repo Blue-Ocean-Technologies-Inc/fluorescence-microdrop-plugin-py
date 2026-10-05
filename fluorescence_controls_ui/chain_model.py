@@ -18,7 +18,7 @@ Converts to/from Task 1's `ChainEntry` (`fluorescence_protocol_controls
 millisecond field name; the stored entry keeps its explicit unit)."""
 
 # Enthought library imports.
-from traits.api import Bool, Enum, HasTraits, Range, Str
+from traits.api import Bool, Enum, HasTraits, Range, Str, observe
 
 # Microdrop package imports.
 from fluorescence_protocol_controls.capture_chain import ChainEntry
@@ -26,6 +26,9 @@ from fluorescence_protocol_controls.capture_chain import ChainEntry
 # Local imports.
 from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .consts import (
+    CAMERA_LEAD_TIME_MS_DEFAULT,
+    CAMERA_LEAD_TIME_MS_MAX,
+    CAMERA_LEAD_TIME_MS_MIN,
     EXPOSURE_MS_MAX,
     EXPOSURE_MS_MIN,
     LED_DUTY_MAX,
@@ -36,9 +39,37 @@ from .consts import (
 )
 
 
-class FluorescenceChainRow(HasTraits):
+class CapturePhases(HasTraits):
+    """The protocol phase(s) a capture fires in, shared by the chain row
+    and the panel model that edits it. At least one phase is always on:
+    switching off the sole phase hands it to the other, so clicking the
+    only lit Start/End toggle swaps phases instead of being refused."""
+
+    #: Fire at step start (the executor's on_pre_step).
+    capture_start = Bool(True)
+
+    #: Fire at step end (the executor's on_post_step).
+    capture_end = Bool(False)
+
+    @observe("[capture_start,capture_end]")
+    def _keep_one_capture_phase(self, event):
+        # Turn the OTHER phase on, never the one just switched off: a
+        # TraitsUI editor skips repainting a trait it is itself writing,
+        # so reverting the clicked toggle would leave its button stale.
+        if self.capture_start or self.capture_end:
+            return
+
+        if event.name == "capture_start":
+            self.capture_end = True
+        else:
+            self.capture_start = True
+
+
+class FluorescenceChainRow(CapturePhases):
     """One row of a capture chain (attached to a step/group, or in the
-    free-mode stash): the LED/camera params to apply plus whether it runs."""
+    free-mode stash): the LED/camera params to apply plus whether it runs.
+    The phase flags (`capture_start` / `capture_end`) mirror ChainEntry;
+    the panel's Start/End toggles edit them via the live binding."""
 
     label = Str()
     wavelength = Enum(*LED_WAVELENGTHS)
@@ -46,16 +77,17 @@ class FluorescenceChainRow(HasTraits):
     frequency = Range(LED_FREQUENCY_MIN, LED_FREQUENCY_MAX, value=40000)
     exposure = Range(float(EXPOSURE_MS_MIN), float(EXPOSURE_MS_MAX), value=10.0)
     gain = Range(ASI_GAIN_MIN, ASI_GAIN_MAX, value=0)
+    camera_lead_time_ms = Range(
+        CAMERA_LEAD_TIME_MS_MIN,
+        CAMERA_LEAD_TIME_MS_MAX,
+        value=CAMERA_LEAD_TIME_MS_DEFAULT,
+    )
     run = Bool(True)
     auto_exposure = Bool(False)
     auto_gain = Bool(False)
     # Optional user tag; `label` above is derived from it (see
     # capture_chain.chain_label) and never edited directly.
     image_tag = Str("")
-    # Protocol phase(s) this row fires in (mirrors ChainEntry; the panel's
-    # Start/End toggles edit these via the live binding).
-    capture_start = Bool(True)
-    capture_end = Bool(False)
 
     def to_entry_dict(self) -> dict:
         """This row's params as a `ChainEntry`-shaped dict (`exposure` ->
@@ -67,6 +99,7 @@ class FluorescenceChainRow(HasTraits):
             "frequency": self.frequency,
             "exposure_ms": self.exposure,
             "gain": self.gain,
+            "camera_lead_time_ms": self.camera_lead_time_ms,
             "run": self.run,
             "auto_exposure": self.auto_exposure,
             "auto_gain": self.auto_gain,
@@ -85,6 +118,7 @@ class FluorescenceChainRow(HasTraits):
             frequency=entry.frequency,
             exposure=entry.exposure_ms,
             gain=entry.gain,
+            camera_lead_time_ms=entry.camera_lead_time_ms,
             run=entry.run,
             auto_exposure=entry.auto_exposure,
             auto_gain=entry.auto_gain,

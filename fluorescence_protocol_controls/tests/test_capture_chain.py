@@ -168,3 +168,33 @@ def test_both_phases_false_is_coerced_to_step_start():
     entry = _entry(capture_start=False, capture_end=False)
     assert entry.capture_start is True
     assert entry.capture_end is False
+
+
+# --- camera_lead_time_ms ---------------------------------------------------
+
+
+def test_camera_lead_time_defaults_to_zero():
+    assert _entry().camera_lead_time_ms == 0
+
+
+def test_legacy_dict_without_camera_lead_time_parses_with_zero():
+    raw = _entry().model_dump()
+    del raw["camera_lead_time_ms"]
+
+    [restored] = parse_chain([raw])
+
+    assert restored.camera_lead_time_ms == 0
+
+
+def test_camera_lead_time_round_trips():
+    entries = [_entry(label="A", camera_lead_time_ms=1500)]
+
+    restored = parse_chain(dump_chain(entries))
+
+    assert restored[0].camera_lead_time_ms == 1500
+
+
+@pytest.mark.parametrize("lead_time_ms", [-1, 60_001])
+def test_out_of_range_camera_lead_time_raises_validation_error(lead_time_ms):
+    with pytest.raises(ValidationError):
+        _entry(camera_lead_time_ms=lead_time_ms)

@@ -65,6 +65,7 @@ CHAIN_ROW_PARAM_TRAITS = (
     "frequency",
     "exposure",
     "gain",
+    "camera_lead_time_ms",
     "auto_exposure",
     "auto_gain",
     "capture_start",
@@ -183,6 +184,11 @@ class FluorescenceControlsController(BaseStatusController):
     # Controller Interface                                                 #
     # ------------------------------------------------------------------ #
     def frequency_setattr(self, info, object, traitname, value):
+        return super().setattr(info, object, traitname, int(value))
+
+    def camera_lead_time_ms_setattr(self, info, object, traitname, value):
+        # Same xslider as frequency, same int cast: the editor can hand back
+        # floats (its range arrows clamp to a Float window bound).
         return super().setattr(info, object, traitname, int(value))
 
     # ------------------------------------------------------------------ #
@@ -320,9 +326,14 @@ class FluorescenceControlsController(BaseStatusController):
         row = event.new
         if row is None:
             return
+
         self._loading_row = True
         try:
             self.model.image_tag = row.image_tag
+            # Start then End: for every valid row/panel pair the only
+            # transient both-off state is start switching off ahead of
+            # end, which the model's phase invariant resolves by turning
+            # end on — exactly the row's value, set next anyway.
             self.model.capture_start = row.capture_start
             self.model.capture_end = row.capture_end
             # Auto flags FIRST: an auto OFF-transition adopts the camera's
@@ -334,6 +345,7 @@ class FluorescenceControlsController(BaseStatusController):
             self.model.frequency = row.frequency
             self.model.exposure = row.exposure
             self.model.gain = row.gain
+            self.model.camera_lead_time_ms = row.camera_lead_time_ms
             self.model.wavelength = row.wavelength
         finally:
             self._loading_row = False
@@ -480,6 +492,7 @@ class FluorescenceControlsController(BaseStatusController):
             frequency=self.model.frequency,
             exposure=self.model.exposure,
             gain=self.model.gain,
+            camera_lead_time_ms=self.model.camera_lead_time_ms,
             auto_exposure=self.model.auto_exposure,
             auto_gain=self.model.auto_gain,
             capture_start=self.model.capture_start,

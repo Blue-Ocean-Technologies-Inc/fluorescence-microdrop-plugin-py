@@ -312,6 +312,90 @@ def test_panel_edit_without_selection_does_not_touch_any_row():
     assert row.intensity == 10
 
 
+_PHASE_PAIRS = [(True, False), (False, True), (True, True)]
+
+
+@pytest.mark.parametrize("row_phases", _PHASE_PAIRS, ids=str)
+@pytest.mark.parametrize("panel_phases", _PHASE_PAIRS, ids=str)
+def test_row_load_lands_every_phase_pair_without_write_back(
+    monkeypatch, panel_phases, row_phases
+):
+    """Loading a row assigns start then end; any transient both-off flip
+    the phase invariant makes on the way must neither stick on the panel
+    nor be written back into the selected row or pushed."""
+    calls = []
+    monkeypatch.setattr(
+        controller_mod,
+        "protocol_tree_set_cell_publisher",
+        types.SimpleNamespace(publish=lambda **kw: calls.append(kw)),
+    )
+    controller, model = _controller()
+    model.attached_step_id = "step-1"
+    # From both-on, any valid pair is reachable start-then-end with no flip.
+    model.capture_end = True
+    (model.capture_start, model.capture_end) = panel_phases
+    assert (model.capture_start, model.capture_end) == panel_phases
+
+    row = FluorescenceChainRow(
+        label="A", capture_start=row_phases[0], capture_end=row_phases[1]
+    )
+    model.chain_rows = [row]
+    calls.clear()
+
+    model.chain_selection = row
+
+    assert (model.capture_start, model.capture_end) == row_phases
+    assert (row.capture_start, row.capture_end) == row_phases
+    assert calls == []
+
+
+def test_clicking_end_on_while_start_is_on_keeps_both_in_the_row():
+    controller, model = _controller()
+    row = FluorescenceChainRow(label="A")
+    model.chain_rows = [row]
+    model.chain_selection = row
+
+    model.capture_end = True
+
+    assert (row.capture_start, row.capture_end) == (True, True)
+
+
+def test_switching_off_the_sole_phase_swaps_it_in_the_selected_row():
+    controller, model = _controller()
+    row = FluorescenceChainRow(label="A")
+    model.chain_rows = [row]
+    model.chain_selection = row
+
+    model.capture_start = False
+
+    assert (model.capture_start, model.capture_end) == (False, True)
+    assert (row.capture_start, row.capture_end) == (False, True)
+
+
+# --- camera lead time: panel <-> row --------------------------------------------------
+
+
+def test_add_capture_seeds_camera_lead_time_from_the_panel():
+    controller, model = _controller()
+    model.camera_lead_time_ms = 1500
+
+    controller.add_capture()
+
+    assert model.chain_rows[0].camera_lead_time_ms == 1500
+
+
+def test_camera_lead_time_loads_from_and_writes_back_to_the_selected_row():
+    controller, model = _controller()
+    row = FluorescenceChainRow(label="A", camera_lead_time_ms=3000)
+    model.chain_rows = [row]
+
+    model.chain_selection = row
+    assert model.camera_lead_time_ms == 3000
+
+    model.camera_lead_time_ms = 500
+    assert row.camera_lead_time_ms == 500
+
+
 # --- Run Capture: lazy capture_service import -----------------------------------------
 
 

@@ -17,11 +17,18 @@ chain table (`chain_rows`, `free_chain`, `chain_selection`,
 it round-trips against Task 1's `ChainEntry` (`exposure` <-> `exposure_ms`).
 """
 
+# Third-party imports.
+import pytest
+
+# Enthought library imports.
+from apptools.preferences.api import Preferences
+
 # Microdrop package imports.
 from fluorescence_controller.consts import LED_WAVELENGTHS
 from fluorescence_controls_ui.chain_model import FluorescenceChainRow
 from fluorescence_controls_ui.consts import PERSISTED_CONTROL_TRAITS
 from fluorescence_controls_ui.model import FluorescenceStatusModel
+from fluorescence_controls_ui.preferences import FluorescencePreferences
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 
 # --- FluorescenceChainRow <-> ChainEntry -----------------------------------------
@@ -175,6 +182,7 @@ def test_persisted_control_traits_is_the_new_single_set():
         "frequency",
         "gain",
         "exposure",
+        "camera_lead_time_ms",
         "device_viewer_stream",
         "auto_exposure",
         "auto_gain",
@@ -210,3 +218,79 @@ def test_row_phase_defaults_and_entry_round_trip():
     back = FluorescenceChainRow.from_entry(entry)
     assert back.capture_start is False
     assert back.capture_end is True
+
+
+# --- capture-phase invariant (CapturePhases) ----------------------------------------
+
+
+@pytest.mark.parametrize("model_type", [FluorescenceChainRow, FluorescenceStatusModel])
+def test_switching_off_the_sole_phase_swaps_to_the_other(model_type):
+    """Both toggles stay clickable; the only rule is that one stays on.
+    Clicking the sole lit phase hands it to the other."""
+    model = model_type()
+    assert (model.capture_start, model.capture_end) == (True, False)
+
+    model.capture_start = False
+    assert (model.capture_start, model.capture_end) == (False, True)
+
+    model.capture_end = False
+    assert (model.capture_start, model.capture_end) == (True, False)
+
+
+@pytest.mark.parametrize("model_type", [FluorescenceChainRow, FluorescenceStatusModel])
+def test_phases_switch_independently_while_the_other_is_on(model_type):
+    model = model_type()
+
+    model.capture_end = True
+    assert (model.capture_start, model.capture_end) == (True, True)
+
+    model.capture_start = False
+    assert (model.capture_start, model.capture_end) == (False, True)
+
+    model.capture_start = True
+    model.capture_end = False
+    assert (model.capture_start, model.capture_end) == (True, False)
+
+
+@pytest.mark.parametrize(
+    "phases", [(True, False), (False, True), (True, True)], ids=str
+)
+def test_row_from_entry_keeps_every_valid_phase_pair(phases):
+    entry = ChainEntry(
+        label="x",
+        wavelength=LED_WAVELENGTHS[0],
+        intensity=50,
+        frequency=40000,
+        exposure_ms=10.0,
+        gain=0,
+        capture_start=phases[0],
+        capture_end=phases[1],
+    )
+
+    row = FluorescenceChainRow.from_entry(entry)
+
+    assert (row.capture_start, row.capture_end) == phases
+
+
+# --- camera lead time -----------------------------------------------------------------
+
+
+def test_camera_lead_time_defaults_to_zero_on_row_and_model():
+    # In-memory preferences: the lead time persists, so the process-wide
+    # node could otherwise carry a value over from another run.
+    model = FluorescenceStatusModel(
+        preferences=FluorescencePreferences(preferences=Preferences())
+    )
+
+    assert FluorescenceChainRow().camera_lead_time_ms == 0
+    assert model.camera_lead_time_ms == 0
+
+
+def test_camera_lead_time_round_trips_between_row_and_entry():
+    row = FluorescenceChainRow(label="A", camera_lead_time_ms=2500)
+
+    d = row.to_entry_dict()
+    assert d["camera_lead_time_ms"] == 2500
+
+    back = FluorescenceChainRow.from_entry(ChainEntry(**d))
+    assert back.camera_lead_time_ms == 2500
