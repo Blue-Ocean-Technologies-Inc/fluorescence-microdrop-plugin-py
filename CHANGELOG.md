@@ -1,3 +1,13 @@
+## [v3.1.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.1.0) (2026-10-05)
+
+### Feat
+
+- **capture-chain**: add a per-capture camera lead time ([`2982ad7`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/2982ad78b5ca715ab5f7bb76d2c7bc8e609fd7d1))
+
+### Fix
+
+- **controls-ui**: keep the sole capture phase clickable ([`9bdf0f2`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/9bdf0f21e797ca35abf0816611725e7f190ed291))
+
 ## [v3.0.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.0.0) (2026-09-29)
 
 ### BREAKING CHANGE
