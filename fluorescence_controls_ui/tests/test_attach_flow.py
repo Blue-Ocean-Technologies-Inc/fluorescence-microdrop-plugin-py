@@ -802,3 +802,215 @@ def test_move_capture_refires_selection_for_the_table_highlight(monkeypatch):
 
     assert events and events[-1] is b  # a genuine change ended on b
     assert model.chain_selection is b
+
+
+# --- multi-selection: the chain is written to every selected step ---------------------
+
+
+def _multi_msg(step_id, selected_step_ids, chain_labels=()):
+    """row_selected for current row `step_id` with `selected_step_ids`
+    selected; `cells` carry only the current row's chain, as the tree
+    sends them."""
+    entries = [ChainEntry(**_entry_dict(label)) for label in chain_labels]
+
+    return ProtocolTreeRowSelectedMessage(
+        step_id=step_id,
+        cells={FLUORESCENCE_CHAIN_COLUMN_ID: dump_chain(entries) or None},
+        selected_step_ids=list(selected_step_ids),
+    )
+
+
+def test_multi_selection_attach_on_first_add_writes_each_step(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    msg = _multi_msg("s2", ["s1", "s2", "s3"])
+    controller._on_tree_row_selected(_event(msg))
+
+    controller.add_capture()
+
+    assert [c["step_id"] for c in set_cell] == ["s1", "s2", "s3"]
+    assert all(c["value"] == set_cell[0]["value"] for c in set_cell)
+    assert len(set_cell[0]["value"]) == 1
+
+
+def test_multi_selection_param_edit_writes_each_step_once(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    msg = _multi_msg("s1", ["s1", "s3"], chain_labels=["A"])
+    controller._on_tree_row_selected(_event(msg))
+    model.chain_selection = model.chain_rows[0]
+    set_cell.clear()
+
+    model.intensity = 77
+
+    assert [c["step_id"] for c in set_cell] == ["s1", "s3"]
+    assert all(c["value"][0]["intensity"] == 77 for c in set_cell)
+
+
+def test_multi_selection_delete_writes_each_step(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    msg = _multi_msg("s1", ["s1", "s2"], chain_labels=["A"])
+    controller._on_tree_row_selected(_event(msg))
+
+    controller.delete_capture()
+
+    assert [(c["step_id"], c["value"]) for c in set_cell] == [
+        ("s1", None),
+        ("s2", None),
+    ]
+
+
+def test_back_to_single_selection_writes_one_step(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller._on_tree_row_selected(
+        _event(_multi_msg("s1", ["s1", "s2", "s3"], chain_labels=["A"]))
+    )
+    controller._on_tree_row_selected(
+        _event(_multi_msg("s2", ["s2"], chain_labels=["B"]))
+    )
+    model.chain_selection = model.chain_rows[0]
+    set_cell.clear()
+
+    model.intensity = 12
+
+    assert [c["step_id"] for c in set_cell] == ["s2"]
+
+
+def test_multi_selection_loads_the_primary_steps_chain(monkeypatch):
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    msg = _multi_msg("s3", ["s1", "s2", "s3"], chain_labels=["Primary"])
+
+    controller._on_tree_row_selected(_event(msg))
+
+    assert model.attached_step_id == "s3"
+    assert [r.label for r in model.chain_rows] == ["Primary"]
+    assert model.target_step_ids == ["s1", "s2", "s3"]
+
+
+def test_selection_change_with_same_primary_reloads(monkeypatch):
+    """Adding a step to the selection is a new selection, not an echo:
+    the primary's chain reloads (dropping the row selection) and the
+    write targets follow."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller._on_tree_row_selected(_event(_multi_msg("s1", ["s1"], ["A"])))
+    rows = model.chain_rows
+    model.chain_selection = rows[0]
+
+    controller._on_tree_row_selected(_event(_multi_msg("s1", ["s1", "s2"], ["A"])))
+
+    assert model.chain_selection is None
+    assert model.chain_rows is not rows
+    assert model.target_step_ids == ["s1", "s2"]
+
+
+def test_multi_selection_echo_of_own_edit_keeps_selection(monkeypatch):
+    """N writes produce one rebroadcast (for the current row) carrying the
+    same selection — skipped like a single-step echo."""
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    msg = _multi_msg("s1", ["s1", "s2"], chain_labels=["A", "B"])
+    controller._on_tree_row_selected(_event(msg))
+    rows = model.chain_rows
+    model.chain_selection = rows[1]
+
+    echo = _multi_msg("s1", ["s1", "s2"], chain_labels=["A", "B"])
+    controller._on_tree_row_selected(_event(echo))
+
+    assert model.chain_selection is rows[1]
+    assert model.chain_rows is rows
+
+
+def test_older_core_payload_without_selected_step_ids_targets_one_step(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    msg = ProtocolTreeRowSelectedMessage.deserialize(
+        '{"step_id": "s1", "group_id": null, "cells": {}}'
+    )
+    controller._on_tree_row_selected(_event(msg))
+
+    controller.add_capture()
+
+    assert model.target_step_ids == ["s1"]
+    assert [c["step_id"] for c in set_cell] == ["s1"]
+
+
+def test_deselected_current_row_targets_the_primary_alone(monkeypatch):
+    """Ctrl-click can deselect the current row while others stay
+    selected; the pane still shows (and so writes only) that row."""
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller._on_tree_row_selected(_event(_multi_msg("s3", ["s1", "s2"])))
+
+    controller.add_capture()
+
+    assert [c["step_id"] for c in set_cell] == ["s3"]
+
+
+def test_multi_selection_append_extends_primary_chain_for_all(monkeypatch):
+    monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Append")
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.free_chain = [FluorescenceChainRow(label="F")]
+    model.chain_rows = list(model.free_chain)
+
+    msg = _multi_msg("s1", ["s1", "s2"], chain_labels=["Old"])
+    controller._on_tree_row_selected(_event(msg))
+
+    assert [c["step_id"] for c in set_cell] == ["s1", "s2"]
+    assert all(len(c["value"]) == 2 for c in set_cell)
+    assert model.free_chain == []
+
+
+def test_multi_selection_replace_writes_free_chain_to_all(monkeypatch):
+    monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Replace")
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.free_chain = [FluorescenceChainRow(label="F")]
+    model.chain_rows = list(model.free_chain)
+
+    msg = _multi_msg("s2", ["s1", "s2", "s3"], chain_labels=["Old"])
+    controller._on_tree_row_selected(_event(msg))
+
+    assert [c["step_id"] for c in set_cell] == ["s1", "s2", "s3"]
+    assert all(len(c["value"]) == 1 for c in set_cell)
+
+
+def test_attached_status_text(monkeypatch):
+    _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+
+    assert model.attached_status_text == ""
+
+    msg = _multi_msg("s1", ["s1", "s2", "s3"])
+    msg.cells["id"] = [0, 1]
+    controller._on_tree_row_selected(_event(msg))
+
+    assert model.attached_status_text == "Attached: Step 1.2 (+2 steps)"
+
+    single = _multi_msg("s1", ["s1"])
+    single.cells["id"] = [0, 1]
+    controller._on_tree_row_selected(_event(single))
+
+    assert model.attached_status_text == "Attached: Step 1.2"
+
+    controller._on_tree_row_selected(_event(ProtocolTreeRowSelectedMessage()))
+
+    assert model.attached_status_text == ""
+
+
+def test_protocol_step_applied_resets_targets_to_executing_step(monkeypatch):
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    controller._on_tree_row_selected(_event(_multi_msg("s1", ["s1", "s2"], ["A"])))
+
+    controller._on_protocol_step_applied(
+        _event({"step_uuid": "s2", "chain": [], "firing_label": ""})
+    )
+
+    assert model.attached_step_id == "s2"
+    assert model.target_step_ids == ["s2"]
+    assert set_cell == []

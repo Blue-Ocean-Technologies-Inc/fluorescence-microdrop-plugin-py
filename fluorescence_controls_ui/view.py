@@ -164,6 +164,8 @@ chain_table_editor = TableEditor(
 # selected row, or the last one when nothing is selected.
 _spacing = 16
 chain_group = VGroup(
+    # Which step(s) the chain is written to; blank in free mode.
+    Readonly("attached_status_text", show_label=False),
     HGroup(
         HGroup(
             UItem(

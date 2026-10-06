@@ -117,7 +117,9 @@ class FluorescenceControlsController(BaseStatusController):
     loads into the pane; a group or deselection returns to free mode; a
     free-mode chain holding unsaved captures offers the operator a
     four-way Append / Replace / New step / Cancel choice before the pane
-    switches away from it (see ``_on_tree_row_selected``).
+    switches away from it (see ``_on_tree_row_selected``). With several
+    steps selected the chain loads from the tree's current row (the
+    primary) and every chain edit is written to all selected steps.
     """
 
     #: Guards the panel<->row live binding against write-back loops while
@@ -396,22 +398,31 @@ class FluorescenceControlsController(BaseStatusController):
         self._push_chain_to_step()
 
     def _push_chain_to_step(self):
-        """Persist `chain_rows` to wherever it currently lives: an
-        attached step's cell (tree write-back, blanking the cell when the
-        chain empties), or the free-mode stash (nothing to write to the
-        tree while unattached). Every persist path funnels through here,
-        so this is also where derived labels are refreshed."""
+        """Persist `chain_rows` to wherever it currently lives: every
+        attached step's cell — one set_cell per `target_step_ids` entry,
+        blanking the cells when the chain empties — or the free-mode stash
+        (nothing to write to the tree while unattached). Every persist
+        path funnels through here, so this is also where derived labels
+        are refreshed.
+
+        N writes cost one echo, not N: the tree rebroadcasts row_selected
+        only for its current row, the primary."""
         self._relabel_chain()
-        if self.model.attached_step_id:
-            entries = [ChainEntry(**r.to_entry_dict()) for r in self.model.chain_rows]
-            self._last_local_push = time.monotonic()
-            protocol_tree_set_cell_publisher.publish(
-                step_id=self.model.attached_step_id,
-                col_id=FLUORESCENCE_CHAIN_COLUMN_ID,
-                value=dump_chain(entries) or None,
-            )
-        else:
+
+        if not self.model.attached_step_id:
             self.model.free_chain = list(self.model.chain_rows)
+            return
+
+        entries = [ChainEntry(**r.to_entry_dict()) for r in self.model.chain_rows]
+        value = dump_chain(entries) or None
+        self._last_local_push = time.monotonic()
+
+        for step_id in self.model.target_step_ids:
+            protocol_tree_set_cell_publisher.publish(
+                step_id=step_id,
+                col_id=FLUORESCENCE_CHAIN_COLUMN_ID,
+                value=value,
+            )
 
     # ------------------------------------------------------------------ #
     # Chain-table button wiring (model:add_capture_button/run_capture_button
@@ -517,35 +528,54 @@ class FluorescenceControlsController(BaseStatusController):
             ".".join(str(i + 1) for i in path),
         )
 
-    def _attach_to_step(self, step_id, entries, cells):
+    @staticmethod
+    def _selected_step_ids(msg):
+        """row_selected's `selected_step_ids`; a core predating the field
+        has no such attribute on its message model, which reads as []
+        (the primary alone — `target_step_ids`)."""
+        return list(getattr(msg, "selected_step_ids", None) or [])
+
+    def _attach_to_step(self, msg, entries):
         """Adopt `entries` (a list[ChainEntry]) as the pane's chain,
-        attached to `step_id`, and push the write-back."""
+        attached to the selection in row_selected `msg` (primary
+        `msg.step_id`), and push the write-back to every target step."""
         (self.model.attached_step_desc, self.model.attached_step_dotted) = (
-            self._step_display_context(cells)
+            self._step_display_context(msg.cells)
         )
-        self.model.attached_step_id = step_id
+        self.model.attached_step_id = msg.step_id
+        self.model.selected_step_ids = self._selected_step_ids(msg)
         self.model.attached_group_id = ""
         self.model.chain_selection = None
         self.model.chain_rows = [FluorescenceChainRow.from_entry(e) for e in entries]
         self._push_chain_to_step()
 
-    def _load_step_chain(self, step_id, cells):
+    def _load_step_chain(self, msg):
         """Plain step selection: no free-mode captures were in play, so
-        just load the step's own stored chain.
+        just load the primary step's own stored chain (`msg.cells` — the
+        tree sends only the current row's cells, so with several steps
+        selected the others' chains are not shown; the first edit writes
+        the primary's chain to all of them).
 
         A panel edit on this same attached step publishes set_cell, which
         the tree applies and then rebroadcasts PROTOCOL_TREE_ROW_SELECTED
         for the still-selected step — that echo lands right back here. If
-        the incoming chain matches what `chain_rows` already holds, this
-        is that echo (not a genuine external change): skip the reload so
-        `chain_selection` survives it."""
+        the selection is unchanged and the incoming chain matches what
+        `chain_rows` already holds, this is that echo (not a genuine
+        external change): skip the reload so `chain_selection` survives
+        it. A changed selection (same primary, steps added or dropped)
+        reloads like a fresh selection."""
         # Display context first — idempotent for the echo case below, and
         # it keeps the burst-folder naming fresh across rebroadcasts.
         (self.model.attached_step_desc, self.model.attached_step_dotted) = (
-            self._step_display_context(cells)
+            self._step_display_context(msg.cells)
         )
-        entries = parse_chain(cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
-        if step_id == self.model.attached_step_id:
+        entries = parse_chain(msg.cells.get(FLUORESCENCE_CHAIN_COLUMN_ID))
+        same_selection = (
+            msg.step_id == self.model.attached_step_id
+            and self._selected_step_ids(msg) == self.model.selected_step_ids
+        )
+
+        if same_selection:
             same = [e.model_dump() for e in entries] == [
                 r.to_entry_dict() for r in self.model.chain_rows
             ]
@@ -558,7 +588,9 @@ class FluorescenceControlsController(BaseStatusController):
             )
             if same or recently_pushed:
                 return
-        self.model.attached_step_id = step_id
+
+        self.model.attached_step_id = msg.step_id
+        self.model.selected_step_ids = self._selected_step_ids(msg)
         self.model.attached_group_id = ""
         self.model.chain_selection = None
         self.model.chain_rows = [FluorescenceChainRow.from_entry(e) for e in entries]
@@ -567,6 +599,7 @@ class FluorescenceControlsController(BaseStatusController):
         """Group selected, or nothing selected: restore the free-mode
         stash into the visible chain."""
         self.model.attached_step_id = ""
+        self.model.selected_step_ids = []
         self.model.attached_group_id = ""
         self.model.attached_step_desc = ""
         self.model.attached_step_dotted = ""
@@ -637,10 +670,15 @@ class FluorescenceControlsController(BaseStatusController):
                     merged = existing + [ChainEntry(**r.to_entry_dict()) for r in free]
                 else:  # Replace
                     merged = [ChainEntry(**r.to_entry_dict()) for r in free]
-                self._attach_to_step(msg.step_id, merged, msg.cells)
+
+                # With several steps selected both choices write the one
+                # merged chain to all of them: Append extends the
+                # primary's chain, Replace overwrites every step's.
+                self._attach_to_step(msg, merged)
                 self._clear_free_chain()
                 return
-            self._load_step_chain(msg.step_id, msg.cells)  # plain selection
+
+            self._load_step_chain(msg)  # plain selection
         elif msg.group_id:
             if free:
                 n = len(free)
@@ -684,6 +722,9 @@ class FluorescenceControlsController(BaseStatusController):
             FluorescenceChainRow.from_entry(entry)
             for entry in parse_chain(payload.get("chain") or [])
         ]
+        # The mirror tracks the one executing step, never a selection.
+        self.model.selected_step_ids = []
+
         # Replace the table only when the executing step's chain changed —
         # don't thrash the TableEditor on every entry of the same step.
         if step_uuid != self.model.attached_step_id or [
