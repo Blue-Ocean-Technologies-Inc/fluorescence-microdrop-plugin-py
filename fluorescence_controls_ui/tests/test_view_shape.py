@@ -18,7 +18,11 @@ traitsui object-graph walk — no Qt widget instantiation (that's Task 10).
 from traitsui.api import Group, Item, View
 
 # Microdrop package imports.
+from fluorescence_controls_ui.consts import LED_PROPORTION_TRAITS
 from fluorescence_controls_ui.view import UnifiedView
+
+# Microdrop utils imports.
+from microdrop_utils.traitsui_qt_helpers import IconButtonEditor
 
 
 def _item_names(node):
@@ -157,6 +161,44 @@ def test_camera_lead_time_item_sits_with_the_camera_params():
     item = _find(params_group, "camera_lead_time_ms")
     assert item is not None
     assert item.label == "Camera Lead Time (ms)"
+
+
+def test_mix_preset_items_sit_under_the_mix_sliders():
+    from fluorescence_controls_ui.view import multi_channel_group
+
+    names = _item_names(multi_channel_group)
+
+    for name in (
+        "led_mix_preset_name",
+        "save_led_mix_preset_button",
+        "led_mix_preset",
+        "delete_led_mix_preset_button",
+    ):
+        assert name in names, f"{name!r} missing from the Multi-Channel group"
+
+    assert names.index("led_mix_preset_name") > names.index(LED_PROPORTION_TRAITS[-1])
+
+
+def test_mix_preset_picker_lists_the_model_choices():
+    from fluorescence_controls_ui.view import multi_channel_group
+
+    item = _find(multi_channel_group, "led_mix_preset")
+
+    assert item.editor.name == "led_mix_preset_choices"
+
+
+def test_mix_preset_buttons_are_glyphs_gated_on_their_inputs():
+    from fluorescence_controls_ui.view import multi_channel_group
+
+    save = _find(multi_channel_group, "save_led_mix_preset_button")
+    delete = _find(multi_channel_group, "delete_led_mix_preset_button")
+
+    assert isinstance(save.editor, IconButtonEditor)
+    assert save.editor.glyph == "add"
+    assert save.enabled_when == "led_mix_preset_name.strip()"
+    assert isinstance(delete.editor, IconButtonEditor)
+    assert delete.editor.glyph == "remove"
+    assert delete.enabled_when == "led_mix_preset"
 
 
 def test_camera_lead_time_uses_the_frequency_range_shifting_slider():

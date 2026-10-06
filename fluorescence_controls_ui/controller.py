@@ -303,6 +303,64 @@ class FluorescenceControlsController(BaseStatusController):
             self._publish_lighting(exclusive=True)
 
     # ------------------------------------------------------------------ #
+    # Multi-Channel mix presets                                            #
+    # ------------------------------------------------------------------ #
+    @observe("model:save_led_mix_preset_button")
+    def _save_led_mix_preset_button_clicked(self, event):
+        self.save_led_mix_preset()
+
+    @observe("model:delete_led_mix_preset_button")
+    def _delete_led_mix_preset_button_clicked(self, event):
+        self.delete_led_mix_preset()
+
+    @observe("model:led_mix_preset")
+    def _led_mix_preset_picked(self, event):
+        """Load the picked preset's shares onto the sliders — the path a
+        slider drag takes, so a lit mix relights and a selected mix row
+        re-saves. Picking no preset leaves the sliders as they are."""
+        shares = self.model.led_mix_presets.get(event.new)
+
+        if shares is None:
+            return
+
+        self.model.trait_set(
+            **{
+                name: shares.get(index, 0)
+                for index, name in enumerate(LED_PROPORTION_TRAITS)
+            }
+        )
+
+    def save_led_mix_preset(self):
+        """File the panel's shares under the typed name (overwriting a
+        preset of that name) and show it as the picked preset."""
+        name = self.model.led_mix_preset_name.strip()
+
+        if not name:
+            return
+
+        self.model.led_mix_presets = {
+            **self.model.led_mix_presets,
+            name: self.model.led_proportions(),
+        }
+        self.model.led_mix_preset = name
+
+    def delete_led_mix_preset(self):
+        """Forget the picked preset; the sliders keep their shares."""
+        name = self.model.led_mix_preset
+
+        if not name:
+            return
+
+        # Clear the pick first: the picker must never hold a name its
+        # choices no longer list.
+        self.model.led_mix_preset = ""
+        self.model.led_mix_presets = {
+            key: shares
+            for key, shares in self.model.led_mix_presets.items()
+            if key != name
+        }
+
+    # ------------------------------------------------------------------ #
     # Camera settings — the pane is the ONLY editor (no device-viewer      #
     # settings row): pushed straight into the shared ASI settings, which  #
     # a running camera feed applies live.                                 #

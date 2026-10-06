@@ -12,9 +12,11 @@
 from traits.api import (
     Bool,
     Button,
+    Dict,
     Enum,
     Event,
     Instance,
+    Int,
     List,
     Property,
     Range,
@@ -216,6 +218,27 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
             index: getattr(self, name)
             for index, name in enumerate(LED_PROPORTION_TRAITS)
         }
+
+    # ------------------------------------------------------------------ #
+    # Multi-Channel mix presets                                            #
+    # ------------------------------------------------------------------ #
+    #: Saved mixes: name -> shares in the `led_proportions()` shape.
+    #: Persisted whole through PERSISTED_CONTROL_TRAITS; the controller
+    #: always reassigns it, so every save/delete reaches the preferences.
+    led_mix_presets = Dict(Str, Dict(Int, Int))
+    #: Name the next save files the panel's shares under (an existing
+    #: preset of that name is overwritten).
+    led_mix_preset_name = Str("")
+    #: The picked preset ("" = none); the controller applies a pick to the
+    #: share sliders. Session-only, like the section switches.
+    led_mix_preset = Str("")
+    #: Picker choices: "" (no preset), then the saved names in order.
+    led_mix_preset_choices = Property(List(Str), observe="led_mix_presets.items")
+    save_led_mix_preset_button = Button("add")
+    delete_led_mix_preset_button = Button("remove")
+
+    def _get_led_mix_preset_choices(self):
+        return ["", *sorted(self.led_mix_presets)]
 
     # ------------------------------------------------------------------ #
     # Capture-chain state                                                  #
