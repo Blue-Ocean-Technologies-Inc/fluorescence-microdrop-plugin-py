@@ -249,8 +249,28 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
     #: The selected row (the TableEditor's `selected=` binds an object,
     #: not an index).
     chain_selection = Instance(FluorescenceChainRow)
-    #: uuid of the protocol step `chain_rows` is attached to; "" = free mode.
+    #: uuid of the PRIMARY protocol step `chain_rows` is attached to — the
+    #: tree's current row (row_selected's `step_id`); "" = free mode. The
+    #: chain loads from it and Run Capture names bursts after it. It is the
+    #: current row rather than the first selected because the tree echoes
+    #: a set_cell back (row_selected rebroadcast) only for its current
+    #: row, and the pane's echo guard matches that echo to this id.
     attached_step_id = Str("")
+    #: Every step the tree has selected, in tree order (row_selected's
+    #: `selected_step_ids`; [] from a core that predates it). Chain edits
+    #: are written to all of them — see `target_step_ids`.
+    selected_step_ids = List(Str)
+    #: The steps each chain persist writes to: the selection when it
+    #: holds the primary, else the primary alone (an older core, or a
+    #: Ctrl-click that deselected the current row); [] in free mode.
+    target_step_ids = Property(
+        List(Str), observe="[attached_step_id,selected_step_ids]"
+    )
+    #: Pane status line naming the attached step(s), e.g.
+    #: "Attached: Step 1.2 (+2 steps)"; blank in free mode.
+    attached_status_text = Property(
+        Str, observe="[attached_step_id,attached_step_dotted,selected_step_ids]"
+    )
     #: uuid of the protocol step-group `chain_rows` is attached to.
     attached_group_id = Str("")
     #: Display context of the attached step, read from the row_selected
@@ -281,6 +301,29 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
     #: per-mutation persistence into losing rows).
     move_up_button = Button("arrow_upward")
     move_down_button = Button("arrow_downward")
+
+    def _get_target_step_ids(self):
+        if not self.attached_step_id:
+            return []
+
+        if self.attached_step_id in self.selected_step_ids:
+            return list(self.selected_step_ids)
+
+        return [self.attached_step_id]
+
+    def _get_attached_status_text(self):
+        if not self.attached_step_id:
+            return ""
+
+        step = (
+            f"Step {self.attached_step_dotted}" if self.attached_step_dotted else "step"
+        )
+        others = len(self.target_step_ids) - 1
+
+        if others:
+            return f"Attached: {step} (+{others} step{'s' if others != 1 else ''})"
+
+        return f"Attached: {step}"
 
     @observe(f"[{','.join(PERSISTED_CONTROL_TRAITS)}]", post_init=True)
     def _push_preferences(self, event):
