@@ -112,8 +112,7 @@ params_group = VGroup(
     Item(
         "wavelength",
         label="Wavelength",
-        tooltip="One LED, or Multi-Channel to light several at once "
-        "(live lighting only — captures stay single-wavelength)",
+        tooltip="One LED, or Multi-Channel to light several at once with the mix below",
     ),
     Item("intensity", label="Intensity (%)"),
     multi_channel_group,
@@ -209,11 +208,8 @@ chain_group = VGroup(
             UItem(
                 "add_capture_button",
                 editor=IconButtonEditor(
-                    glyph="add",
-                    tooltip="Add a capture from the panel's params (unavailable "
-                    "in Multi-Channel: captures are single-wavelength)",
+                    glyph="add", tooltip="Add a capture from the panel's params"
                 ),
-                enabled_when="not multi_channel",
             ),
             UItem(
                 "delete_capture_button",
@@ -245,11 +241,9 @@ chain_group = VGroup(
                 "capture_selected_button",
                 editor=IconButtonEditor(
                     glyph="photo_camera",
-                    tooltip="Capture the selected row now, ticked or not "
-                    "(unavailable in Multi-Channel: captures are "
-                    "single-wavelength)",
+                    tooltip="Capture the selected row now (ticked or not)",
                 ),
-                enabled_when="connected and not protocol_running and not multi_channel",
+                enabled_when="connected and not protocol_running",
             ),
             UItem(
                 "run_capture_button",

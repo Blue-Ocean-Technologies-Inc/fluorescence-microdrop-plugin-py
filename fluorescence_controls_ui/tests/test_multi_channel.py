@@ -11,8 +11,8 @@
 """Hardware-free tests for the Multi-Channel mix: per-channel proportions
 scale the single intensity knob into per-LED duties, and the proportions
 persist like the other control values. Also the controller's mode
-switches: entering Multi-Channel lights the mix, leaving it is one
-exclusive set_led, and the mix never reaches a capture-chain row."""
+switches (entering Multi-Channel lights the mix, leaving it is one
+exclusive set_led) and the panel editing a chain row's mix (#31)."""
 
 # Standard library imports.
 import json
@@ -216,17 +216,57 @@ def test_stream_start_sets_every_frequency_then_the_mix(controller, model, publi
     assert published == [*frequencies, _mix(led_1=model.intensity)]
 
 
-def test_multi_channel_releases_and_never_writes_the_chain_row(controller, model):
+def test_switching_the_selected_row_to_multi_gives_it_the_shares(controller, model):
+    row = FluorescenceChainRow(wavelength=LED_WAVELENGTHS[1])
+    model.chain_rows = [row]
+    model.chain_selection = row
+    model.trait_set(led_proportion_0=100, led_proportion_2=50)
+
+    model.wavelength = MULTI_CHANNEL
+
+    assert model.chain_selection is row
+    assert row.wavelength == MULTI_CHANNEL
+    assert row.proportions == {0: 100, 1: 0, 2: 50, 3: 0, 4: 0, 5: 0}
+    assert row.label == "Multi_B100_G50_1"
+    assert model.free_chain[0].to_entry_dict()["proportions"] == row.proportions
+
+
+def test_share_edits_re_save_into_the_selected_mix_row(controller, model):
+    row = FluorescenceChainRow(wavelength=LED_WAVELENGTHS[1])
+    model.chain_rows = [row]
+    model.chain_selection = row
+    model.wavelength = MULTI_CHANNEL
+
+    model.led_proportion_5 = 30
+    model.intensity = 70
+
+    assert row.proportions[5] == 30
+    assert row.intensity == 70
+    assert row.label == "Multi_DR30_1"
+
+
+def test_share_edits_leave_a_single_wavelength_row_alone(controller, model):
     row = FluorescenceChainRow(wavelength=LED_WAVELENGTHS[1])
     model.chain_rows = [row]
     model.chain_selection = row
 
-    model.wavelength = MULTI_CHANNEL
-    model.intensity = 10
+    model.led_proportion_5 = 30
 
-    assert model.chain_selection is None
-    assert row.wavelength == LED_WAVELENGTHS[1]
-    assert row.intensity != 10
+    assert row.proportions == {}
+
+
+def test_mix_row_click_loads_its_shares(controller, model):
+    row = FluorescenceChainRow(
+        wavelength=MULTI_CHANNEL, intensity=40, proportions={1: 70, 3: 20}
+    )
+    model.chain_rows = [row]
+
+    model.chain_selection = row
+
+    assert model.multi_channel
+    assert model.intensity == 40
+    assert model.led_proportions() == {0: 0, 1: 70, 2: 0, 3: 20, 4: 0, 5: 0}
+    assert row.proportions == {1: 70, 3: 20}  # loading never writes back
 
 
 def test_row_click_leaves_multi_channel(controller, model):
@@ -240,9 +280,25 @@ def test_row_click_leaves_multi_channel(controller, model):
     assert not model.multi_channel
 
 
-def test_add_capture_is_refused_in_multi_channel(controller, model):
+def test_add_capture_in_multi_channel_seeds_a_mix_row(controller, model):
+    model.trait_set(led_proportion_2=100, led_proportion_4=40)
     model.wavelength = MULTI_CHANNEL
 
     controller.add_capture()
 
-    assert model.chain_rows == []
+    [row] = model.chain_rows
+    assert row.wavelength == MULTI_CHANNEL
+    assert row.proportions == model.led_proportions()
+    assert row.label == "Multi_G100_R40_1"
+    assert model.chain_selection is row
+
+
+def test_mix_row_click_while_lit_lights_the_rows_mix(lit, model, published):
+    row = FluorescenceChainRow(
+        wavelength=MULTI_CHANNEL, intensity=50, proportions={1: 100}
+    )
+    model.chain_rows = [row]
+
+    model.chain_selection = row
+
+    assert published[-1] == _mix(led_1=50)

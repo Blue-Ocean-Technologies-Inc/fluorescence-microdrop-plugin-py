@@ -132,7 +132,8 @@ class FluorescenceChainColumnModel(BaseColumnModel):
 
 class FluorescenceChainColumnView(BaseColumnView):
     """Read-only summary: ticked count, or ticked/total when some
-    entries are parked (run=False)."""
+    entries are parked (run=False); the tooltip lists the entries by
+    their derived labels, which spell out a Multi-Channel mix."""
 
     #: The pane writes the chain via PROTOCOL_TREE_SET_CELL (bypassing
     #: setData), so declare the dependency for the tree model's per-row
@@ -145,6 +146,16 @@ class FluorescenceChainColumnView(BaseColumnView):
             return ""
         t, n = len(ticked(entries)), len(entries)
         return str(n) if t == n else f"{t}/{n}"
+
+    def get_tooltip(self, row):
+        entries = parse_chain(getattr(row, FLUORESCENCE_CHAIN_COLUMN_ID, None))
+
+        return (
+            "\n".join(
+                f"{entry.label}{'' if entry.run else ' (parked)'}" for entry in entries
+            )
+            or None
+        )
 
     def create_editor(self, parent, context):
         return None  # display-only; the pane owns authoring the chain
@@ -235,10 +246,9 @@ class FluorescenceChainHandler(BaseColumnHandler):
                 capture_service.apply_camera_settings(entry)
                 protocol_set_fluorescence_publisher.publish(
                     light_on=True,
-                    led=entry.led_index,
-                    duty=entry.intensity,
                     frequency=entry.frequency,
                     settle_s=LED_STABILIZATION_S,
+                    **entry.led_request(),
                 )
                 ctx.wait_for(FLUORESCENCE_APPLIED, timeout=self.ack_time_s)
 

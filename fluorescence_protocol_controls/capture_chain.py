@@ -34,7 +34,9 @@ from fluorescence_controller.consts import (
     LED_FREQUENCY_MAX,
     LED_FREQUENCY_MIN,
     LED_WAVELENGTHS,
+    MULTI_CHANNEL,
 )
+from fluorescence_controller.datamodels import LedIndex, LedProportion, scaled_duty
 from fluorescence_controls_ui.cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from fluorescence_controls_ui.consts import (
     CAMERA_LEAD_TIME_MS_DEFAULT,
@@ -48,6 +50,14 @@ from fluorescence_controls_ui.consts import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: Short channel names for mix labels, from the wavelength names' initials
+#: ("Deep Red (660 nm)" -> "DR"), in LED_WAVELENGTHS order.
+LED_SHORT_NAMES = tuple(
+    "".join(word[0] for word in name.split(" (")[0].split()) for name in LED_WAVELENGTHS
+)
+#: The label token that marks a Multi-Channel capture.
+MULTI_CHANNEL_TOKEN = "Multi"
 
 
 class ChainEntry(BaseModel):
@@ -89,10 +99,15 @@ class ChainEntry(BaseModel):
     capture_start: bool = True
     capture_end: bool = False
 
+    # Multi-Channel mix (wavelength == MULTI_CHANNEL only): led index ->
+    # share of `intensity` (%). Absent on single-wavelength entries, which
+    # is also how every entry saved before mixes existed loads.
+    proportions: dict[LedIndex, LedProportion] | None = None
+
     @field_validator("wavelength")
     @classmethod
     def _wavelength_is_known(cls, value):
-        if value not in LED_WAVELENGTHS:
+        if value not in (*LED_WAVELENGTHS, MULTI_CHANNEL):
             raise ValueError(f"Unknown LED wavelength: {value!r}")
         return value
 
@@ -102,9 +117,41 @@ class ChainEntry(BaseModel):
             self.capture_start = True
         return self
 
+    @model_validator(mode="after")
+    def _proportions_match_wavelength(self):
+        """A mix needs its shares; a single wavelength carries none (stray
+        shares are dropped rather than rejected, like the phase coercion)."""
+        if self.multi_channel and not self.proportions:
+            raise ValueError(f"{MULTI_CHANNEL} entry without proportions")
+
+        if not self.multi_channel:
+            self.proportions = None
+
+        return self
+
+    @property
+    def multi_channel(self) -> bool:
+        return self.wavelength == MULTI_CHANNEL
+
     @property
     def led_index(self) -> int:
         return LED_WAVELENGTHS.index(self.wavelength)
+
+    def led_intensities(self) -> dict[int, int]:
+        """The mix at this entry's intensity: every channel's duty (0 for a
+        channel without a share, so nothing else stays lit)."""
+        return {
+            index: scaled_duty(self.intensity, self.proportions.get(index, 0))
+            for index in range(len(LED_WAVELENGTHS))
+        }
+
+    def led_request(self) -> dict:
+        """The LED part of this entry's protocol_set_fluorescence request:
+        the per-channel mix, or the one LED at the intensity."""
+        if self.multi_channel:
+            return {"intensities": self.led_intensities()}
+
+        return {"led": self.led_index, "duty": self.intensity}
 
 
 def parse_chain(value) -> list[ChainEntry]:
@@ -141,12 +188,29 @@ def sanitize_label(label: str) -> str:
     return clean or "capture"
 
 
-def chain_label(image_tag: str, wavelength: str, index: int) -> str:
+def mix_label(proportions) -> str:
+    """A mix's label token: ``Multi`` plus each lit channel's short name and
+    share, e.g. ``Multi B100 G60 R25`` (channels at 0 % are left out)."""
+    shares = [
+        f"{LED_SHORT_NAMES[index]}{share}"
+        for index, share in sorted((proportions or {}).items())
+        if share
+    ]
+
+    return " ".join([MULTI_CHANNEL_TOKEN, *shares])
+
+
+def chain_label(image_tag: str, wavelength: str, index: int, proportions=None) -> str:
     """The DERIVED label of chain position ``index`` (1-based):
     ``image_tag_wavelength_index``, with the optional tag omitted when
-    empty. The index makes labels unique within a chain by construction,
-    which is why there is no suffix-on-collision machinery."""
+    empty and a Multi-Channel wavelength spelled as its ``mix_label``. The
+    index makes labels unique within a chain by construction, which is why
+    there is no suffix-on-collision machinery."""
+    if wavelength == MULTI_CHANNEL:
+        wavelength = mix_label(proportions)
+
     parts = (
         [image_tag, wavelength, str(index)] if image_tag else [wavelength, str(index)]
     )
+
     return sanitize_label("_".join(parts))

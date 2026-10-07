@@ -47,6 +47,7 @@ from .consts import (
     EXPOSURE_MS_MIN,
     LED_PROPORTION_TRAITS,
     LED_WAVELENGTHS,
+    MULTI_CHANNEL,
     SET_LED,
     SET_LED_FREQUENCY,
 )
@@ -107,12 +108,12 @@ class FluorescenceControlsController(BaseStatusController):
     sequence atomically (two pub/sub messages would have no ordering
     guarantee).
 
-    Multi-Channel is a panel-only live-lighting mode: the mix (every
-    channel at intensity x its proportion) goes out as one
-    set_led_intensities request, the chain row being edited is released on
-    entry, and Add / Capture-selected stay off — capture-chain rows and the
-    protocol column remain single-wavelength. Leaving the mode for one LED
-    is the usual exclusive set_led (all off, then that LED).
+    Multi-Channel lights a mix (every channel at intensity x its
+    proportion) as one set_led_intensities request. Like any wavelength it
+    is also a chain-row param: the selected row takes the mode and the
+    panel's shares, share edits re-save into it, Add seeds a mix row, and
+    a mix row click loads its shares into the panel. Leaving the mode for
+    one LED is the usual exclusive set_led (all off, then that LED).
 
     The standalone 0.5 s duplicate-command debounce is unnecessary here:
     trait observers only fire on actual value changes.
@@ -279,8 +280,17 @@ class FluorescenceControlsController(BaseStatusController):
 
     @observe(f"model:{LED_PROPORTION_TRAITS_EXPRESSION}")
     def _proportion_changed(self, event):
-        if self.model.multi_channel and self._live():
+        """Relight the mix, and re-save the shares into a selected mix row
+        (the proportions counterpart of the panel<->row binding below)."""
+        if not self.model.multi_channel:
+            return
+
+        if self._live():
             self._publish_mix()
+
+        if not self._loading_row and self.model.chain_selection is not None:
+            self.model.chain_selection.proportions = self.model.led_proportions()
+            self._push_chain_to_step()
 
     @observe("model:frequency")
     def _frequency_changed(self, event):
@@ -289,12 +299,6 @@ class FluorescenceControlsController(BaseStatusController):
 
     @observe("model:wavelength")
     def _wavelength_changed(self, event):
-        """Entering Multi-Channel releases the edited chain row (rows stay
-        single-wavelength); a row click loading its wavelength is what
-        leaves the mode again."""
-        if self.model.multi_channel:
-            self.model.chain_selection = None
-
         if self._live():
             self._publish_lighting(exclusive=True)
 
@@ -384,6 +388,13 @@ class FluorescenceControlsController(BaseStatusController):
             self.model.exposure = row.exposure
             self.model.gain = row.gain
             self.model.camera_lead_time_ms = row.camera_lead_time_ms
+            if row.wavelength == MULTI_CHANNEL:
+                self.model.trait_set(
+                    **{
+                        name: row.proportions.get(index, 0)
+                        for index, name in enumerate(LED_PROPORTION_TRAITS)
+                    }
+                )
             self.model.wavelength = row.wavelength
         finally:
             self._loading_row = False
@@ -391,14 +402,16 @@ class FluorescenceControlsController(BaseStatusController):
     @observe(f"model:{CHAIN_ROW_PARAM_TRAITS_EXPRESSION}")
     def _sync_panel_to_selected_row(self, event):
         """A panel edit re-saves into the selected row (guarded against
-        echoing a row-click load) and pushes the chain out."""
-        if (
-            self._loading_row
-            or self.model.multi_channel
-            or self.model.chain_selection is None
-        ):
+        echoing a row-click load) and pushes the chain out. Switching the
+        row to Multi-Channel hands it the panel's shares too."""
+        row = self.model.chain_selection
+        if self._loading_row or row is None:
             return
-        setattr(self.model.chain_selection, event.name, event.new)
+
+        if event.name == "wavelength" and self.model.multi_channel:
+            row.proportions = self.model.led_proportions()
+
+        setattr(row, event.name, event.new)
         self._push_chain_to_step()
 
     def _relabel_chain(self, rows=None):
@@ -410,7 +423,9 @@ class FluorescenceControlsController(BaseStatusController):
         rewrites below fire no reentrant events."""
         rows = self.model.chain_rows if rows is None else rows
         for i, row in enumerate(rows):
-            expected = chain_label(row.image_tag, row.wavelength, i + 1)
+            expected = chain_label(
+                row.image_tag, row.wavelength, i + 1, row.proportions
+            )
             if row.label != expected:
                 row.label = expected
 
@@ -526,10 +541,8 @@ class FluorescenceControlsController(BaseStatusController):
         """Append a new row seeded from the panel's current values,
         select it (re-loading it into the panel — a no-op), and persist
         the chain; the push derives the new row's label from its tag,
-        wavelength, and position."""
-        if self.model.multi_channel:
-            return
-
+        wavelength (a mix row also takes the panel's shares), and
+        position."""
         row = FluorescenceChainRow(
             image_tag=self.model.image_tag,
             wavelength=self.model.wavelength,
@@ -542,6 +555,7 @@ class FluorescenceControlsController(BaseStatusController):
             auto_gain=self.model.auto_gain,
             capture_start=self.model.capture_start,
             capture_end=self.model.capture_end,
+            proportions=self.model.led_proportions(),
         )
         self.model.chain_rows = self.model.chain_rows + [row]
         self.model.chain_selection = row
@@ -798,7 +812,7 @@ class FluorescenceControlsController(BaseStatusController):
         """Capture ONLY the selected row, now, ticked or not (`run` is
         forced on for this one-shot; the row's stored tick is untouched)."""
         row = self.model.chain_selection
-        if self.model.protocol_running or self.model.multi_channel or row is None:
+        if self.model.protocol_running or row is None:
             return
         self._start_burst([ChainEntry(**{**row.to_entry_dict(), "run": True})])
 

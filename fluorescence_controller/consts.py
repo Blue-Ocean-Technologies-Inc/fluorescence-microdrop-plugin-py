@@ -67,6 +67,9 @@ LED_WAVELENGTHS = (
     "Deep Red (660 nm)",
 )
 LED_DUTY_MIN, LED_DUTY_MAX = 0, 100
+# Wavelength choice for a per-channel mix instead of one LED: the controls
+# pane's Multi-Channel mode and a capture-chain entry holding proportions.
+MULTI_CHANNEL = "Multi-Channel"
 LED_FREQUENCY_MIN, LED_FREQUENCY_MAX = 20, 100000
 
 # Service Request Topics
