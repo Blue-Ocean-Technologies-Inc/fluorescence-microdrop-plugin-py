@@ -1,3 +1,9 @@
+## [v3.5.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.5.0) (2026-10-07)
+
+### Feat
+
+- **controls-ui**: attach the capture chain to every selected step ([`51deae4`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/51deae4f70a106c69d29b4489bce85100a41e481))
+
 ## [v3.4.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.4.0) (2026-10-07)
 
 ### Feat
