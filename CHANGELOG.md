@@ -1,3 +1,9 @@
+## [v3.5.1](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.5.1) (2026-10-07)
+
+### Fix
+
+- **camera**: hand off ASI frames on the camera thread ([`6cc61b1`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/6cc61b18ba8135ff664b54c0d3c6ce1924b47ad7))
+
 ## [v3.5.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.5.0) (2026-10-07)
 
 ### Feat
