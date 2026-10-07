@@ -1,3 +1,11 @@
+## [v3.3.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.3.0) (2026-10-07)
+
+### Feat
+
+- **ui**: edit and run Multi-Channel chain rows ([`28dc153`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/28dc153daec8ba2bc706823870e1abe95856bace))
+- **controller**: apply a Multi-Channel mix in protocol steps ([`5e00c7b`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/5e00c7b291bc657dd3d2f4170caad411c2ce0a4c))
+- **chain**: let a capture-chain entry hold a Multi-Channel mix ([`0214c97`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/0214c9723368103d32a6c6a0343854ec575cbc4b))
+
 ## [v3.2.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.2.0) (2026-10-07)
 
 ### Feat
