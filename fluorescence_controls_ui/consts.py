@@ -111,3 +111,13 @@ ASI_DRIVER_URL = (
 #: (capture_service.utc_stamp writes it; the core image_viewer plugin's
 #: discovery.capture_timestamp parses it back).
 CAPTURE_TIMESTAMP_FORMAT = "%Y_%m_%d-%H_%M_%S"
+
+#: QImage.save quality for capture PNGs. Qt maps PNG quality q to zlib
+#: level (100 - q) * 9 // 91: 85 is level 1 — lossless like every level,
+#: far faster to encode than the default 6 for a slightly larger file
+#: (90 and above would store uncompressed).
+CAPTURE_PNG_QUALITY = 85
+
+#: Suffix of a capture while it is being written; the finished file is
+#: renamed into place, and image discovery never matches this suffix.
+CAPTURE_PARTIAL_SUFFIX = ".partial"
