@@ -11,7 +11,7 @@
 """ASI camera frame-grabber thread + display-conversion helpers.
 
 Port of the standalone app's ``ASIVideoThread``: open/init the camera on the
-thread, loop single-frame captures, emit each frame as a numpy array. The
+thread, loop single-frame captures, hand each frame to a `FrameMailbox`. The
 display helpers are pure functions so they stay hardware-free testable.
 """
 
@@ -164,10 +164,73 @@ def frame_to_qimage(img: np.ndarray) -> QImage:
     return qimage.copy()
 
 
-class ASIVideoThread(QThread):
-    """Grabs frames from an ASI camera and emits them for display."""
+class FrameMailbox:
+    """Latest-wins handoff of raw frames from the camera thread.
 
-    change_pixmap_signal = Signal(np.ndarray)
+    The camera thread `put`s every frame here itself, so a capture waiting
+    for a fresh frame never depends on the GUI event loop. The preview path
+    holds at most one pending notification (`claim_preview` /
+    `take_preview`) and always takes the newest frame, so a stalled GUI
+    never accumulates a backlog of full-resolution frames."""
+
+    def __init__(self):
+        self._condition = threading.Condition()
+        self._frame = None
+        self._seq = 0
+        self._preview_pending = False
+
+    @property
+    def frame(self):
+        """The newest raw frame, or None before the first lands."""
+        with self._condition:
+            return self._frame
+
+    @property
+    def seq(self):
+        """Bumped with every stored frame, so a reader can wait for a
+        frame strictly newer than one it saw."""
+        with self._condition:
+            return self._seq
+
+    def put(self, frame):
+        """Store ``frame`` as the newest and wake every waiter."""
+        with self._condition:
+            self._frame = frame
+            self._seq += 1
+            self._condition.notify_all()
+
+    def wait_after(self, seq, timeout):
+        """Block until a frame newer than ``seq`` is stored; False on
+        timeout."""
+        with self._condition:
+            return self._condition.wait_for(
+                lambda: self._seq > seq and self._frame is not None, timeout
+            )
+
+    def claim_preview(self):
+        """True when no preview was pending (one is now) — the caller then
+        notifies the GUI exactly once."""
+        with self._condition:
+            if self._preview_pending:
+                return False
+
+            self._preview_pending = True
+            return True
+
+    def take_preview(self):
+        """Release the pending preview and return the newest frame."""
+        with self._condition:
+            self._preview_pending = False
+            return self._frame
+
+
+class ASIVideoThread(QThread):
+    """Grabs frames from an ASI camera into its `frames` mailbox and
+    notifies the GUI when a preview frame is ready."""
+
+    #: A preview frame waits in `frames`: at most one notification is in
+    #: flight, and the receiver takes the frame with `frames.take_preview()`.
+    preview_ready_signal = Signal()
     #: Camera capabilities (CAMERA_CAPS_TRAITS dict), emitted once after
     #: init so the UI can narrow its choices to what the camera supports.
     camera_caps_signal = Signal(dict)
@@ -187,11 +250,18 @@ class ASIVideoThread(QThread):
         self.running = True
         self.exposure = exposure  # microseconds
         self.gain = gain
-        # Advanced settings (controls + ROI format) queue up here and are
-        # applied on THIS thread between frames — the SDK forbids ROI
-        # changes during an exposure. The initial dict is applied right
+        #: Every captured raw frame, handed off on THIS thread.
+        self.frames = FrameMailbox()
+        #: Notify the GUI of preview frames only while the device-viewer
+        #: stream is on (the feed writes this plain attribute).
+        self.preview_enabled = False
+        # Exposure/gain and advanced settings (controls + ROI format) queue
+        # up here and are applied on THIS thread between frames, so only the
+        # capture loop drives the SDK handle (the SDK forbids ROI changes
+        # during an exposure). The initial advanced dict is applied right
         # after camera init, before the first frame.
         self._advanced_lock = threading.Lock()
+        self._pending_camera_settings = {}
         self._pending_advanced = dict(advanced or {})
         # The full ROI trio must be re-sent together, so remember the
         # last-applied values to fill in whichever the change omits.
@@ -208,7 +278,25 @@ class ASIVideoThread(QThread):
         self._last_temperature_poll = 0.0
 
     def set_camera_settings(self, exposure=None, gain=None):
-        """Update live capture settings (applied by the running camera)."""
+        """Queue exposure (us) / gain changes from any thread; the capture
+        loop applies them before the next frame."""
+        settings = {"exposure": exposure, "gain": gain}
+
+        with self._advanced_lock:
+            self._pending_camera_settings.update(
+                {name: value for name, value in settings.items() if value is not None}
+            )
+
+    def _apply_pending_camera_settings(self):
+        with self._advanced_lock:
+            pending = self._pending_camera_settings
+            self._pending_camera_settings = {}
+
+        if pending:
+            self._apply_camera_settings(**pending)
+
+    def _apply_camera_settings(self, exposure=None, gain=None):
+        """Apply exposure/gain to the running camera (capture thread only)."""
         if exposure is not None:
             self.exposure = exposure
         if gain is not None:
@@ -302,14 +390,12 @@ class ASIVideoThread(QThread):
             frame_error_count = 0
             while self.running:
                 try:
+                    self._apply_pending_camera_settings()
                     self._apply_pending_advanced()
                     img = self.camera.capture_image()
                     if img is not None:
                         frame_error_count = 0
-                        # Raw sensor data (16-bit for RAW16 cameras): the
-                        # consumer converts for display and can keep the raw
-                        # frame for captures.
-                        self.change_pixmap_signal.emit(img)
+                        self._hand_off_frame(img)
                         self._auto_adjust(img)
                         if self.auto_exposure or self.auto_gain:
                             self.auto_values_signal.emit(self.exposure, self.gain)
@@ -344,6 +430,16 @@ class ASIVideoThread(QThread):
         finally:
             self.cleanup_camera()
 
+    def _hand_off_frame(self, img):
+        """Store the raw sensor frame (16-bit for RAW16 cameras) for
+        captures and, while the preview is on, notify the GUI unless a
+        notification is already pending — the GUI then takes the newest
+        frame, so a stall drops preview frames instead of queueing them."""
+        self.frames.put(img)
+
+        if self.preview_enabled and self.frames.claim_preview():
+            self.preview_ready_signal.emit()
+
     def _auto_adjust(self, img):
         """Software auto-exposure/auto-gain, one step per frame: nudge the
         frame's 8-bit display mean toward the target (native-app Auto tab
@@ -372,7 +468,7 @@ class ASIVideoThread(QThread):
                     f"Auto exposure: mean {mean:.0f} -> target "
                     f"{target:.0f}, exposure {new_exposure} us"
                 )
-                self.set_camera_settings(exposure=new_exposure)
+                self._apply_camera_settings(exposure=new_exposure)
                 return
         if self.auto_gain:
             step = int(60 * math.log2(ratio))
@@ -384,7 +480,7 @@ class ASIVideoThread(QThread):
                     f"Auto gain: mean {mean:.0f} -> target "
                     f"{target:.0f}, gain {new_gain}"
                 )
-                self.set_camera_settings(gain=new_gain)
+                self._apply_camera_settings(gain=new_gain)
 
     def _poll_temperature(self):
         """Report the sensor temperature every few seconds (the SDK's

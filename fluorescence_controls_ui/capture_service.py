@@ -108,28 +108,33 @@ def burst_folder(step_desc: str | None, dotted_id: str | None) -> Path:
 
 
 def apply_camera_settings(entry) -> None:
-    """Mirror the entry's exposure/gain into the shared ASI settings ON
-    THE GUI THREAD (the burst runs off it; the settings singleton and the
-    running feed's observers live with the GUI) — same ms->us marshalling
-    the deleted per-step compound column's `_apply_camera_settings` used.
+    """Apply the entry's exposure/gain straight to the active feed's camera
+    thread (the burst runs off the GUI thread, and a GUI stall must not
+    delay — or outlast — the capture), then mirror them into the shared ASI
+    settings ON THE GUI THREAD, where the singleton and the pane live.
 
     The entry's per-row auto modes ride along: with auto on, the capture
     thread's brightness loop owns exposure/gain during the settle window
     and the stored values are only the starting point."""
-    GUI.invoke_later(
-        asi_camera_settings.trait_set,
+    settings = dict(
         exposure=int(entry.exposure_ms * 1000),
         gain=entry.gain,
         auto_exposure=entry.auto_exposure,
         auto_gain=entry.auto_gain,
     )
+    feed = current_feed()
+
+    if feed is not None:
+        feed.apply_capture_settings(**settings)
+
+    GUI.invoke_later(asi_camera_settings.trait_set, **settings)
 
 
 def save_entry_capture(entry, folder: Path) -> Path:
     """Wait for a fresh frame from the active feed and save it: the raw
     16-bit sensor frame (lossless) under `16bit_raw/`, plus an 8-bit
     display conversion next to it — the SAME conversion chain
-    `AsiCameraFeed._on_thread_frame` uses for previews (`to_display_8bit`
+    `AsiCameraFeed._on_preview_ready` uses for previews (`to_display_8bit`
     -> `debayered_to_rgb` -> the QImage constructor helper), minus the
     preview-only gamma/contrast/brightness adjustment and timestamp stamp,
     which never touch saved captures either. Returns the display path."""

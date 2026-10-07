@@ -17,11 +17,14 @@ timeout paths.
 No real ASI hardware anywhere: `ASIVideoThread` is replaced with a fake
 (mirrors test_camera_settings.py's `FakeThread` convention) for the
 registry tests, and `run_burst`'s feed is a tiny stub carrying the two
-attributes `wait_for_frame_after` needs (`frame_seq`, `_last_raw`).
+attributes `wait_for_frame_after` needs (`frame_seq`, `_last_raw`). The
+frame-handoff tests drive a real, never-started `ASIVideoThread` from a
+plain Python thread: no camera and no GUI event loop.
 """
 
 # Standard library imports.
 import sys
+import threading
 import time
 
 # Third-party imports.
@@ -87,14 +90,16 @@ class _FakeSignal:
 
 
 class _FakeThread:
-    change_pixmap_signal = _FakeSignal()
+    preview_ready_signal = _FakeSignal()
     camera_caps_signal = _FakeSignal()
     temperature_signal = _FakeSignal()
     auto_values_signal = _FakeSignal()
     error_signal = _FakeSignal()
 
     def __init__(self, *args, **kwargs):
-        pass
+        from fluorescence_controls_ui.cameras.asi_thread import FrameMailbox
+
+        self.frames = FrameMailbox()
 
     def set_auto_settings(self, **settings):
         pass
@@ -143,50 +148,167 @@ def test_stop_does_not_clear_registry_when_superseded(provider_module):
         feed2.stop()
 
 
-def test_frame_seq_increments_before_last_raw_is_stored(provider_module):
+def test_feed_reads_frames_from_the_thread_mailbox(provider_module):
     feed = provider_module.AsiCameraFeed("sdk", 0)
+
     try:
         assert feed.frame_seq == 0
         assert feed._last_raw is None
+
         raw = np.zeros((2, 2), dtype=np.uint16)
-        feed._on_thread_frame(raw)
+        feed._thread.frames.put(raw)
         assert feed.frame_seq == 1
         assert feed._last_raw is raw
-        feed._on_thread_frame(raw)
+
+        feed._thread.frames.put(raw)
         assert feed.frame_seq == 2
     finally:
         feed.stop()
 
 
-# --- wait_for_frame_after (real method, bound onto a plain stub) -------
+# --- FrameMailbox --------------------------------------------------------
 
 
 @pytest.fixture
-def frame_stub_cls(provider_module):
-    class _Stub:
-        wait_for_frame_after = provider_module.AsiCameraFeed.wait_for_frame_after
+def mailbox():
+    from fluorescence_controls_ui.cameras.asi_thread import FrameMailbox
 
-        def __init__(self, frame_seq=0, raw=None):
-            self.frame_seq = frame_seq
-            self._last_raw = raw
-
-    return _Stub
+    return FrameMailbox()
 
 
-def test_wait_for_frame_after_returns_true_once_seq_advances(frame_stub_cls):
-    stub = frame_stub_cls(frame_seq=5, raw=np.zeros((2, 2), dtype=np.uint16))
-    assert stub.wait_for_frame_after(4, timeout=0.5) is True
+def test_wait_after_returns_true_once_seq_advances(mailbox):
+    mailbox.put(np.zeros((2, 2), dtype=np.uint16))
+    assert mailbox.wait_after(0, timeout=0.5) is True
 
 
-def test_wait_for_frame_after_times_out_when_seq_does_not_advance(frame_stub_cls):
-    stub = frame_stub_cls(frame_seq=4, raw=np.zeros((2, 2), dtype=np.uint16))
-    assert stub.wait_for_frame_after(4, timeout=0.05) is False
+def test_wait_after_times_out_when_seq_does_not_advance(mailbox):
+    mailbox.put(np.zeros((2, 2), dtype=np.uint16))
+    assert mailbox.wait_after(1, timeout=0.05) is False
 
 
-def test_wait_for_frame_after_requires_a_stored_raw_frame(frame_stub_cls):
-    # seq advanced but no frame landed yet: must still time out.
-    stub = frame_stub_cls(frame_seq=5, raw=None)
-    assert stub.wait_for_frame_after(4, timeout=0.05) is False
+def test_wait_after_requires_a_stored_raw_frame(mailbox):
+    # Nothing landed yet: even a wait for "anything newer" times out.
+    assert mailbox.wait_after(-1, timeout=0.05) is False
+
+
+# --- camera-thread frame handoff (no GUI event loop) ---------------------
+
+
+@pytest.fixture
+def video_thread():
+    """A real ASIVideoThread that is never started: tests call its
+    capture-loop steps directly, from whichever thread they choose."""
+    from fluorescence_controls_ui.cameras.asi_thread import ASIVideoThread
+
+    return ASIVideoThread("sdk", 0)
+
+
+def test_frame_seq_advances_on_the_camera_thread_without_a_gui_loop():
+    from fluorescence_controls_ui.cameras import provider
+
+    feed = provider.AsiCameraFeed("sdk", 0)
+    # Captures alone: no preview notification is ever queued to the GUI.
+    feed._thread.preview_enabled = False
+    raw = np.full((2, 2), 7, dtype=np.uint16)
+
+    try:
+        camera_thread = threading.Thread(
+            target=feed._thread._hand_off_frame, args=(raw,)
+        )
+        camera_thread.start()
+        camera_thread.join(timeout=2.0)
+
+        assert feed.frame_seq == 1
+        assert feed._last_raw is raw
+    finally:
+        feed.stop()
+
+
+def test_wait_for_frame_after_wakes_on_the_camera_thread_update():
+    from fluorescence_controls_ui.cameras import provider
+
+    feed = provider.AsiCameraFeed("sdk", 0)
+    # Captures alone: no preview notification is ever queued to the GUI.
+    feed._thread.preview_enabled = False
+    raw = np.full((2, 2), 7, dtype=np.uint16)
+    seq = feed.frame_seq
+    camera_thread = threading.Timer(0.1, feed._thread._hand_off_frame, args=(raw,))
+
+    try:
+        camera_thread.start()
+        started = time.monotonic()
+
+        assert feed.wait_for_frame_after(seq, timeout=5.0) is True
+        assert time.monotonic() - started < 2.0
+        assert feed._last_raw is raw
+    finally:
+        camera_thread.cancel()
+        feed.stop()
+
+
+def test_pending_preview_frames_coalesce_to_the_newest(video_thread):
+    notifications = []
+    video_thread.preview_ready_signal.connect(lambda: notifications.append(1))
+    video_thread.preview_enabled = True
+    frames = [np.full((2, 2), value, dtype=np.uint16) for value in (1, 2, 3)]
+
+    for frame in frames:
+        video_thread._hand_off_frame(frame)
+
+    # One notification for the whole backlog; the GUI takes the newest.
+    assert len(notifications) == 1
+    assert video_thread.frames.take_preview() is frames[-1]
+
+    video_thread._hand_off_frame(frames[0])
+    assert len(notifications) == 2
+
+
+def test_no_preview_notification_while_the_stream_is_off(video_thread):
+    notifications = []
+    video_thread.preview_ready_signal.connect(lambda: notifications.append(1))
+    video_thread.preview_enabled = False
+
+    video_thread._hand_off_frame(np.zeros((2, 2), dtype=np.uint16))
+
+    assert notifications == []
+    assert video_thread.frames.seq == 1
+
+
+def test_camera_settings_apply_on_the_capture_loop(video_thread):
+    applied = []
+
+    class _Camera:
+        def set_camera_settings(self, exposure, gain):
+            applied.append((exposure, gain))
+
+    video_thread.camera = _Camera()
+    video_thread.set_camera_settings(exposure=5_000)
+    assert applied == []
+
+    video_thread._apply_pending_camera_settings()
+    assert applied == [(5_000, video_thread.gain)]
+    assert video_thread.exposure == 5_000
+
+
+def test_apply_camera_settings_reaches_the_feed_without_the_gui(monkeypatch):
+    """A stalled GUI (invoke_later never runs) must not hold back the
+    entry's exposure/gain on their way to the camera."""
+    received = []
+
+    class _Feed:
+        def apply_capture_settings(self, **settings):
+            received.append(settings)
+
+    monkeypatch.setattr(capture_service, "current_feed", lambda: _Feed())
+    monkeypatch.setattr(
+        capture_service.GUI, "invoke_later", lambda func, *args, **kwargs: None
+    )
+
+    capture_service.apply_camera_settings(_entry("A", exposure_ms=12.5, gain=40))
+
+    assert received == [
+        dict(exposure=12_500, gain=40, auto_exposure=False, auto_gain=False)
+    ]
 
 
 # --- notify_applied / arm_applied / wait_applied ------------------------
@@ -270,6 +392,9 @@ class _RunFeed:
         self.frame_seq += 1
         self._last_raw = np.full((2, 2), 1000, dtype=np.uint16)
         return True
+
+    def apply_capture_settings(self, **settings):
+        pass
 
 
 @pytest.fixture
