@@ -78,6 +78,11 @@ SEND_COMMAND = f"{DEVICE_NAME}/requests/send_command"
 SET_LED = f"{DEVICE_NAME}/requests/set_led"
 SET_LED_FREQUENCY = f"{DEVICE_NAME}/requests/set_led_frequency"
 ALL_LEDS_OFF = f"{DEVICE_NAME}/requests/all_leds_off"
+# Multi-channel mix: JSON {"intensities": {<led index>: <duty>}}, applied as
+# one contiguous led_<index>_<duty> sequence. The firmware has no per-channel
+# multi-set (leda_<duty> drives every LED at the SAME duty) and no limit on
+# total output, so every channel is set individually and nothing is scaled.
+SET_LED_INTENSITIES = f"{DEVICE_NAME}/requests/set_led_intensities"
 ALL_LEDS_ON = f"{DEVICE_NAME}/requests/all_leds_on"
 # Protocol-driven atomic apply: one step's LED state (frequency + exclusive
 # off->on set, or all off) + settle in ONE handler call. The backend acks

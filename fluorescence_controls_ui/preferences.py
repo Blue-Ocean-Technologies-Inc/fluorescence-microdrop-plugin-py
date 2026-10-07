@@ -46,6 +46,8 @@ from .consts import (
     FREQUENCY_DEFAULT,
     GAIN_DEFAULT,
     INTENSITY_DEFAULT,
+    LED_PROPORTION_DEFAULT,
+    LED_PROPORTION_TRAITS,
     LED_WAVELENGTHS,
 )
 
@@ -147,6 +149,18 @@ class FluorescencePreferences(PreferencesHelper):
     auto_max_exposure_unit = Str("ms", desc="Unit of the max exposure limit: ms or s")
 
     firmware_source = Directory(desc="Firmware directory or zip file")
+
+
+# Multi-Channel proportions, one preference key per LED channel (generated
+# from LED_PROPORTION_TRAITS so the keys follow the channel list).
+for _index, _name in enumerate(LED_PROPORTION_TRAITS):
+    FluorescencePreferences.add_class_trait(
+        _name,
+        Int(
+            LED_PROPORTION_DEFAULT,
+            desc=f"Multi-Channel share of {LED_WAVELENGTHS[_index]} (%)",
+        ),
+    )
 
 
 fluorescence_tab = PreferencesCategory(

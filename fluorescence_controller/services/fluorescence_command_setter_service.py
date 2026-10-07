@@ -24,6 +24,7 @@ from ..datamodels import (
     ProtocolSetFluorescenceData,
     SetLedData,
     SetLedFrequencyData,
+    SetLedIntensitiesData,
 )
 from ..fluorescence_serial_proxy import FluorescenceSerialProxy
 from ..interfaces.i_fluorescence_control_mixin_service import (
@@ -62,6 +63,18 @@ class FluorescenceCommandSetterService(HasTraits):
             if data.exclusive:
                 self.proxy.send_command("led_off")
             self.proxy.send_command(f"led_{data.led}_{data.duty}")
+
+    def on_set_led_intensities_request(self, body):
+        """Drive several LEDs at once (Multi-Channel mode) in one handler
+        call. The firmware has no multi-duty command, so each channel gets
+        its own led_<index>_<duty> line; the transaction lock keeps the
+        sequence contiguous on the wire, so no other request can land in
+        the middle of a mix."""
+        data = SetLedIntensitiesData(**json.loads(body))
+
+        with self.proxy.transaction_lock:
+            for led, duty in sorted(data.intensities.items()):
+                self.proxy.send_command(f"led_{led}_{duty}")
 
     def on_set_led_frequency_request(self, body):
         data = SetLedFrequencyData(**json.loads(body))
