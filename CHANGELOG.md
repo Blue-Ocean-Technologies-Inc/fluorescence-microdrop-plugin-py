@@ -1,3 +1,13 @@
+## [v3.2.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.2.0) (2026-10-07)
+
+### Feat
+
+- **ui**: collapsible Multi-Channel mix group ([`75108ec`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/75108eca4b7d62f1a5110bf79eb82fc2e6c9f714))
+- **ui**: show the Multi-Channel mix sliders in the pane ([`c38f585`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/c38f585cc6dc7bcc0127d7e3684885751dc5145d))
+- **ui**: add a Multi-Channel LED mode to the controls pane ([`fde4e8d`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/fde4e8d7490e0bb87b80e28f1efaf215ec306512))
+- **ui**: persist per-channel Multi-Channel proportions ([`bfdaddf`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/bfdaddf3029314572d6230b9062452ec2cc30db8))
+- **controller**: add a validated set_led_intensities request ([`d060170`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/d06017004654e25bc5c4d13933493d3fbb9cf8c7))
+
 ## [v3.1.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.1.0) (2026-10-05)
 
 ### Feat
