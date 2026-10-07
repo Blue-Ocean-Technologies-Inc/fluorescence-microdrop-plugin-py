@@ -1,3 +1,9 @@
+## [v3.5.2](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.5.2) (2026-10-07)
+
+### Fix
+
+- **capture**: write capture PNGs atomically, faster ([`33b7737`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/33b77378c7066660b60b473282327f16c1f6cadc))
+
 ## [v3.5.1](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.5.1) (2026-10-07)
 
 ### Fix
