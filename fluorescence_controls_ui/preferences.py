@@ -18,7 +18,7 @@ fluorescence plugin's own traits.
 # Enthought library imports.
 from apptools.preferences.api import PreferencesHelper
 from envisage.ui.tasks.api import PreferencesCategory, PreferencesPane
-from traits.api import Bool, Directory, Float, Int, Str
+from traits.api import Bool, Dict, Directory, Float, Int, Str
 from traitsui.api import Item, VGroup, View
 
 # Microdrop style imports.
@@ -105,6 +105,12 @@ class FluorescencePreferences(PreferencesHelper):
         False, desc="Auto-adjust camera exposure toward the target brightness"
     )
     auto_gain = Bool(False, desc="Auto-adjust camera gain toward the target brightness")
+    # The whole map in one key: the node stores its repr, which the helper
+    # reads back with literal_eval (the protocol tree's Dict preferences
+    # round-trip the same way).
+    led_mix_presets = Dict(
+        Str, Dict(Int, Int), desc="Saved Multi-Channel mixes: name -> shares (%)"
+    )
 
     # Advanced camera settings (see cameras.camera_settings
     # ADVANCED_CAMERA_TRAITS). Edited from the advanced camera controls

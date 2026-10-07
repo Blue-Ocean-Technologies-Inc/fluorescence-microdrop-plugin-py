@@ -97,6 +97,7 @@ PERSISTED_CONTROL_TRAITS = [
     "auto_exposure",
     "auto_gain",
     *LED_PROPORTION_TRAITS,
+    "led_mix_presets",
 ]
 
 # ZWO ASI camera driver for Windows (from the standalone app's README): the

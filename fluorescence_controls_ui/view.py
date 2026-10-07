@@ -9,7 +9,18 @@
 # Thanks for using Microdrop open source!
 
 # Enthought library imports.
-from traitsui.api import HGroup, Item, Label, Readonly, TableEditor, UItem, VGroup, View
+from traitsui.api import (
+    EnumEditor,
+    HGroup,
+    Item,
+    Label,
+    Readonly,
+    TableEditor,
+    TextEditor,
+    UItem,
+    VGroup,
+    View,
+)
 from traitsui.key_bindings import KeyBinding, KeyBindings
 from traitsui.menu import Action, Menu
 
@@ -82,6 +93,37 @@ MULTI_CHANNEL_TOOLTIP = (
     "mix is applied as set."
 )
 
+# Presets under the sliders: save the shares under a typed name (add), and
+# pick a saved mix to load it onto the sliders (remove deletes the pick).
+led_mix_preset_save_row = HGroup(
+    Item(
+        "led_mix_preset_name",
+        label="Save As",
+        editor=TextEditor(placeholder="Preset name"),
+        tooltip="Name to save the current shares under; an existing preset "
+        "of that name is overwritten",
+    ),
+    UItem(
+        "save_led_mix_preset_button",
+        editor=IconButtonEditor(glyph="add", tooltip="Save the shares as a preset"),
+        enabled_when="led_mix_preset_name.strip()",
+    ),
+)
+
+led_mix_preset_pick_row = HGroup(
+    Item(
+        "led_mix_preset",
+        label="Preset",
+        editor=EnumEditor(name="led_mix_preset_choices"),
+        tooltip="Load a saved mix onto the sliders",
+    ),
+    UItem(
+        "delete_led_mix_preset_button",
+        editor=IconButtonEditor(glyph="remove", tooltip="Delete the picked preset"),
+        enabled_when="led_mix_preset",
+    ),
+)
+
 multi_channel_group = VGroup(
     _collapse_header("show_multi_channel", "Multi-Channel Mix"),
     VGroup(
@@ -89,6 +131,8 @@ multi_channel_group = VGroup(
             Item(name, label=f"{wavelength} (%)", tooltip=MULTI_CHANNEL_TOOLTIP)
             for name, wavelength in zip(LED_PROPORTION_TRAITS, LED_WAVELENGTHS)
         ],
+        led_mix_preset_save_row,
+        led_mix_preset_pick_row,
         visible_when="show_multi_channel",
         show_border=True,
     ),
