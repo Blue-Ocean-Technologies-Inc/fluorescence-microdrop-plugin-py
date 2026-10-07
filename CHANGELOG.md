@@ -1,3 +1,9 @@
+## [v3.4.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.4.0) (2026-10-07)
+
+### Feat
+
+- **ui**: save and pick Multi-Channel mix presets ([`0396674`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/03966747c8d5320e92ebcbedb983ec567d1af971))
+
 ## [v3.3.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.3.0) (2026-10-07)
 
 ### Feat
