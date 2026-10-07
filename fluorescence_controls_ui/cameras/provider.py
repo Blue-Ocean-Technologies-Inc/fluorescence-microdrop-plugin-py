@@ -78,10 +78,6 @@ class AsiCameraFeed(QObject):
 
     def __init__(self, sdk_dir, camera_id):
         super().__init__()
-        self._last_raw = None
-        #: Bumped on every raw frame (before `_last_raw` is stored), so a
-        #: capture can wait for a frame strictly newer than one it saw.
-        self.frame_seq = 0
         self._last_preview_time = 0.0
         # Display-adjustment LUT cache (rebuilt when the trio changes).
         self._display_lut = None
@@ -100,7 +96,10 @@ class AsiCameraFeed(QObject):
         self._thread.set_auto_settings(
             **{name: getattr(asi_camera_settings, name) for name in AUTO_SETTING_TRAITS}
         )
-        self._thread.change_pixmap_signal.connect(self._on_thread_frame)
+        self._thread.preview_enabled = asi_camera_settings.device_viewer_stream
+        # Queued onto the GUI thread (this feed lives there); raw frames for
+        # captures never take this path — they wait in the thread's mailbox.
+        self._thread.preview_ready_signal.connect(self._on_preview_ready)
         self._thread.camera_caps_signal.connect(self._on_camera_caps)
         self._thread.temperature_signal.connect(self._on_camera_temperature)
         self._thread.auto_values_signal.connect(self._on_auto_values)
@@ -121,37 +120,50 @@ class AsiCameraFeed(QObject):
         global _ACTIVE_FEED
         _ACTIVE_FEED = self
 
-    def _on_thread_frame(self, raw):
-        # Queued onto the GUI thread: keep the raw sensor frame for captures.
-        # The display conversion is heavy on full-resolution 16-bit frames,
-        # so it runs only while the device-viewer stream checkbox is on —
+    @property
+    def frame_seq(self):
+        """Sequence number of the newest raw frame, bumped on the camera
+        thread — a capture waits for one strictly newer than it saw."""
+        return self._thread.frames.seq
+
+    @property
+    def _last_raw(self):
+        """The newest raw sensor frame (the burst capture service saves it
+        after `wait_for_frame_after`)."""
+        return self._thread.frames.frame
+
+    def _on_preview_ready(self):
+        # GUI thread, at most one pending: take the newest frame. The
+        # display conversion is heavy on full-resolution 16-bit frames, so
+        # it runs only while the device-viewer stream checkbox is on —
         # rate-capped and downscaled to preview size (captures keep the
         # full-rate, full-resolution raw frames).
-        # Lock-free by convention (see _last_raw elsewhere in this file):
-        # store the raw frame BEFORE bumping frame_seq, so a reader on
-        # another thread that observes the bumped seq always sees the
-        # matching (or newer) raw frame — never the stale one. That
-        # ordering is what makes wait_for_frame_after's "newer frame"
-        # guarantee correct.
-        self._last_raw = raw
-        self.frame_seq += 1
-        if not asi_camera_settings.device_viewer_stream:
-            return
+        raw = self._thread.frames.take_preview()
         now = time.monotonic()
+
+        if raw is None or not asi_camera_settings.device_viewer_stream:
+            return
+
         if now - self._last_preview_time < 1.0 / DEVICE_VIEWER_STREAM_MAX_FPS:
             return
+
         self._last_preview_time = now
+
         # Stride-subsample to roughly the viewport's size BEFORE converting
         # (the frame is already debayered/mono here, so striding is safe).
         preview = raw
         stride = max(1, raw.shape[1] // DEVICE_VIEWER_STREAM_MAX_WIDTH)
+
         if stride > 1:
             preview = raw[::stride, ::stride]
+
         image = frame_to_qimage(
             debayered_to_rgb(self._apply_display_adjustments(to_display_8bit(preview)))
         )
+
         if asi_camera_settings.add_timestamp:
             image = self._stamp_timestamp(image)
+
         self.frame.emit(image)
 
     def _apply_display_adjustments(self, img):
@@ -170,6 +182,7 @@ class AsiCameraFeed(QObject):
         return self._display_lut[img]
 
     def _on_stream_setting_changed(self, event):
+        self._thread.preview_enabled = event.new
         self.streaming.emit(event.new)
 
     def raw_frame(self):
@@ -180,13 +193,17 @@ class AsiCameraFeed(QObject):
         return raw_to_qimage(self._last_raw)
 
     def wait_for_frame_after(self, seq: int, timeout: float) -> bool:
-        """Block (worker thread) until a frame newer than ``seq`` lands."""
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if self.frame_seq > seq and self._last_raw is not None:
-                return True
-            time.sleep(0.02)
-        return False
+        """Block (worker thread) until a frame newer than ``seq`` lands —
+        woken by the camera thread itself, independent of the GUI."""
+        return self._thread.frames.wait_after(seq, timeout)
+
+    def apply_capture_settings(self, exposure, gain, auto_exposure, auto_gain):
+        """Hand a capture entry's exposure (us) / gain / auto modes straight
+        to the camera thread from any thread, so a protocol step never waits
+        on the GUI event loop; the settings singleton is mirrored separately
+        on the GUI thread."""
+        self._thread.set_auto_settings(auto_exposure=auto_exposure, auto_gain=auto_gain)
+        self._thread.set_camera_settings(exposure=exposure, gain=gain)
 
     def _on_settings_changed(self, event):
         self._thread.set_camera_settings(

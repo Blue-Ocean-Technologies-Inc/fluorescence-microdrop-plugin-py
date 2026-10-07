@@ -72,7 +72,7 @@ def test_running_feed_applies_pane_edits(monkeypatch):
             pass
 
     class FakeThread:
-        change_pixmap_signal = FakeSignal()
+        preview_ready_signal = FakeSignal()
         camera_caps_signal = FakeSignal()
         temperature_signal = FakeSignal()
         auto_values_signal = FakeSignal()
