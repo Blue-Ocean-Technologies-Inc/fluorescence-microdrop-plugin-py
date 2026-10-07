@@ -106,11 +106,15 @@ def display_adjust_lut(gamma: float, contrast: float, brightness: float) -> np.n
 def to_display_8bit(img: np.ndarray) -> np.ndarray:
     """16-bit sensor frames scaled for display (standalone heuristic: full
     16-bit range when values exceed 12 bits, else treat as 12-bit data).
-    8-bit frames pass through untouched."""
+    8-bit frames pass through untouched. Integer shifts, not float
+    division: the same truncated values without a float64 copy of a
+    full-resolution frame."""
     if img.dtype == np.uint16:
         if img.max() > 2**12:
-            return (img / 256).astype(np.uint8)
-        return (img / 16).astype(np.uint8)
+            return np.right_shift(img, 8).astype(np.uint8)
+
+        return np.right_shift(img, 4).astype(np.uint8)
+
     return img
 
 

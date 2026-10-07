@@ -23,6 +23,7 @@ Two small synchronization primitives live here too:
 """
 
 # Standard library imports.
+import os
 import threading
 import time
 from pathlib import Path
@@ -52,7 +53,11 @@ from .cameras.asi_thread import (
 )
 from .cameras.camera_settings import asi_camera_settings
 from .cameras.provider import current_feed
-from .consts import CAPTURE_TIMESTAMP_FORMAT
+from .consts import (
+    CAPTURE_PARTIAL_SUFFIX,
+    CAPTURE_PNG_QUALITY,
+    CAPTURE_TIMESTAMP_FORMAT,
+)
 
 # Logger import.
 from logger.logger_service import get_logger
@@ -147,11 +152,28 @@ def save_entry_capture(entry, folder: Path) -> Path:
     label = f"{sanitize_label(entry.label)}_{utc_stamp()}"
 
     raw_path = folder / RAW_CAPTURES_SUBDIR / f"{label}_raw.png"
-    raw_to_qimage(raw).save(str(raw_path))
+    save_png_atomically(raw_to_qimage(raw), raw_path)
 
     display_path = folder / f"{label}.png"
-    frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))).save(str(display_path))
+    save_png_atomically(
+        frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))), display_path
+    )
+
     return display_path
+
+
+def save_png_atomically(image, path: Path) -> None:
+    """Encode ``image`` as a lossless PNG under a partial name beside
+    ``path``, then rename it into place: the image viewer's discovery poll
+    only ever sees complete files (it never retries a file that failed to
+    decode)."""
+    partial_path = path.with_name(f"{path.name}{CAPTURE_PARTIAL_SUFFIX}")
+
+    if not image.save(str(partial_path), "PNG", CAPTURE_PNG_QUALITY):
+        partial_path.unlink(missing_ok=True)
+        raise OSError(f"Could not write capture {path}")
+
+    os.replace(partial_path, path)
 
 
 def run_burst(

@@ -69,3 +69,11 @@ def test_enumeration_disabled_without_sdk_dir(tmp_path):
     assert list_asi_cameras("") == []
     # A directory without the SDK library: logged + skipped, never raises.
     assert list_asi_cameras(str(tmp_path)) == []
+
+
+def test_16bit_conversions_equal_integer_shifts():
+    full_range = np.array([[0, 255, 256, 40000, 65535]], dtype=np.uint16)
+    twelve_bit = np.array([[0, 15, 16, 2049, 4095]], dtype=np.uint16)
+
+    assert np.array_equal(to_display_8bit(full_range), full_range >> 8)
+    assert np.array_equal(to_display_8bit(twelve_bit), twelve_bit >> 4)

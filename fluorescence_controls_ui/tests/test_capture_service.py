@@ -31,6 +31,10 @@ import pytest
 # Microdrop package imports.
 import fluorescence_controls_ui
 from fluorescence_controller.consts import ALL_LEDS_OFF, LED_WAVELENGTHS
+from fluorescence_controls_ui.consts import (
+    CAPTURE_PARTIAL_SUFFIX,
+    CAPTURE_PNG_QUALITY,
+)
 from fluorescence_protocol_controls.capture_chain import ChainEntry
 
 ENTRY_KW = dict(
@@ -343,6 +347,7 @@ def test_run_burst_happy_path_saves_only_ticked_entries(
     assert (folder / "16bit_raw" / "A_2026_07_16-12_30_45_raw.png").exists()
     assert not list(folder.glob("B_*.png"))
     assert not list((folder / "16bit_raw").glob("B_*_raw.png"))
+    assert not list(folder.rglob(f"*{CAPTURE_PARTIAL_SUFFIX}"))
 
     assert off_calls == [(ALL_LEDS_OFF, "")]
 
@@ -440,3 +445,65 @@ def test_apply_camera_settings_forwards_auto_flags(sync_gui):
     capture_service.apply_camera_settings(entry)
     assert asi_camera_settings.auto_exposure is False
     assert asi_camera_settings.auto_gain is False
+
+
+# --- save_png_atomically -------------------------------------------------
+
+
+class _RecordingImage:
+    """QImage stand-in: records what the final path looked like while the
+    encode was in flight, then writes (or fails to write) the partial
+    file."""
+
+    def __init__(self, final_path, succeed=True):
+        self.final_path = final_path
+        self.succeed = succeed
+        self.calls = []
+
+    def save(self, path, image_format, quality):
+        self.calls.append(
+            dict(
+                path=path,
+                image_format=image_format,
+                quality=quality,
+                final_existed=self.final_path.exists(),
+            )
+        )
+
+        if not self.succeed:
+            return False
+
+        with open(path, "wb") as partial_file:
+            partial_file.write(b"\x89PNG half")
+            # Mid-encode: only the partial name exists.
+            assert not self.final_path.exists()
+            partial_file.write(b" and the rest")
+
+        return True
+
+
+def test_save_png_atomically_hides_the_file_until_it_is_complete(tmp_path):
+    final_path = tmp_path / "A_2026_07_16-12_30_45.png"
+    image = _RecordingImage(final_path)
+
+    capture_service.save_png_atomically(image, final_path)
+
+    (call,) = image.calls
+    assert call["final_existed"] is False
+    assert call["path"] == str(final_path) + CAPTURE_PARTIAL_SUFFIX
+    assert call["image_format"] == "PNG"
+    assert call["quality"] == CAPTURE_PNG_QUALITY
+
+    assert final_path.read_bytes() == b"\x89PNG half and the rest"
+    assert list(tmp_path.iterdir()) == [final_path]
+
+
+def test_save_png_atomically_raises_and_leaves_nothing_on_failure(tmp_path):
+    final_path = tmp_path / "A_2026_07_16-12_30_45.png"
+
+    with pytest.raises(OSError, match="A_2026_07_16-12_30_45.png"):
+        capture_service.save_png_atomically(
+            _RecordingImage(final_path, succeed=False), final_path
+        )
+
+    assert list(tmp_path.iterdir()) == []
