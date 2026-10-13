@@ -175,11 +175,13 @@ class FrameMailbox:
     for a fresh frame never depends on the GUI event loop. The preview path
     holds at most one pending notification (`claim_preview` /
     `take_preview`) and always takes the newest frame, so a stalled GUI
-    never accumulates a backlog of full-resolution frames."""
+    never accumulates a backlog of full-resolution frames. Each frame
+    travels with the camera settings it was exposed with."""
 
     def __init__(self):
         self._condition = threading.Condition()
         self._frame = None
+        self._settings = None
         self._seq = 0
         self._preview_pending = False
 
@@ -196,12 +198,20 @@ class FrameMailbox:
         with self._condition:
             return self._seq
 
-    def put(self, frame):
-        """Store ``frame`` as the newest and wake every waiter."""
+    def put(self, frame, settings):
+        """Store ``frame`` and the camera ``settings`` it was exposed with
+        as the newest, and wake every waiter."""
         with self._condition:
             self._frame = frame
+            self._settings = settings
             self._seq += 1
             self._condition.notify_all()
+
+    def latest(self):
+        """The newest ``(frame, settings)`` pair, read under one lock so a
+        frame is never paired with the next frame's settings."""
+        with self._condition:
+            return self._frame, self._settings
 
     def wait_after(self, seq, timeout):
         """Block until a frame newer than ``seq`` is stored; False on
@@ -435,14 +445,29 @@ class ASIVideoThread(QThread):
             self.cleanup_camera()
 
     def _hand_off_frame(self, img):
-        """Store the raw sensor frame (16-bit for RAW16 cameras) for
-        captures and, while the preview is on, notify the GUI unless a
-        notification is already pending — the GUI then takes the newest
-        frame, so a stall drops preview frames instead of queueing them."""
-        self.frames.put(img)
+        """Store the raw sensor frame (16-bit for RAW16 cameras) with the
+        settings it was exposed with for captures and, while the preview
+        is on, notify the GUI unless a notification is already pending —
+        the GUI then takes the newest frame, so a stall drops preview
+        frames instead of queueing them."""
+        self.frames.put(img, self._applied_settings())
 
         if self.preview_enabled and self.frames.claim_preview():
             self.preview_ready_signal.emit()
+
+    def _applied_settings(self):
+        """The exposure (us), gain and readout format the camera is set to.
+
+        Only valid as a frame's settings when snapshotted at its hand-off:
+        the loop applies pending settings BEFORE `capture_image()` and only
+        `_auto_adjust` changes them AFTER, so between the two they are
+        exactly what that frame was exposed with."""
+        return dict(
+            exposure_us=self.exposure,
+            gain=self.gain,
+            binning=self._roi_settings["binning"],
+            image_type=self._roi_settings["image_type"],
+        )
 
     def _auto_adjust(self, img):
         """Software auto-exposure/auto-gain, one step per frame: nudge the

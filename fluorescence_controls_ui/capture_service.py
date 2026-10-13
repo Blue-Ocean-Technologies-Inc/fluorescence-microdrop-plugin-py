@@ -141,12 +141,15 @@ def apply_camera_settings(entry) -> None:
     GUI.invoke_later(asi_camera_settings.trait_set, **settings)
 
 
-def capture_metadata(entry, feed, *, stamp, step_desc=None, dotted_id=None) -> dict:
+def capture_metadata(
+    entry, camera_settings, *, stamp, step_desc=None, dotted_id=None
+) -> dict:
     """The capture settings embedded in both of an entry's PNGs: the step
-    context, the LED request, and the camera's exposure/gain AS APPLIED at
-    the grab (`feed.applied_camera_settings`) — with an auto mode on they
-    differ from the entry's requested starting values, which ride along
-    too. ``stamp`` is the UTC stamp of the capture's filenames."""
+    context, the LED request, and ``camera_settings`` — the exposure/gain
+    and readout format the saved frame was exposed with (paired with it by
+    `AsiCameraFeed.latest_capture`). With an auto mode on they differ from
+    the entry's requested starting values, which ride along too.
+    ``stamp`` is the UTC stamp of the capture's filenames."""
     temperature = asi_camera_settings.camera_temperature
 
     if entry.multi_channel:
@@ -165,7 +168,7 @@ def capture_metadata(entry, feed, *, stamp, step_desc=None, dotted_id=None) -> d
         intensity=entry.intensity,
         frequency=entry.frequency,
         **leds,
-        **feed.applied_camera_settings,
+        **camera_settings,
         requested_exposure_ms=entry.exposure_ms,
         requested_gain=entry.gain,
         auto_exposure=entry.auto_exposure,
@@ -184,8 +187,9 @@ def save_entry_capture(entry, folder: Path, *, step_desc=None, dotted_id=None) -
     -> `debayered_to_rgb` -> the QImage constructor helper), minus the
     preview-only gamma/contrast/brightness adjustment and timestamp stamp,
     which never touch saved captures either. Both PNGs carry
-    `capture_metadata` as JSON text under CAPTURE_METADATA_KEY (the step
-    context is None in free mode). Returns the display path."""
+    `capture_metadata` as JSON text under CAPTURE_METADATA_KEY, with the
+    camera settings taken atomically with the frame (the step context is
+    None in free mode). Returns the display path."""
     feed = current_feed()
 
     if feed is None:
@@ -197,11 +201,15 @@ def save_entry_capture(entry, folder: Path, *, step_desc=None, dotted_id=None) -
     if not feed.wait_for_frame_after(seq, timeout):
         raise TimeoutError(f"No new frame for {entry.label!r} within {timeout}s")
 
-    raw = feed._last_raw
+    raw, camera_settings = feed.latest_capture()
     stamp = utc_stamp()
     metadata = json.dumps(
         capture_metadata(
-            entry, feed, stamp=stamp, step_desc=step_desc, dotted_id=dotted_id
+            entry,
+            camera_settings,
+            stamp=stamp,
+            step_desc=step_desc,
+            dotted_id=dotted_id,
         )
     )
 

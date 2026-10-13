@@ -8,13 +8,15 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Hardware-free tests for the ASI display helpers and enumeration guard."""
+"""Hardware-free tests for the ASI display helpers, the frame mailbox's
+frame/settings pairing, and the enumeration guard."""
 
 # Third-party imports.
 import numpy as np
 
 # Microdrop package imports.
 from fluorescence_controls_ui.cameras.asi_thread import (
+    FrameMailbox,
     debayered_to_rgb,
     frame_to_qimage,
     raw_to_qimage,
@@ -77,3 +79,26 @@ def test_16bit_conversions_equal_integer_shifts():
 
     assert np.array_equal(to_display_8bit(full_range), full_range >> 8)
     assert np.array_equal(to_display_8bit(twelve_bit), twelve_bit >> 4)
+
+
+def test_mailbox_latest_pairs_each_frame_with_its_own_settings():
+    mailbox = FrameMailbox()
+    frame_a, frame_b = (np.full((2, 2), value, dtype=np.uint16) for value in (1, 2))
+    settings_a = dict(exposure_us=10_000, gain=0, binning=1, image_type="raw16")
+    settings_b = dict(exposure_us=20_000, gain=50, binning=1, image_type="raw16")
+
+    assert mailbox.latest() == (None, None)
+
+    mailbox.put(frame_a, settings_a)
+    frame, settings = mailbox.latest()
+
+    assert frame is frame_a
+    assert settings is settings_a
+
+    # Latest wins as a PAIR: B never reads back with A's settings.
+    mailbox.put(frame_b, settings_b)
+    frame, settings = mailbox.latest()
+
+    assert frame is frame_b
+    assert settings is settings_b
+    assert mailbox.frame is frame_b

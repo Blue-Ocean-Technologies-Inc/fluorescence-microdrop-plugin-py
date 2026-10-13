@@ -18,7 +18,7 @@ No real ASI hardware anywhere: `ASIVideoThread` is replaced with a fake
 (mirrors test_camera_settings.py's `FakeThread` convention) for the
 registry tests, and `run_burst`'s feed is a tiny stub carrying the two
 attributes `wait_for_frame_after` needs (`frame_seq`, `_last_raw`) plus
-the camera thread's applied settings the capture metadata records. The
+`latest_capture`, pairing the frame with FRAME_SETTINGS. The
 frame-handoff tests drive a real, never-started `ASIVideoThread` from a
 plain Python thread: no camera and no GUI event loop.
 """
@@ -60,6 +60,10 @@ ENTRY_KW = dict(
     exposure_ms=10.0,
     gain=0,
 )
+
+#: Camera settings a stub frame was "exposed with" — deliberately unlike
+#: ENTRY_KW's, so the metadata can tell applied from requested values.
+FRAME_SETTINGS = dict(exposure_us=23_456, gain=77, binning=2, image_type="raw16")
 
 capture_service = None  # populated by _capture_service_module below
 
@@ -173,11 +177,11 @@ def test_feed_reads_frames_from_the_thread_mailbox(provider_module):
         assert feed._last_raw is None
 
         raw = np.zeros((2, 2), dtype=np.uint16)
-        feed._thread.frames.put(raw)
+        feed._thread.frames.put(raw, FRAME_SETTINGS)
         assert feed.frame_seq == 1
         assert feed._last_raw is raw
 
-        feed._thread.frames.put(raw)
+        feed._thread.frames.put(raw, FRAME_SETTINGS)
         assert feed.frame_seq == 2
     finally:
         feed.stop()
@@ -194,12 +198,12 @@ def mailbox():
 
 
 def test_wait_after_returns_true_once_seq_advances(mailbox):
-    mailbox.put(np.zeros((2, 2), dtype=np.uint16))
+    mailbox.put(np.zeros((2, 2), dtype=np.uint16), FRAME_SETTINGS)
     assert mailbox.wait_after(0, timeout=0.5) is True
 
 
 def test_wait_after_times_out_when_seq_does_not_advance(mailbox):
-    mailbox.put(np.zeros((2, 2), dtype=np.uint16))
+    mailbox.put(np.zeros((2, 2), dtype=np.uint16), FRAME_SETTINGS)
     assert mailbox.wait_after(1, timeout=0.05) is False
 
 
@@ -263,17 +267,25 @@ def test_wait_for_frame_after_wakes_on_the_camera_thread_update():
         feed.stop()
 
 
-def test_applied_camera_settings_report_the_camera_threads_values():
-    """The auto loop moves exposure/gain through `_apply_camera_settings`
-    on the camera thread; the feed reports those, not the requested ones."""
+def test_latest_capture_keeps_the_settings_the_frame_was_exposed_with():
+    """The auto loop moves exposure/gain (`_apply_camera_settings`) right
+    after each hand-off; a capture must still report the values its frame
+    was exposed with, never the next frame's."""
     from fluorescence_controls_ui.cameras import provider
 
     feed = provider.AsiCameraFeed("sdk", 0)
+    feed._thread.preview_enabled = False
+    raw = np.full((2, 2), 7, dtype=np.uint16)
 
     try:
         feed._thread._apply_camera_settings(exposure=31_000, gain=120)
+        feed._thread._hand_off_frame(raw)
+        feed._thread._apply_camera_settings(exposure=62_000, gain=180)
 
-        assert feed.applied_camera_settings == dict(
+        frame, settings = feed.latest_capture()
+
+        assert frame is raw
+        assert settings == dict(
             exposure_us=31_000,
             gain=120,
             binning=asi_camera_settings.binning,
@@ -424,17 +436,15 @@ class _RunFeed:
     def __init__(self):
         self.frame_seq = 0
         self._last_raw = None
-        # Unlike ENTRY_KW's exposure/gain on purpose: the metadata must
-        # record what the camera thread applied, not what the entry asked.
-        self.applied_camera_settings = dict(
-            exposure_us=23_456, gain=77, binning=2, image_type="raw16"
-        )
 
     def wait_for_frame_after(self, seq, timeout):
         self.frame_seq += 1
         # Distinct pixel values, so a lossy round-trip cannot pass.
         self._last_raw = np.array([[0, 1000], [40_000, 65_535]], dtype=np.uint16)
         return True
+
+    def latest_capture(self):
+        return self._last_raw, FRAME_SETTINGS
 
     def apply_capture_settings(self, **settings):
         pass
@@ -678,12 +688,12 @@ def test_raw_capture_with_metadata_still_loads_pixel_identical(
     np.testing.assert_array_equal(raw, run_feed._last_raw)
 
 
-def test_capture_metadata_records_a_multi_channel_mix(run_feed, monkeypatch):
+def test_capture_metadata_records_a_multi_channel_mix(monkeypatch):
     monkeypatch.setattr(asi_camera_settings, "camera_temperature", float("nan"))
     entry = _entry("Mix", wavelength=MULTI_CHANNEL, proportions={0: 100, 1: 50})
 
     metadata = capture_service.capture_metadata(
-        entry, run_feed, stamp="2026_07_16-12_30_45"
+        entry, FRAME_SETTINGS, stamp="2026_07_16-12_30_45"
     )
 
     assert metadata["led_intensities"] == entry.led_intensities()
