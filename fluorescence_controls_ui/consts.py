@@ -121,3 +121,12 @@ CAPTURE_PNG_QUALITY = 85
 #: Suffix of a capture while it is being written; the finished file is
 #: renamed into place, and image discovery never matches this suffix.
 CAPTURE_PARTIAL_SUFFIX = ".partial"
+
+#: PNG text-chunk key under which every capture PNG (raw and display)
+#: carries its capture settings as JSON. Colon-free: Qt's PNG reader
+#: mangles keys containing a colon in QImage.textKeys().
+CAPTURE_METADATA_KEY = "MicrodropCapture"
+
+#: Schema version stamped into the capture metadata JSON; bump it when a
+#: field is renamed or changes meaning so readers can tell the shapes apart.
+CAPTURE_METADATA_VERSION = 1

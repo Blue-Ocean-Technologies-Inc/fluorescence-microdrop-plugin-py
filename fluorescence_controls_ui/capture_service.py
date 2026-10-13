@@ -11,8 +11,10 @@
 """Burst capture service: fires a capture chain's ticked entries against
 the shared fluorescence hardware and the active ASI feed, off the GUI
 thread. The controls pane's Run Capture button (`controller.run_capture`)
-and the protocol column's per-step capture bucket both funnel through
-`run_burst`.
+runs `run_burst`; the protocol column's per-step capture bucket drives the
+same `apply_camera_settings` / `save_entry_capture` steps itself. Every PNG
+`save_entry_capture` writes carries its capture settings
+(`capture_metadata`) as JSON text under CAPTURE_METADATA_KEY.
 
 Two small synchronization primitives live here too:
   * the applied-ack `Event`, set by `message_handler.py`'s
@@ -23,6 +25,8 @@ Two small synchronization primitives live here too:
 """
 
 # Standard library imports.
+import json
+import math
 import os
 import threading
 import time
@@ -54,6 +58,8 @@ from .cameras.asi_thread import (
 from .cameras.camera_settings import asi_camera_settings
 from .cameras.provider import current_feed
 from .consts import (
+    CAPTURE_METADATA_KEY,
+    CAPTURE_METADATA_VERSION,
     CAPTURE_PARTIAL_SUFFIX,
     CAPTURE_PNG_QUALITY,
     CAPTURE_TIMESTAMP_FORMAT,
@@ -135,34 +141,84 @@ def apply_camera_settings(entry) -> None:
     GUI.invoke_later(asi_camera_settings.trait_set, **settings)
 
 
-def save_entry_capture(entry, folder: Path) -> Path:
+def capture_metadata(entry, feed, *, stamp, step_desc=None, dotted_id=None) -> dict:
+    """The capture settings embedded in both of an entry's PNGs: the step
+    context, the LED request, and the camera's exposure/gain AS APPLIED at
+    the grab (`feed.applied_camera_settings`) — with an auto mode on they
+    differ from the entry's requested starting values, which ride along
+    too. ``stamp`` is the UTC stamp of the capture's filenames."""
+    temperature = asi_camera_settings.camera_temperature
+
+    if entry.multi_channel:
+        leds = dict(led_intensities=entry.led_intensities())
+    else:
+        leds = dict(led_index=entry.led_index)
+
+    return dict(
+        version=CAPTURE_METADATA_VERSION,
+        timestamp_utc=stamp,
+        label=entry.label,
+        image_tag=entry.image_tag,
+        step_description=step_desc,
+        step_dotted_id=dotted_id,
+        wavelength=entry.wavelength,
+        intensity=entry.intensity,
+        frequency=entry.frequency,
+        **leds,
+        **feed.applied_camera_settings,
+        requested_exposure_ms=entry.exposure_ms,
+        requested_gain=entry.gain,
+        auto_exposure=entry.auto_exposure,
+        auto_gain=entry.auto_gain,
+        camera_lead_time_ms=entry.camera_lead_time_ms,
+        # NaN until the camera reports a reading, and JSON has no NaN.
+        sensor_temperature_c=None if math.isnan(temperature) else temperature,
+    )
+
+
+def save_entry_capture(entry, folder: Path, *, step_desc=None, dotted_id=None) -> Path:
     """Wait for a fresh frame from the active feed and save it: the raw
     16-bit sensor frame (lossless) under `16bit_raw/`, plus an 8-bit
     display conversion next to it — the SAME conversion chain
     `AsiCameraFeed._on_preview_ready` uses for previews (`to_display_8bit`
     -> `debayered_to_rgb` -> the QImage constructor helper), minus the
     preview-only gamma/contrast/brightness adjustment and timestamp stamp,
-    which never touch saved captures either. Returns the display path."""
+    which never touch saved captures either. Both PNGs carry
+    `capture_metadata` as JSON text under CAPTURE_METADATA_KEY (the step
+    context is None in free mode). Returns the display path."""
     feed = current_feed()
+
     if feed is None:
         raise RuntimeError("no active camera feed")
+
     seq = feed.frame_seq
     timeout = entry.exposure_ms / 1000.0 * 2 + 2.0
+
     if not feed.wait_for_frame_after(seq, timeout):
         raise TimeoutError(f"No new frame for {entry.label!r} within {timeout}s")
+
     raw = feed._last_raw
+    stamp = utc_stamp()
+    metadata = json.dumps(
+        capture_metadata(
+            entry, feed, stamp=stamp, step_desc=step_desc, dotted_id=dotted_id
+        )
+    )
+
     # Per-capture timestamp in every filename — the regular capture
     # pipeline's naming convention, so a file is traceable to its moment
     # even outside its burst folder.
-    label = f"{sanitize_label(entry.label)}_{utc_stamp()}"
+    label = f"{sanitize_label(entry.label)}_{stamp}"
 
     raw_path = folder / RAW_CAPTURES_SUBDIR / f"{label}_raw.png"
-    save_png_atomically(raw_to_qimage(raw), raw_path)
+    raw_image = raw_to_qimage(raw)
+    raw_image.setText(CAPTURE_METADATA_KEY, metadata)
+    save_png_atomically(raw_image, raw_path)
 
     display_path = folder / f"{label}.png"
-    save_png_atomically(
-        frame_to_qimage(debayered_to_rgb(to_display_8bit(raw))), display_path
-    )
+    display_image = frame_to_qimage(debayered_to_rgb(to_display_8bit(raw)))
+    display_image.setText(CAPTURE_METADATA_KEY, metadata)
+    save_png_atomically(display_image, display_path)
 
     return display_path
 
@@ -191,6 +247,7 @@ def run_burst(
     always fires on the way out — even on error/timeout — so a failed
     burst can never leave a light on."""
     folder = burst_folder(step_desc, dotted_id)
+
     try:
         for entry in ticked(entries):
             apply_camera_settings(entry)
@@ -208,7 +265,8 @@ def run_burst(
             if entry.camera_lead_time_ms:
                 time.sleep(entry.camera_lead_time_ms / 1000.0)
 
-            save_entry_capture(entry, folder)
+            save_entry_capture(entry, folder, step_desc=step_desc, dotted_id=dotted_id)
     finally:
         publish_message(topic=ALL_LEDS_OFF, message="")
+
     return folder

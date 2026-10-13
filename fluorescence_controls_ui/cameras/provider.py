@@ -132,6 +132,22 @@ class AsiCameraFeed(QObject):
         after `wait_for_frame_after`)."""
         return self._thread.frames.frame
 
+    @property
+    def applied_camera_settings(self):
+        """The camera thread's operating exposure (us) / gain — with auto
+        modes on, where the brightness loop has taken them, not the values
+        requested — and the readout binning / image type the camera
+        accepted. Plain attribute reads, safe from the burst worker
+        thread."""
+        roi = self._thread._roi_settings
+
+        return dict(
+            exposure_us=self._thread.exposure,
+            gain=self._thread.gain,
+            binning=roi["binning"],
+            image_type=roi["image_type"],
+        )
+
     def _on_preview_ready(self):
         # GUI thread, at most one pending: take the newest frame. The
         # display conversion is heavy on full-resolution 16-bit frames, so
