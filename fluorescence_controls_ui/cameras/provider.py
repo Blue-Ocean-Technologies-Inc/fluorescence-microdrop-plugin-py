@@ -128,9 +128,16 @@ class AsiCameraFeed(QObject):
 
     @property
     def _last_raw(self):
-        """The newest raw sensor frame (the burst capture service saves it
-        after `wait_for_frame_after`)."""
+        """The newest raw sensor frame (for `raw_frame()`)."""
         return self._thread.frames.frame
+
+    def latest_capture(self):
+        """The newest ``(raw frame, settings)`` pair, read atomically: the
+        exposure (us) / gain and readout binning / image type that frame
+        was exposed with — with an auto mode on, the brightness loop's
+        values, not the requested ones. The burst capture service saves it
+        after `wait_for_frame_after`."""
+        return self._thread.frames.latest()
 
     def _on_preview_ready(self):
         # GUI thread, at most one pending: take the newest frame. The

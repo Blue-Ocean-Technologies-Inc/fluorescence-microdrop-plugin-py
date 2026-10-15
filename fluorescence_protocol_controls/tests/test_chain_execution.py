@@ -135,7 +135,7 @@ def fake_capture_service(monkeypatch):
     did not exist before), so the fake is picked up regardless of import
     history and nothing leaks to later tests.
     """
-    calls = {"apply": [], "burst_folder": [], "save": []}
+    calls = {"apply": [], "burst_folder": [], "save": [], "save_context": []}
 
     def apply_camera_settings(entry):
         calls["apply"].append(entry)
@@ -146,8 +146,9 @@ def fake_capture_service(monkeypatch):
         )
         return FAKE_FOLDER
 
-    def save_entry_capture(entry, folder):
+    def save_entry_capture(entry, folder, *, step_desc=None, dotted_id=None):
         calls["save"].append((entry, folder))
+        calls["save_context"].append(dict(step_desc=step_desc, dotted_id=dotted_id))
 
     fake = type(sys)("fluorescence_controls_ui.capture_service")
     fake.apply_camera_settings = apply_camera_settings
@@ -246,6 +247,11 @@ def test_two_ticked_entries_run_in_order_one_folder(
         ("a", FAKE_FOLDER),
         ("c", FAKE_FOLDER),
     ]
+
+    # The PNG metadata names the step itself, without the folder's phase
+    # suffix.
+    step_context = dict(step_desc="Step A", dotted_id=row.dotted_path())
+    assert fake_capture_service["save_context"] == [step_context, step_context]
 
 
 def test_preview_mode_is_a_noop(row_type, fake_capture_service, publisher_calls):
@@ -485,7 +491,7 @@ def test_burst_light_off_fires_even_when_a_capture_raises(
     row.name = "Step A"
     col.model.set_value(row, [_entry("a").model_dump()])
 
-    def boom(entry, folder):
+    def boom(entry, folder, **context):
         raise RuntimeError("save failed")
 
     monkeypatch.setattr(
@@ -509,7 +515,7 @@ def _log_saves_into(ctx, monkeypatch):
     monkeypatch.setattr(
         sys.modules["fluorescence_controls_ui.capture_service"],
         "save_entry_capture",
-        lambda entry, folder: ctx.log.append(("save", entry.label)),
+        lambda entry, folder, **context: ctx.log.append(("save", entry.label)),
     )
 
 

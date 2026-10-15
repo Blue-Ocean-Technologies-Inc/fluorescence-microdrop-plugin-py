@@ -17,24 +17,38 @@ timeout paths.
 No real ASI hardware anywhere: `ASIVideoThread` is replaced with a fake
 (mirrors test_camera_settings.py's `FakeThread` convention) for the
 registry tests, and `run_burst`'s feed is a tiny stub carrying the two
-attributes `wait_for_frame_after` needs (`frame_seq`, `_last_raw`). The
+attributes `wait_for_frame_after` needs (`frame_seq`, `_last_raw`) plus
+`latest_capture`, pairing the frame with FRAME_SETTINGS. The
 frame-handoff tests drive a real, never-started `ASIVideoThread` from a
 plain Python thread: no camera and no GUI event loop.
 """
 
 # Standard library imports.
+import json
 import sys
 import threading
 import time
 
 # Third-party imports.
+import cv2
 import numpy as np
 import pytest
 
+# Enthought library imports.
+from pyface.qt.QtGui import QImageReader
+
 # Microdrop package imports.
 import fluorescence_controls_ui
-from fluorescence_controller.consts import ALL_LEDS_OFF, LED_WAVELENGTHS
+from fluorescence_controller.consts import (
+    ALL_LEDS_OFF,
+    LED_WAVELENGTHS,
+    MULTI_CHANNEL,
+)
+from fluorescence_controls_ui.cameras.camera_settings import asi_camera_settings
 from fluorescence_controls_ui.consts import (
+    CAPTURE_FIELD_DESCRIPTIONS,
+    CAPTURE_METADATA_KEY,
+    CAPTURE_METADATA_VERSION,
     CAPTURE_PARTIAL_SUFFIX,
     CAPTURE_PNG_QUALITY,
 )
@@ -47,6 +61,10 @@ ENTRY_KW = dict(
     exposure_ms=10.0,
     gain=0,
 )
+
+#: Camera settings a stub frame was "exposed with" — deliberately unlike
+#: ENTRY_KW's, so the metadata can tell applied from requested values.
+FRAME_SETTINGS = dict(exposure_us=23_456, gain=77, binning=2, image_type="raw16")
 
 capture_service = None  # populated by _capture_service_module below
 
@@ -160,11 +178,11 @@ def test_feed_reads_frames_from_the_thread_mailbox(provider_module):
         assert feed._last_raw is None
 
         raw = np.zeros((2, 2), dtype=np.uint16)
-        feed._thread.frames.put(raw)
+        feed._thread.frames.put(raw, FRAME_SETTINGS)
         assert feed.frame_seq == 1
         assert feed._last_raw is raw
 
-        feed._thread.frames.put(raw)
+        feed._thread.frames.put(raw, FRAME_SETTINGS)
         assert feed.frame_seq == 2
     finally:
         feed.stop()
@@ -181,12 +199,12 @@ def mailbox():
 
 
 def test_wait_after_returns_true_once_seq_advances(mailbox):
-    mailbox.put(np.zeros((2, 2), dtype=np.uint16))
+    mailbox.put(np.zeros((2, 2), dtype=np.uint16), FRAME_SETTINGS)
     assert mailbox.wait_after(0, timeout=0.5) is True
 
 
 def test_wait_after_times_out_when_seq_does_not_advance(mailbox):
-    mailbox.put(np.zeros((2, 2), dtype=np.uint16))
+    mailbox.put(np.zeros((2, 2), dtype=np.uint16), FRAME_SETTINGS)
     assert mailbox.wait_after(1, timeout=0.05) is False
 
 
@@ -247,6 +265,34 @@ def test_wait_for_frame_after_wakes_on_the_camera_thread_update():
         assert feed._last_raw is raw
     finally:
         camera_thread.cancel()
+        feed.stop()
+
+
+def test_latest_capture_keeps_the_settings_the_frame_was_exposed_with():
+    """The auto loop moves exposure/gain (`_apply_camera_settings`) right
+    after each hand-off; a capture must still report the values its frame
+    was exposed with, never the next frame's."""
+    from fluorescence_controls_ui.cameras import provider
+
+    feed = provider.AsiCameraFeed("sdk", 0)
+    feed._thread.preview_enabled = False
+    raw = np.full((2, 2), 7, dtype=np.uint16)
+
+    try:
+        feed._thread._apply_camera_settings(exposure=31_000, gain=120)
+        feed._thread._hand_off_frame(raw)
+        feed._thread._apply_camera_settings(exposure=62_000, gain=180)
+
+        frame, settings = feed.latest_capture()
+
+        assert frame is raw
+        assert settings == dict(
+            exposure_us=31_000,
+            gain=120,
+            binning=asi_camera_settings.binning,
+            image_type=asi_camera_settings.image_type,
+        )
+    finally:
         feed.stop()
 
 
@@ -394,8 +440,12 @@ class _RunFeed:
 
     def wait_for_frame_after(self, seq, timeout):
         self.frame_seq += 1
-        self._last_raw = np.full((2, 2), 1000, dtype=np.uint16)
+        # Distinct pixel values, so a lossy round-trip cannot pass.
+        self._last_raw = np.array([[0, 1000], [40_000, 65_535]], dtype=np.uint16)
         return True
+
+    def latest_capture(self):
+        return self._last_raw, FRAME_SETTINGS
 
     def apply_capture_settings(self, **settings):
         pass
@@ -528,7 +578,7 @@ def capture_order(monkeypatch):
     monkeypatch.setattr(
         capture_service,
         "save_entry_capture",
-        lambda entry, folder: order.append(("grab", entry.label)),
+        lambda entry, folder, **context: order.append(("grab", entry.label)),
     )
 
     return order
@@ -570,6 +620,106 @@ def test_apply_camera_settings_forwards_auto_flags(sync_gui):
     capture_service.apply_camera_settings(entry)
     assert asi_camera_settings.auto_exposure is False
     assert asi_camera_settings.auto_gain is False
+
+
+# --- capture metadata ----------------------------------------------------
+
+
+def _read_capture_metadata(path):
+    """The capture settings JSON a saved PNG carries, read back the way
+    any Qt consumer would."""
+    return json.loads(QImageReader(str(path)).text(CAPTURE_METADATA_KEY))
+
+
+def test_run_burst_embeds_capture_metadata_in_both_pngs(
+    experiment_dir,
+    frozen_time,
+    run_feed,
+    publish_recorder,
+    off_calls,
+    sync_gui,
+    monkeypatch,
+):
+    monkeypatch.setattr(asi_camera_settings, "camera_temperature", 21.5)
+    entry = _entry("A", image_tag="dye", auto_exposure=True, camera_lead_time_ms=0)
+
+    folder = capture_service.run_burst([entry], step_desc="My Step", dotted_id="1.1")
+
+    raw_path = folder / "16bit_raw" / "A_2026_07_16-12_30_45_raw.png"
+    display_path = folder / "A_2026_07_16-12_30_45.png"
+    metadata = _read_capture_metadata(raw_path)
+
+    assert _read_capture_metadata(display_path) == metadata
+    assert metadata == dict(
+        version=CAPTURE_METADATA_VERSION,
+        timestamp_utc="2026_07_16-12_30_45",
+        label="A",
+        image_tag="dye",
+        step_description="My Step",
+        step_dotted_id="1.1",
+        wavelength=LED_WAVELENGTHS[0],
+        intensity="50 %",
+        frequency="1000 Hz",
+        led_index=0,
+        # As applied by the camera thread (23 456 us), not the entry's request.
+        exposure="23.456 ms",
+        gain=77,
+        binning=2,
+        image_type="raw16",
+        requested_exposure="10 ms",
+        requested_gain=0,
+        auto_exposure=True,
+        auto_gain=False,
+        camera_lead_time="0 ms",
+        sensor_temperature="21.5 °C",
+        field_descriptions=CAPTURE_FIELD_DESCRIPTIONS,
+    )
+
+
+def test_raw_capture_with_metadata_still_loads_pixel_identical(
+    experiment_dir, frozen_time, run_feed, publish_recorder, off_calls, sync_gui
+):
+    folder = capture_service.run_burst([_entry("A")])
+
+    raw = cv2.imread(
+        str(folder / "16bit_raw" / "A_2026_07_16-12_30_45_raw.png"),
+        cv2.IMREAD_ANYDEPTH | cv2.IMREAD_GRAYSCALE,
+    )
+
+    assert raw.dtype == np.uint16
+    np.testing.assert_array_equal(raw, run_feed._last_raw)
+
+
+def test_capture_metadata_records_a_multi_channel_mix(monkeypatch):
+    monkeypatch.setattr(asi_camera_settings, "camera_temperature", float("nan"))
+    entry = _entry("Mix", wavelength=MULTI_CHANNEL, proportions={0: 100, 1: 50})
+
+    metadata = capture_service.capture_metadata(
+        entry, FRAME_SETTINGS, stamp="2026_07_16-12_30_45"
+    )
+
+    assert metadata["led_intensities"] == {
+        index: f"{duty} %" for index, duty in entry.led_intensities().items()
+    }
+    assert "led_index" not in metadata
+    assert metadata["step_description"] is None
+    assert metadata["step_dotted_id"] is None
+    # No temperature reading yet: null rather than JSON-invalid NaN.
+    assert metadata["sensor_temperature"] is None
+    assert "NaN" not in json.dumps(metadata)
+
+
+def test_every_capture_metadata_field_is_described():
+    single = _entry("A")
+    mix = _entry("Mix", wavelength=MULTI_CHANNEL, proportions={0: 100})
+    described = {"version", "field_descriptions", *CAPTURE_FIELD_DESCRIPTIONS}
+
+    for entry in (single, mix):
+        metadata = capture_service.capture_metadata(
+            entry, FRAME_SETTINGS, stamp="2026_07_16-12_30_45"
+        )
+
+        assert set(metadata) <= described
 
 
 # --- save_png_atomically -------------------------------------------------

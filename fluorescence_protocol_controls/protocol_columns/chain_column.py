@@ -257,7 +257,9 @@ class FluorescenceChainHandler(BaseColumnHandler):
                 if entry.camera_lead_time_ms:
                     ctx.sleep(entry.camera_lead_time_ms / 1000.0)
 
-                capture_service.save_entry_capture(entry, folder)
+                capture_service.save_entry_capture(
+                    entry, folder, step_desc=row.name, dotted_id=row.dotted_path()
+                )
         finally:
             # Lights out the moment the burst is done — the LED is needed only
             # for the brief capture, never between the start/end phases nor
