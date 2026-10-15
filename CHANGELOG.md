@@ -1,3 +1,11 @@
+## [v3.6.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.6.0) (2026-10-15)
+
+### Feat
+
+- **capture**: units, grouped keys and field descriptions ([`ab108b4`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/ab108b4d4f80c5c9ad1dc8042967589be6124cb6))
+- **capture**: pair each frame with its exposure settings ([`6a79c1f`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/6a79c1fa3a978b5b7e7c798ca92d8a701c8ad2af))
+- **capture**: embed capture settings as PNG metadata ([`aef5a7d`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/aef5a7d86b64f1974e8543a8fcff3f09a7ffccb3))
+
 ## [v3.5.2](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.5.2) (2026-10-07)
 
 ### Fix
