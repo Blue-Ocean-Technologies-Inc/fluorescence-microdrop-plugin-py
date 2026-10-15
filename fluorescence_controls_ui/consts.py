@@ -123,10 +123,66 @@ CAPTURE_PNG_QUALITY = 85
 CAPTURE_PARTIAL_SUFFIX = ".partial"
 
 #: PNG text-chunk key under which every capture PNG (raw and display)
-#: carries its capture settings as JSON. Colon-free: Qt's PNG reader
-#: mangles keys containing a colon in QImage.textKeys().
-CAPTURE_METADATA_KEY = "MicrodropCapture"
+#: carries its capture settings as JSON. CamelCase, as Qt's PNG reader
+#: loses a key with a space (QImageReader.textKeys() folds it into
+#: "Description") and truncates one at a colon, though the PNG spec
+#: allows both; CamelCase-aware readers show it as "Capture Details".
+CAPTURE_METADATA_KEY = "CaptureDetails"
 
-#: Schema version stamped into the capture metadata JSON; bump it when a
-#: field is renamed or changes meaning so readers can tell the shapes apart.
-CAPTURE_METADATA_VERSION = 1
+#: Semantic version of the capture metadata JSON schema, stamped into it;
+#: bump it when a field is added, renamed or changes meaning so readers
+#: can tell the shapes apart.
+CAPTURE_METADATA_VERSION = "1.0.0"
+
+#: One-line meaning of every capture-metadata field, shipped in the JSON
+#: under ``field_descriptions`` — the generic image viewer's reserved key,
+#: which it shows as each field's tooltip and never as a field. Both LED
+#: keys are listed; a capture carries one of them.
+CAPTURE_FIELD_DESCRIPTIONS = {
+    "timestamp_utc": "When the image was captured, in UTC.",
+    "label": (
+        "Name of the capture: image tag, wavelength and chain position; "
+        "also the start of its file name."
+    ),
+    "image_tag": "Optional tag the user gave the capture, leading its label.",
+    "step_description": (
+        "Protocol step that took the capture (null when run from the controls pane)."
+    ),
+    "step_dotted_id": "Position of that step in the protocol tree, e.g. 1.2.",
+    "wavelength": "LED colour that lit the sample, or Multi-Channel for a mix.",
+    "led_index": "Controller channel number (from 0) of the LED that was lit.",
+    "led_intensities": (
+        "Brightness (PWM duty cycle) of each LED channel in the mix, by channel number."
+    ),
+    "intensity": (
+        "LED brightness as a PWM duty cycle; for a mix, the master level "
+        "that each channel's share scales."
+    ),
+    "frequency": "PWM switching frequency of the lit LED(s).",
+    "exposure": "Exposure time the image was actually taken with.",
+    "requested_exposure": (
+        "Exposure time set for the capture; only the starting point when "
+        "auto exposure is on."
+    ),
+    "auto_exposure": (
+        "Whether exposure was adjusted automatically toward a target brightness."
+    ),
+    "camera_lead_time": (
+        "Extra wait after the LED settled before the image was taken, so "
+        "exposure and gain could settle."
+    ),
+    "gain": "Camera gain the image was actually taken with.",
+    "requested_gain": (
+        "Camera gain set for the capture; only the starting point when auto gain is on."
+    ),
+    "auto_gain": "Whether gain was adjusted automatically toward a target brightness.",
+    "binning": (
+        "Sensor pixels combined into one image pixel along each side "
+        "(1 = full resolution)."
+    ),
+    "image_type": "Camera readout format of the frame, e.g. raw16 for 16-bit raw.",
+    "sensor_temperature": (
+        "Camera sensor temperature last read when the image was saved "
+        "(null before the first reading)."
+    ),
+}

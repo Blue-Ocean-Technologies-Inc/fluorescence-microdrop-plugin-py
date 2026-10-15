@@ -32,6 +32,9 @@ import threading
 import time
 from pathlib import Path
 
+# Third-party imports.
+import pint
+
 # Enthought library imports.
 from pyface.gui import GUI
 
@@ -58,6 +61,7 @@ from .cameras.asi_thread import (
 from .cameras.camera_settings import asi_camera_settings
 from .cameras.provider import current_feed
 from .consts import (
+    CAPTURE_FIELD_DESCRIPTIONS,
     CAPTURE_METADATA_KEY,
     CAPTURE_METADATA_VERSION,
     CAPTURE_PARTIAL_SUFFIX,
@@ -69,6 +73,16 @@ from .consts import (
 from logger.logger_service import get_logger
 
 logger = get_logger(__name__)
+
+#: Formats capture-metadata quantities. Offset units (°C) autoconvert so
+#: that ``unit_registry.Quantity(text)`` parses every stored value back,
+#: temperatures included — a plain registry rejects "24.6 °C".
+unit_registry = pint.UnitRegistry(autoconvert_offset_to_baseunit=True)
+
+#: Twelve significant digits keep every value in these ranges exact
+#: (e.g. "12345.678 ms") and out of exponent form; pint's bare "g" rounds
+#: to six digits and switches to "2×10⁶" for large values.
+_QUANTITY_FORMAT = ".12g~P"
 
 #: Set by message_handler.py's FLUORESCENCE_APPLIED listener (worker
 #: thread) on every backend ack; waited on here between an LED publish
@@ -141,6 +155,17 @@ def apply_camera_settings(entry) -> None:
     GUI.invoke_later(asi_camera_settings.trait_set, **settings)
 
 
+def _quantity_text(value, unit, *, display_unit=None) -> str:
+    """``value`` in ``unit`` as display text with an abbreviated unit, e.g.
+    "120 ms" or "24.6 °C", converted to ``display_unit`` when given."""
+    quantity = unit_registry.Quantity(value, unit)
+
+    if display_unit is not None:
+        quantity = quantity.to(display_unit)
+
+    return f"{quantity:{_QUANTITY_FORMAT}}"
+
+
 def capture_metadata(
     entry, camera_settings, *, stamp, step_desc=None, dotted_id=None
 ) -> dict:
@@ -149,14 +174,29 @@ def capture_metadata(
     and readout format the saved frame was exposed with (paired with it by
     `AsiCameraFeed.latest_capture`). With an auto mode on they differ from
     the entry's requested starting values, which ride along too.
-    ``stamp`` is the UTC stamp of the capture's filenames."""
+    ``stamp`` is the UTC stamp of the capture's filenames. The fields'
+    meanings close it (CAPTURE_FIELD_DESCRIPTIONS), for the image viewer's
+    tooltips.
+
+    Dimensioned values are pint quantity strings carrying their unit, one
+    unit per kind — times in ms, frequency in Hz, LED duty in %,
+    temperature in °C — so they display as stored and parse back with
+    ``unit_registry.Quantity(text)``."""
     temperature = asi_camera_settings.camera_temperature
 
     if entry.multi_channel:
-        leds = dict(led_intensities=entry.led_intensities())
+        leds = dict(
+            led_intensities={
+                index: _quantity_text(duty, "percent")
+                for index, duty in entry.led_intensities().items()
+            }
+        )
     else:
         leds = dict(led_index=entry.led_index)
 
+    # Key order is display order — the image viewer lists the fields as
+    # stored — so related settings sit together: the capture, its step,
+    # the light, the exposure, the gain, then the sensor readout.
     return dict(
         version=CAPTURE_METADATA_VERSION,
         timestamp_utc=stamp,
@@ -165,17 +205,25 @@ def capture_metadata(
         step_description=step_desc,
         step_dotted_id=dotted_id,
         wavelength=entry.wavelength,
-        intensity=entry.intensity,
-        frequency=entry.frequency,
         **leds,
-        **camera_settings,
-        requested_exposure_ms=entry.exposure_ms,
-        requested_gain=entry.gain,
+        intensity=_quantity_text(entry.intensity, "percent"),
+        frequency=_quantity_text(entry.frequency, "Hz"),
+        exposure=_quantity_text(
+            camera_settings["exposure_us"], "us", display_unit="ms"
+        ),
+        requested_exposure=_quantity_text(entry.exposure_ms, "ms"),
         auto_exposure=entry.auto_exposure,
+        camera_lead_time=_quantity_text(entry.camera_lead_time_ms, "ms"),
+        gain=camera_settings["gain"],
+        requested_gain=entry.gain,
         auto_gain=entry.auto_gain,
-        camera_lead_time_ms=entry.camera_lead_time_ms,
+        binning=camera_settings["binning"],
+        image_type=camera_settings["image_type"],
         # NaN until the camera reports a reading, and JSON has no NaN.
-        sensor_temperature_c=None if math.isnan(temperature) else temperature,
+        sensor_temperature=(
+            None if math.isnan(temperature) else _quantity_text(temperature, "degC")
+        ),
+        field_descriptions=CAPTURE_FIELD_DESCRIPTIONS,
     )
 
 

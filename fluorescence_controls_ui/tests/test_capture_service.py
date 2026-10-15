@@ -46,6 +46,7 @@ from fluorescence_controller.consts import (
 )
 from fluorescence_controls_ui.cameras.camera_settings import asi_camera_settings
 from fluorescence_controls_ui.consts import (
+    CAPTURE_FIELD_DESCRIPTIONS,
     CAPTURE_METADATA_KEY,
     CAPTURE_METADATA_VERSION,
     CAPTURE_PARTIAL_SUFFIX,
@@ -657,20 +658,21 @@ def test_run_burst_embeds_capture_metadata_in_both_pngs(
         step_description="My Step",
         step_dotted_id="1.1",
         wavelength=LED_WAVELENGTHS[0],
-        intensity=50,
-        frequency=1000,
+        intensity="50 %",
+        frequency="1000 Hz",
         led_index=0,
-        # As applied by the camera thread, not the entry's request.
-        exposure_us=23_456,
+        # As applied by the camera thread (23 456 us), not the entry's request.
+        exposure="23.456 ms",
         gain=77,
         binning=2,
         image_type="raw16",
-        requested_exposure_ms=10.0,
+        requested_exposure="10 ms",
         requested_gain=0,
         auto_exposure=True,
         auto_gain=False,
-        camera_lead_time_ms=0,
-        sensor_temperature_c=21.5,
+        camera_lead_time="0 ms",
+        sensor_temperature="21.5 °C",
+        field_descriptions=CAPTURE_FIELD_DESCRIPTIONS,
     )
 
 
@@ -696,13 +698,28 @@ def test_capture_metadata_records_a_multi_channel_mix(monkeypatch):
         entry, FRAME_SETTINGS, stamp="2026_07_16-12_30_45"
     )
 
-    assert metadata["led_intensities"] == entry.led_intensities()
+    assert metadata["led_intensities"] == {
+        index: f"{duty} %" for index, duty in entry.led_intensities().items()
+    }
     assert "led_index" not in metadata
     assert metadata["step_description"] is None
     assert metadata["step_dotted_id"] is None
     # No temperature reading yet: null rather than JSON-invalid NaN.
-    assert metadata["sensor_temperature_c"] is None
+    assert metadata["sensor_temperature"] is None
     assert "NaN" not in json.dumps(metadata)
+
+
+def test_every_capture_metadata_field_is_described():
+    single = _entry("A")
+    mix = _entry("Mix", wavelength=MULTI_CHANNEL, proportions={0: 100})
+    described = {"version", "field_descriptions", *CAPTURE_FIELD_DESCRIPTIONS}
+
+    for entry in (single, mix):
+        metadata = capture_service.capture_metadata(
+            entry, FRAME_SETTINGS, stamp="2026_07_16-12_30_45"
+        )
+
+        assert set(metadata) <= described
 
 
 # --- save_png_atomically -------------------------------------------------
