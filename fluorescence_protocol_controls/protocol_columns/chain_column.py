@@ -37,10 +37,10 @@ from traits.api import Any, List, Str
 from fluorescence_controller.consts import (
     ALL_LEDS_OFF,
     FLUORESCENCE_APPLIED,
-    PROTOCOL_FLUORESCENCE_SESSION,
     PROTOCOL_STEP_FLUORESCENCE,
 )
 from fluorescence_controller.datamodels import (
+    protocol_fluorescence_session_publisher,
     protocol_set_fluorescence_publisher,
 )
 from microdrop_application.dialogs import pyface_wrapper
@@ -175,17 +175,18 @@ class FluorescenceChainHandler(BaseColumnHandler):
     default_ack_time_s = 5.0
 
     def on_pre_protocol_start(self, ctx):
-        """Open the capture camera just for this run, and reserve warm-up
-        time so the ASI feed is producing frames before the first capture.
-        This hook only fires when the fluorescence chain column is in the
-        protocol (so the camera opens exactly when fluorescence is in play),
-        and the pane closes the feed again at the end — the camera never
-        sits idle heating up. Preview runs touch no hardware."""
+        """Start the run's capture session, and reserve warm-up time so the
+        ASI feed is producing frames before the first capture. This hook
+        only fires when the fluorescence chain column is in the protocol, so
+        the session starts exactly when fluorescence is in play. The pane
+        turns on what is not already on — the capture camera and the Device
+        View Camera Feed — and turns exactly that back off at the end (see
+        `on_post_protocol_end`), so the camera never sits idle heating up.
+        Preview runs touch no hardware."""
         if getattr(ctx, "preview_mode", False):
             return
-        publish_message(
-            topic=PROTOCOL_FLUORESCENCE_SESSION, message=json.dumps({"active": True})
-        )
+
+        protocol_fluorescence_session_publisher.publish(active=True)
         ctx.add_pre_protocol_wait(CAMERA_WARMUP_S)
 
     def on_pre_step(self, row, ctx):
@@ -313,12 +314,11 @@ class FluorescenceChainHandler(BaseColumnHandler):
         if getattr(ctx, "preview_mode", False):
             return
         publish_message(topic=ALL_LEDS_OFF, message="")
-        # End the capture session: the pane closes the camera it opened and
-        # drops its live run mirror (light off, no row highlighted) so the
+        # End the capture session: the pane closes the camera it opened,
+        # turns the Device View Camera Feed back off if the run turned it on,
+        # and drops its live run mirror (light off, no row highlighted) so the
         # camera + LEDs don't sit idle heating up.
-        publish_message(
-            topic=PROTOCOL_FLUORESCENCE_SESSION, message=json.dumps({"active": False})
-        )
+        protocol_fluorescence_session_publisher.publish(active=False)
 
 
 def make_fluorescence_chain_column():

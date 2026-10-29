@@ -11,6 +11,9 @@
 # Standard library imports.
 import json
 
+# Third-party imports.
+from pydantic import ValidationError
+
 # Enthought library imports.
 from traits.api import Instance
 
@@ -20,6 +23,7 @@ from fluorescence_controller.consts import (
     FIRMWARE_UPLOAD_LOG,
     FIRMWARE_UPLOAD_STARTED,
 )
+from fluorescence_controller.datamodels import ProtocolFluorescenceSessionData
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedMessage,
 )
@@ -128,12 +132,15 @@ class FluorescenceMessageHandler(BaseMessageHandler):
     def _on_protocol_fluorescence_session_triggered(self, body):
         """A capture session start/end. Open/close the run's own headless
         camera on the GUI thread (Qt camera objects), and ferry the flag to
-        live_state so the controller drops its live mirror on end."""
+        live_state so the controller turns the Device View Camera Feed on
+        for the run (and back off at its end, if the run turned it on) and
+        drops its live mirror on end."""
         try:
-            active = bool(json.loads(body).get("active"))
-        except Exception:
+            active = ProtocolFluorescenceSessionData.model_validate_json(body).active
+        except ValidationError:
             logger.error(f"Unparseable protocol-session payload: {body!r}")
             return
+
         from pyface.api import GUI
 
         from . import camera_session

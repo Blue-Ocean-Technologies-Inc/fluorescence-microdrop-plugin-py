@@ -29,6 +29,7 @@ from .consts import (
     LED_FREQUENCY_MAX,
     LED_FREQUENCY_MIN,
     LED_WAVELENGTHS,
+    PROTOCOL_FLUORESCENCE_SESSION,
     PROTOCOL_SET_FLUORESCENCE,
     SET_LED_INTENSITIES,
     UPLOAD_FIRMWARE,
@@ -166,3 +167,28 @@ class SetLedIntensitiesPublisher(ValidatedTopicPublisher):
 
 
 set_led_intensities_publisher = SetLedIntensitiesPublisher(topic=SET_LED_INTENSITIES)
+
+
+class ProtocolFluorescenceSessionData(BaseModel):
+    """A protocol run's capture session starting (``active``) or ending.
+
+    On start the controls pane brings up what the run needs that is not
+    already on — the capture camera and the Device View Camera Feed — and on
+    end turns off exactly what the start turned on.
+    """
+
+    active: bool
+
+
+class ProtocolFluorescenceSessionPublisher(ValidatedTopicPublisher):
+    """Validated publisher for the ``PROTOCOL_FLUORESCENCE_SESSION`` topic."""
+
+    validator_class = ProtocolFluorescenceSessionData
+
+    def publish(self, *, active, **kw):
+        super().publish({"active": active}, **kw)
+
+
+protocol_fluorescence_session_publisher = ProtocolFluorescenceSessionPublisher(
+    topic=PROTOCOL_FLUORESCENCE_SESSION
+)

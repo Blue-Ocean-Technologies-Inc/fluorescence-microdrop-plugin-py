@@ -27,7 +27,10 @@ from fluorescence_controller.consts import (
     PROTOCOL_FLUORESCENCE_SESSION,
 )
 from fluorescence_protocol_controls.capture_chain import ChainEntry
-from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
+from fluorescence_protocol_controls.consts import (
+    CAMERA_WARMUP_S,
+    FLUORESCENCE_CHAIN_COLUMN_ID,
+)
 from fluorescence_protocol_controls.protocol_columns import (
     chain_column as column_module,
 )
@@ -243,6 +246,36 @@ def test_run_end_preview_mode_publishes_nothing(published):
 
     FluorescenceChainHandler().on_post_protocol_end(_Ctx())
     assert published == []
+
+
+class _StartCtx:
+    """Pre-protocol context: records the warm-up waits it is asked for."""
+
+    def __init__(self, preview_mode=False):
+        self.preview_mode = preview_mode
+        self.waits = []
+
+    def add_pre_protocol_wait(self, seconds):
+        self.waits.append(seconds)
+
+
+def test_run_start_starts_the_session_and_reserves_warmup(published):
+    ctx = _StartCtx()
+
+    FluorescenceChainHandler().on_pre_protocol_start(ctx)
+
+    assert [topic for topic, _ in published] == [PROTOCOL_FLUORESCENCE_SESSION]
+    assert json.loads(published[0][1]) == {"active": True}
+    assert ctx.waits == [CAMERA_WARMUP_S]
+
+
+def test_run_start_preview_mode_publishes_nothing(published):
+    ctx = _StartCtx(preview_mode=True)
+
+    FluorescenceChainHandler().on_pre_protocol_start(ctx)
+
+    assert published == []
+    assert ctx.waits == []
 
 
 def test_on_pre_step_bare_row_is_a_noop():

@@ -17,7 +17,11 @@ closes it when the run ends — the camera and LEDs never sit idle heating up.
 
 The device-viewer live preview stays independent: if the operator has already
 pointed it at the ASI camera, that feed is reused (and left alone at the end)
-rather than opening a second one on the single camera.
+rather than opening a second one on the single camera. The session cannot put
+the ASI camera into the device viewer itself: DEVICE_VIEWER_CAMERA_ACTIVE only
+switches on whichever source the viewer's dropdown has selected, and no topic
+selects a source. The Device View Camera Feed checkbox the session turns on is
+the pane controller's concern (``_on_protocol_session_active``).
 
 ``activate`` / ``deactivate`` touch Qt camera objects, so they must run on the
 GUI thread — the message handler marshals them there via ``GUI.invoke_later``.

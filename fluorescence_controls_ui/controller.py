@@ -860,11 +860,24 @@ class FluorescenceControlsController(BaseStatusController):
         """Session start: show the LED board as streaming, matching the
         camera the run just opened — the pane is publish-suppressed during a
         run (`protocol_running`), so this only updates the visual state, no
-        board command. Session end: drop the live mirror — stream off, light
+        board command — and turn the Device View Camera Feed on if it is
+        off, noting in live_state that the run did. Session end: turn the
+        feed back off only if the run turned it on (an operator's own
+        choice is left alone), and drop the live mirror — stream off, light
         off, nothing highlighted, so the pane reflects the idle board."""
         self.model.stream_active = bool(event.new)
+
         if event.new:
+            if not self.model.device_viewer_stream:
+                self.model.device_viewer_stream = True
+                fluorescence_live_state.device_viewer_stream_enabled_by_run = True
+
             return
+
+        if fluorescence_live_state.device_viewer_stream_enabled_by_run:
+            self.model.device_viewer_stream = False
+            fluorescence_live_state.device_viewer_stream_enabled_by_run = False
+
         self.model.chain_selection = None
         self.model.light_on = False
 
