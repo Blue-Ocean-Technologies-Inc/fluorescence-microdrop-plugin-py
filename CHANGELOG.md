@@ -1,3 +1,10 @@
+## [v3.7.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.7.0) (2026-10-29)
+
+### Feat
+
+- **protocol**: show the ASI camera in the device viewer for a run ([`ed509bc`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/ed509bc4b385c5a74a11f2a371737a3a60c78390))
+- **protocol**: turn the device-view camera feed on for a run ([`5d08edc`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/5d08edc79897a676286b412f8e36a1d7322a39d8))
+
 ## [v3.6.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.6.0) (2026-10-15)
 
 ### Feat
