@@ -31,6 +31,7 @@ from fluorescence_controls_ui.controller import FluorescenceControlsController
 from fluorescence_controls_ui.model import FluorescenceStatusModel
 from fluorescence_protocol_controls.capture_chain import ChainEntry, dump_chain
 from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
+from microdrop_application.dialogs.pyface_wrapper import NO, YES
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedMessage,
 )
@@ -131,7 +132,7 @@ def test_group_selection_with_no_free_chain_enters_free_mode(monkeypatch):
     assert model.attached_step_id == ""
 
 
-def test_group_selection_with_free_chain_offers_new_step_only(monkeypatch):
+def test_group_selection_with_free_chain_offers_new_step_or_discard(monkeypatch):
     seen = {}
 
     def fake_choose(parent, message, title=None, choices=(), **kw):
@@ -147,7 +148,7 @@ def test_group_selection_with_free_chain_offers_new_step_only(monkeypatch):
     msg = ProtocolTreeRowSelectedMessage(group_id="grp-1", cells={})
     controller._on_tree_row_selected(_event(msg))
 
-    assert seen["choices"] == ["New step"]
+    assert seen["choices"] == ["New step", "Discard"]
     assert len(add_step) == 1
     assert add_step[0]["group_id"] == "grp-1"
     assert add_step[0]["cells"][FLUORESCENCE_CHAIN_COLUMN_ID][0]["label"] == "A"
@@ -172,7 +173,111 @@ def test_group_selection_cancel_leaves_free_chain_intact(monkeypatch):
     assert model.attached_step_id == ""
 
 
-# --- step selection with a free-mode chain: four-way dialog ---------------------------
+def test_group_selection_discard_confirmed_empties_free_chain(monkeypatch):
+    monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Discard")
+    monkeypatch.setattr(controller_mod, "confirm", lambda *a, **k: YES)
+    add_step = _add_step_recorder(monkeypatch)
+    controller, model = _controller()
+    model.free_chain = [FluorescenceChainRow(label="A")]
+    model.chain_rows = list(model.free_chain)
+
+    msg = ProtocolTreeRowSelectedMessage(group_id="grp-1", cells={})
+    controller._on_tree_row_selected(_event(msg))
+
+    assert add_step == []
+    assert model.free_chain == []
+    assert model.chain_rows == []  # free mode, nothing left to show
+    assert model.attached_step_id == ""
+
+
+def test_group_selection_discard_then_keep_leaves_free_chain_intact(monkeypatch):
+    monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Discard")
+    monkeypatch.setattr(controller_mod, "confirm", lambda *a, **k: NO)
+    controller, model = _controller()
+    model.free_chain = [FluorescenceChainRow(label="A")]
+    model.chain_rows = list(model.free_chain)
+
+    msg = ProtocolTreeRowSelectedMessage(group_id="grp-1", cells={})
+    controller._on_tree_row_selected(_event(msg))
+
+    assert [r.label for r in model.free_chain] == ["A"]
+    assert [r.label for r in model.chain_rows] == ["A"]
+    assert model.attached_step_id == ""
+
+
+# --- step selection with a free-mode chain: five-way dialog ---------------------------
+
+
+def test_step_selection_offers_discard_last(monkeypatch):
+    seen = {}
+
+    def fake_choose(parent, message, title=None, choices=(), **kw):
+        seen["choices"] = list(choices)
+
+    monkeypatch.setattr(controller_mod, "choose", fake_choose)
+    controller, model = _controller()
+    model.free_chain = [FluorescenceChainRow(label="A")]
+    model.chain_rows = list(model.free_chain)
+
+    msg = ProtocolTreeRowSelectedMessage(step_id="step-1", cells={})
+    controller._on_tree_row_selected(_event(msg))
+
+    assert seen["choices"] == ["Append", "Replace", "New step", "Discard"]
+
+
+def test_step_selection_discard_confirmed_loads_step_chain(monkeypatch):
+    confirms = []
+
+    def fake_confirm(parent, message, **kw):
+        confirms.append((message, kw))
+        return YES
+
+    monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Discard")
+    monkeypatch.setattr(controller_mod, "confirm", fake_confirm)
+    set_cell = _set_cell_recorder(monkeypatch)
+    add_step = _add_step_recorder(monkeypatch)
+    controller, model = _controller()
+    model.free_chain = [
+        FluorescenceChainRow(label="A"),
+        FluorescenceChainRow(label="B"),
+    ]
+    model.chain_rows = list(model.free_chain)
+
+    stored = dump_chain([ChainEntry(**_entry_dict("GFP"))])
+    msg = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={FLUORESCENCE_CHAIN_COLUMN_ID: stored}
+    )
+    controller._on_tree_row_selected(_event(msg))
+
+    assert len(confirms) == 1
+    assert "Discard the 2 free-mode captures?" in confirms[0][0]
+    assert confirms[0][1]["yes_label"] == "Discard"
+    assert confirms[0][1]["no_label"] == "Keep"
+    assert model.free_chain == []
+    assert model.attached_step_id == "step-1"
+    assert [r.label for r in model.chain_rows] == ["GFP"]
+    assert set_cell == []  # the step's chain is loaded, never written
+    assert add_step == []
+
+
+def test_step_selection_discard_then_keep_leaves_free_chain_unattached(monkeypatch):
+    monkeypatch.setattr(controller_mod, "choose", lambda *a, **k: "Discard")
+    monkeypatch.setattr(controller_mod, "confirm", lambda *a, **k: NO)
+    set_cell = _set_cell_recorder(monkeypatch)
+    controller, model = _controller()
+    model.free_chain = [FluorescenceChainRow(label="A")]
+    model.chain_rows = list(model.free_chain)
+
+    stored = dump_chain([ChainEntry(**_entry_dict("GFP"))])
+    msg = ProtocolTreeRowSelectedMessage(
+        step_id="step-1", cells={FLUORESCENCE_CHAIN_COLUMN_ID: stored}
+    )
+    controller._on_tree_row_selected(_event(msg))
+
+    assert model.attached_step_id == ""
+    assert set_cell == []
+    assert [r.label for r in model.free_chain] == ["A"]
+    assert [r.label for r in model.chain_rows] == ["A"]
 
 
 def test_step_selection_cancel_leaves_free_chain_unattached(monkeypatch):
