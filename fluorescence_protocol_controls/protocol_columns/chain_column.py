@@ -28,12 +28,14 @@ capture/record/video (10), matching the old compound column's ordering.
 
 # Standard library imports.
 import json
+import uuid
 
 # Enthought library imports.
 from pyface.qt.QtCore import QTimer
 from traits.api import Any, List, Str
 
 # Microdrop package imports.
+from device_viewer.consts import CameraState, camera_select_source_publisher
 from fluorescence_controller.consts import (
     ALL_LEDS_OFF,
     FLUORESCENCE_APPLIED,
@@ -44,6 +46,7 @@ from fluorescence_controller.datamodels import (
     protocol_set_fluorescence_publisher,
 )
 from microdrop_application.dialogs import pyface_wrapper
+from pluggable_protocol_tree.execution.exceptions import AbortError
 from pluggable_protocol_tree.models.column import (
     BaseColumnHandler,
     BaseColumnModel,
@@ -58,6 +61,8 @@ from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
 from ..capture_chain import parse_chain, ticked
 from ..consts import (
     CAMERA_WARMUP_S,
+    DEVICE_VIEWER_CAMERA_SCRATCH_KEY,
+    DEVICE_VIEWER_CAMERA_TIMEOUT_S,
     FLUORESCENCE_CHAIN_COLUMN_ID,
     LED_STABILIZATION_S,
     PHASE_END_SUFFIX,
@@ -93,6 +98,15 @@ def _warn_capture_locked_once():
             "chain owns this step's imaging.",
             title="Capture Disabled",
         ),
+    )
+
+
+def _device_viewer_camera_error(reason):
+    """The operator-facing message for a run stopped because the device
+    viewer could not show the ASI camera."""
+    return (
+        f"Fluorescence: the device viewer could not show the ASI camera "
+        f"({reason}). The protocol was stopped."
     )
 
 
@@ -175,19 +189,76 @@ class FluorescenceChainHandler(BaseColumnHandler):
     default_ack_time_s = 5.0
 
     def on_pre_protocol_start(self, ctx):
-        """Start the run's capture session, and reserve warm-up time so the
-        ASI feed is producing frames before the first capture. This hook
-        only fires when the fluorescence chain column is in the protocol, so
-        the session starts exactly when fluorescence is in play. The pane
-        turns on what is not already on — the capture camera and the Device
-        View Camera Feed — and turns exactly that back off at the end (see
-        `on_post_protocol_end`), so the camera never sits idle heating up.
-        Preview runs touch no hardware."""
+        """Put the ASI camera in the device viewer (stopping the run if the
+        viewer cannot), then start the run's capture session and reserve
+        warm-up time so the ASI feed is producing frames before the first
+        capture. This hook only fires when the fluorescence chain column is
+        in the protocol, so all of it happens exactly when fluorescence is in
+        play. The pane turns on what is not already on — the Device View
+        Camera Feed, and a headless camera if the viewer's feed is not
+        running — and the end of the run turns exactly that back off and
+        restores the viewer's pre-run camera (see `on_post_protocol_end`), so
+        the camera never sits idle heating up. Preview runs touch no
+        hardware."""
         if getattr(ctx, "preview_mode", False):
             return
 
+        self._show_asi_camera_in_device_viewer(ctx)
         protocol_fluorescence_session_publisher.publish(active=True)
         ctx.add_pre_protocol_wait(CAMERA_WARMUP_S)
+
+    @staticmethod
+    def _show_asi_camera_in_device_viewer(ctx):
+        """Ask the device viewer to select the ASI camera and turn it on, and
+        block until it confirms. The viewer's pre-run camera state is stored
+        in the protocol scratch BEFORE the request, so the end of the run
+        restores it even when the reply never arrives.
+
+        Pre-protocol hooks get the ProtocolContext, which has no
+        ``wait_for`` mailbox (the executor opens those per step), so the
+        reply is matched by request_id through capture_service, fed by the
+        controls pane's DEVICE_VIEWER_CAMERA_SOURCE_SELECTED listener.
+
+        Raises RuntimeError — the executor stops the run and shows the
+        operator the message — when no ASI camera is connected, the viewer
+        refuses, or no reply arrives in time; AbortError on Stop."""
+        from fluorescence_controls_ui import capture_service
+
+        label = capture_service.asi_source_label()
+
+        if not label:
+            raise RuntimeError(
+                _device_viewer_camera_error("no ASI camera is connected")
+            )
+
+        request_id = uuid.uuid4().hex
+        ctx.scratch[DEVICE_VIEWER_CAMERA_SCRATCH_KEY] = (
+            capture_service.device_viewer_camera_state(),
+            CameraState(selected_camera=label, active=True),
+        )
+
+        capture_service.arm_source_selected(request_id)
+        camera_select_source_publisher.publish(
+            {"label": label, "active": True, "request_id": request_id}
+        )
+        reply = capture_service.wait_source_selected(
+            request_id, DEVICE_VIEWER_CAMERA_TIMEOUT_S, ctx.stop_event
+        )
+
+        if ctx.stop_event.is_set():
+            raise AbortError("Stopped while waiting for the device viewer camera")
+
+        if reply is None:
+            raise RuntimeError(
+                _device_viewer_camera_error(
+                    f"no reply within {DEVICE_VIEWER_CAMERA_TIMEOUT_S:g} s"
+                )
+            )
+
+        if not reply.ok:
+            raise RuntimeError(
+                _device_viewer_camera_error(reply.error or "request refused")
+            )
 
     def on_pre_step(self, row, ctx):
         """Step-start phase: fire the ticked entries with
@@ -319,6 +390,33 @@ class FluorescenceChainHandler(BaseColumnHandler):
         # and drops its live run mirror (light off, no row highlighted) so the
         # camera + LEDs don't sit idle heating up.
         protocol_fluorescence_session_publisher.publish(active=False)
+        self._restore_device_viewer_camera(ctx)
+
+    @staticmethod
+    def _restore_device_viewer_camera(ctx):
+        """Put the device viewer's camera back the way the run found it, if
+        the run asked for the ASI camera and that changed anything (a camera
+        the operator already had on the ASI source is left alone). With the
+        pre-run state unknown — the viewer never reported one — the ASI
+        camera is just turned off. Fire-and-forget: the controls pane's
+        source-selected listener logs the outcome."""
+        camera_states = ctx.scratch.get(DEVICE_VIEWER_CAMERA_SCRATCH_KEY)
+
+        if camera_states is None:
+            return
+
+        pre_run, run = camera_states
+
+        if pre_run == run:
+            return
+
+        if pre_run is None:
+            pre_run = CameraState(selected_camera=run.selected_camera, active=False)
+
+        # A CameraState restores as sent: label "" selects "<No Camera>".
+        camera_select_source_publisher.publish(
+            {"label": pre_run.selected_camera, "active": pre_run.active}
+        )
 
 
 def make_fluorescence_chain_column():

@@ -9,7 +9,11 @@
 # Thanks for using Microdrop open source!
 
 # Microdrop package imports.
-from device_viewer.consts import PROTOCOL_RUNNING
+from device_viewer.consts import (
+    DEVICE_VIEWER_CAMERA_SOURCE_SELECTED,
+    DEVICE_VIEWER_CAMERA_STATE,
+    PROTOCOL_RUNNING,
+)
 from fluorescence_controller.consts import (  # noqa: F401 (re-export)
     ALL_LEDS_OFF,
     ALL_LEDS_ON,
@@ -46,6 +50,8 @@ ACTOR_TOPIC_DICT = {
         f"{DEVICE_NAME}/signals/#",
         PROTOCOL_RUNNING,
         PROTOCOL_TREE_ROW_SELECTED,
+        DEVICE_VIEWER_CAMERA_SOURCE_SELECTED,
+        DEVICE_VIEWER_CAMERA_STATE,
     ],
 }
 

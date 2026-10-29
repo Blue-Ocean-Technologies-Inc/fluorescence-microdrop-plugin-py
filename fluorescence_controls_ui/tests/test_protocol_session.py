@@ -22,10 +22,13 @@
 the message handler marshals the camera session onto the GUI thread and
 ferries the flag to live_state, and the controller turns the Device View
 Camera Feed on for the run, then back off at the end only if the run turned
-it on. `GUI.invoke_later` is patched, so no camera ever opens."""
+it on. `GUI.invoke_later` is patched, so no camera ever opens. Also covers
+the device viewer camera listeners: the camera state lands in the capture
+service, and a select-source reply reaches the run waiting on it."""
 
 # Standard library imports.
 import json
+import threading
 from types import SimpleNamespace
 
 # Third-party imports.
@@ -36,7 +39,8 @@ from apptools.preferences.api import Preferences
 from traits.api import HasTraits, Instance, List, observe
 
 # Microdrop package imports.
-from fluorescence_controls_ui import camera_session
+from device_viewer.consts import CameraState
+from fluorescence_controls_ui import camera_session, capture_service
 from fluorescence_controls_ui.cameras.camera_settings import asi_camera_settings
 from fluorescence_controls_ui.controller import FluorescenceControlsController
 from fluorescence_controls_ui.live_state import (
@@ -199,3 +203,50 @@ def test_unparseable_session_message_does_nothing(invoked, sessions):
 
     assert invoked == []
     assert sessions == []
+
+
+# --- message handler: device viewer camera state + source-selected replies ----
+
+
+def test_camera_state_lands_in_the_capture_service(monkeypatch):
+    monkeypatch.setattr(capture_service, "_device_viewer_camera", None)
+
+    _handler()._on_state_triggered(
+        json.dumps({"selected_camera": "Webcam", "active": True})
+    )
+
+    assert capture_service.device_viewer_camera_state() == CameraState(
+        selected_camera="Webcam", active=True
+    )
+
+
+def test_unparseable_camera_state_keeps_the_last_one(monkeypatch):
+    last = CameraState(selected_camera="Webcam", active=False)
+    monkeypatch.setattr(capture_service, "_device_viewer_camera", last)
+
+    _handler()._on_state_triggered("not json")
+
+    assert capture_service.device_viewer_camera_state() is last
+
+
+def _source_selected(request_id, ok=True):
+    return json.dumps(
+        {"request_id": request_id, "label": "ASI: X", "ok": ok, "active": ok}
+    )
+
+
+def test_source_selected_reply_reaches_the_waiting_request():
+    capture_service.arm_source_selected("r1")
+
+    _handler()._on_source_selected_triggered(_source_selected("r1"))
+    reply = capture_service.wait_source_selected("r1", 1.0, threading.Event())
+
+    assert (reply.request_id, reply.ok) == ("r1", True)
+
+
+def test_unarmed_source_selected_reply_is_dropped():
+    # e.g. the reply to the fire-and-forget end-of-run restore.
+    _handler()._on_source_selected_triggered(_source_selected("", ok=False))
+    capture_service.arm_source_selected("r2")
+
+    assert capture_service.wait_source_selected("r2", 0.01, threading.Event()) is None

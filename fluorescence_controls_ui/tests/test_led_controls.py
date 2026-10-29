@@ -37,6 +37,7 @@ import pytest
 from apptools.preferences.api import Preferences
 
 # Microdrop package imports.
+import fluorescence_controls_ui
 import fluorescence_controls_ui.controller as controller_mod
 from fluorescence_controller.consts import (
     ALL_LEDS_OFF,
@@ -428,7 +429,13 @@ def fake_capture_service(monkeypatch):
         )
 
     module.run_burst = run_burst
+    # The lazy `from fluorescence_controls_ui import capture_service` resolves
+    # the package attribute first: once another test imported the real module,
+    # a sys.modules-only fake is shadowed (see test_chain_execution.py).
     monkeypatch.setitem(sys.modules, "fluorescence_controls_ui.capture_service", module)
+    monkeypatch.setattr(
+        fluorescence_controls_ui, "capture_service", module, raising=False
+    )
     return calls
 
 
