@@ -228,8 +228,21 @@ def published(monkeypatch):
     return calls
 
 
+class _RunCtx:
+    """Run-level context: no device-viewer camera was asked for (empty
+    scratch); records the warm-up waits it is asked for."""
+
+    def __init__(self, preview_mode=False):
+        self.preview_mode = preview_mode
+        self.scratch = {}
+        self.waits = []
+
+    def add_pre_protocol_wait(self, seconds):
+        self.waits.append(seconds)
+
+
 def test_run_end_always_turns_lights_off(published):
-    FluorescenceChainHandler().on_post_protocol_end(object())
+    FluorescenceChainHandler().on_post_protocol_end(_RunCtx())
     # Lights out, then the capture session ends (the pane closes the camera
     # it opened, so camera + LEDs don't sit idle heating up).
     topics = [topic for topic, _ in published]
@@ -243,6 +256,17 @@ def test_run_end_preview_mode_publishes_nothing(published):
 
     FluorescenceChainHandler().on_post_protocol_end(_Ctx())
     assert published == []
+
+
+def test_run_start_preview_mode_publishes_nothing(published):
+    # The non-preview start (device-viewer camera, then the session) is
+    # covered in test_chain_execution.py, next to the capture service.
+    ctx = _RunCtx(preview_mode=True)
+
+    FluorescenceChainHandler().on_pre_protocol_start(ctx)
+
+    assert published == []
+    assert ctx.waits == []
 
 
 def test_on_pre_step_bare_row_is_a_noop():

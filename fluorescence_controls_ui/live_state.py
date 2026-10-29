@@ -70,6 +70,12 @@ class FluorescenceLiveState(HasTraits):
     #: mirror (light off, nothing highlighted).
     protocol_session_active = Event()
 
+    #: True while a run's capture session has the Device View Camera Feed on
+    #: because the operator had it off: the session end turns it back off
+    #: only then. Lives here, not on the controller, so it survives a pane
+    #: remount mid-run.
+    device_viewer_stream_enabled_by_run = Bool(False)
+
 
 #: Module-level singleton shared inside the fluorescence plugin.
 fluorescence_live_state = FluorescenceLiveState()

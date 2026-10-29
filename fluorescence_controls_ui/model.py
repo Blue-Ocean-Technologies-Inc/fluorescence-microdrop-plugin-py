@@ -111,7 +111,8 @@ class FluorescenceStatusModel(BaseStatusModel, CapturePhases):
     # Render the live ASI feed in the device viewer's video layer. On by
     # default; uncheck for a smoother GUI — full-resolution sensor frames
     # under the electrodes cost rendering time, and the image viewer pane
-    # previews captures regardless.
+    # previews captures regardless. A run with a fluorescence chain turns it
+    # on for the run and back off at the end if it was off.
     device_viewer_stream = Bool(True)
 
     # Software auto-exposure / auto-gain: the capture thread converges the

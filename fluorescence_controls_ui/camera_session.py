@@ -8,16 +8,20 @@
 #
 # Thanks for using Microdrop open source!
 
-"""Headless capture-camera session for protocol runs.
+"""Fallback capture-camera session for protocol runs.
 
-A protocol that captures needs an open ASI feed (``current_feed()``), but
-today that only exists if the operator manually turned the camera on in the
-device viewer. So a run opens its OWN headless feed just to snap pictures and
-closes it when the run ends — the camera and LEDs never sit idle heating up.
+A protocol that captures needs an open ASI feed (``current_feed()``). Before
+the session starts, the chain column has the device viewer show the ASI camera
+(DEVICE_VIEWER_CAMERA_SELECT_SOURCE, confirmed or the run stops), so
+``activate`` normally finds the viewer's feed running and reuses it — the
+operator sees the run's camera, and the column restores the viewer's pre-run
+camera at the end. Only when no feed is running (e.g. the viewer's feed failed
+to start) does the run open its OWN headless feed, closed again when the run
+ends — the camera and LEDs never sit idle heating up.
 
-The device-viewer live preview stays independent: if the operator has already
-pointed it at the ASI camera, that feed is reused (and left alone at the end)
-rather than opening a second one on the single camera.
+A reused feed is never closed here. The Device View Camera Feed checkbox the
+session turns on is the pane controller's concern
+(``_on_protocol_session_active``).
 
 ``activate`` / ``deactivate`` touch Qt camera objects, so they must run on the
 GUI thread — the message handler marshals them there via ``GUI.invoke_later``.
@@ -37,7 +41,8 @@ _session_feed = None
 
 
 def activate():
-    """Open a headless ASI feed for the run if none is already running."""
+    """Open a headless ASI feed for the run if none is already running (the
+    device viewer's own ASI feed, normally, is)."""
     global _session_feed
     if current_feed() is not None:
         logger.info("Capture camera already running; reusing it for the run.")

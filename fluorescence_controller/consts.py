@@ -110,11 +110,13 @@ FIRMWARE_UPLOAD_FINISHED = firmware_upload_finished_topic(DEVICE_NAME)
 # The capture-chain executor emits these so the controls pane can mirror a
 # running protocol's live fluorescence state — the pane is otherwise
 # publish-suppressed during a run and would freeze — and so the capture
-# camera is opened just for the run and closed when idle.
+# camera and the Device View Camera Feed are on for the run, and whatever
+# the run turned on is turned off again at its end.
 # PROTOCOL_STEP_FLUORESCENCE: JSON {step_uuid, chain, firing_label, light_on}
-# for the entry firing right now. PROTOCOL_FLUORESCENCE_SESSION: JSON {active}
-# on run start (True) and end (False). The pane subscribes via signals/#, so
-# no extra routing is needed; the backend (requests/#) never sees them.
+# for the entry firing right now. PROTOCOL_FLUORESCENCE_SESSION:
+# ProtocolFluorescenceSessionData (datamodels.py), JSON {active} on run start
+# (True) and end (False). The pane subscribes via signals/#, so no extra
+# routing is needed; the backend (requests/#) never sees them.
 PROTOCOL_STEP_FLUORESCENCE = f"{DEVICE_NAME}/signals/protocol_step_fluorescence"
 PROTOCOL_FLUORESCENCE_SESSION = f"{DEVICE_NAME}/signals/protocol_fluorescence_session"
 

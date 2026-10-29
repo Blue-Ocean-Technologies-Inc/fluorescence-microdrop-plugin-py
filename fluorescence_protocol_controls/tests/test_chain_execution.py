@@ -18,23 +18,35 @@ overwrite its start captures). No real camera/backend anywhere: `capture_service
 faked wholesale (it is imported lazily inside `_run_phase`, mirroring
 `controller.run_capture`'s pattern), and the publisher + `ctx.wait_for`
 are recorded fakes.
+
+Also covers the run-level hooks that put the ASI camera in the device viewer
+for the run (`on_pre_protocol_start`) and restore the viewer's pre-run camera
+(`on_post_protocol_end`), against the REAL capture service's request/reply
+matching, with the device viewer faked at its select-source publisher.
 """
 
 # Standard library imports.
 import json
 import sys
 import threading
+from types import SimpleNamespace
 
 # Third-party imports.
 import pytest
 
 # Microdrop package imports.
 import fluorescence_controls_ui
+from device_viewer.consts import (
+    CameraSelectSourceRequest,
+    CameraSourceSelected,
+    CameraState,
+)
 from fluorescence_controller.consts import (
     ALL_LEDS_OFF,
     FLUORESCENCE_APPLIED,
     LED_WAVELENGTHS,
     MULTI_CHANNEL,
+    PROTOCOL_FLUORESCENCE_SESSION,
     PROTOCOL_SET_FLUORESCENCE,
     PROTOCOL_STEP_FLUORESCENCE,
 )
@@ -45,8 +57,12 @@ from fluorescence_controller.services import (
 from fluorescence_controller.services.fluorescence_command_setter_service import (
     FluorescenceCommandSetterService,
 )
+from fluorescence_controls_ui import capture_service
 from fluorescence_protocol_controls.capture_chain import ChainEntry, dump_chain
-from fluorescence_protocol_controls.consts import LED_STABILIZATION_S
+from fluorescence_protocol_controls.consts import (
+    CAMERA_WARMUP_S,
+    LED_STABILIZATION_S,
+)
 from fluorescence_protocol_controls.protocol_columns import (
     chain_column as column_module,
 )
@@ -648,3 +664,203 @@ def test_mix_row_drives_every_channel_then_acks(
         "led_5_0",
     ]
     assert acks == []  # the one ack was consumed by wait_for
+
+
+# --- run start / end: the ASI camera in the device viewer ---------------------
+
+ASI_LABEL = "ASI: ZWO ASI294MM Pro"
+
+
+class _RunCtx:
+    """Fake ProtocolContext for the run-level hooks: the preview flag, the
+    protocol scratch, the Stop event, and the pre-protocol waits asked for."""
+
+    def __init__(self, preview_mode=False):
+        self.preview_mode = preview_mode
+        self.scratch = {}
+        self.stop_event = threading.Event()
+        self.waits = []
+
+    def add_pre_protocol_wait(self, seconds):
+        self.waits.append(seconds)
+
+
+@pytest.fixture
+def device_viewer(monkeypatch):
+    """Stands in for the device viewer: an ASI camera is connected, every
+    select-source request is validated and recorded, and answered through
+    the capture service (as the pane's listener would) with ``reply`` —
+    CameraSourceSelected fields over the request's own, or None for no
+    answer at all."""
+    viewer = SimpleNamespace(requests=[], reply={"ok": True})
+
+    def publish(payload, **kw):
+        request = CameraSelectSourceRequest.model_validate(payload)
+        viewer.requests.append(request)
+
+        if viewer.reply is None:
+            return
+
+        fields = {
+            "request_id": request.request_id,
+            "label": request.label,
+            "active": bool(request.active),
+            **viewer.reply,
+        }
+        capture_service.notify_source_selected(CameraSourceSelected(**fields))
+
+    monkeypatch.setattr(
+        column_module.camera_select_source_publisher, "publish", publish
+    )
+    monkeypatch.setattr(capture_service, "asi_source_label", lambda: ASI_LABEL)
+    monkeypatch.setattr(capture_service, "_device_viewer_camera", None)
+    monkeypatch.setattr(column_module, "DEVICE_VIEWER_CAMERA_TIMEOUT_S", 0.05)
+
+    return viewer
+
+
+def _topics(published):
+    return [topic for topic, _ in published]
+
+
+def test_run_start_shows_the_asi_camera_then_starts_the_session(
+    device_viewer, published
+):
+    ctx = _RunCtx()
+
+    FluorescenceChainHandler().on_pre_protocol_start(ctx)
+
+    [request] = device_viewer.requests
+    assert (request.label, request.active) == (ASI_LABEL, True)
+    assert request.request_id
+    assert _topics(published) == [PROTOCOL_FLUORESCENCE_SESSION]
+    assert json.loads(published[0][1]) == {"active": True}
+    assert ctx.waits == [CAMERA_WARMUP_S]
+
+
+@pytest.mark.parametrize(
+    "reply, reason",
+    [
+        ({"ok": False, "error": "camera busy"}, "camera busy"),
+        ({"ok": False}, "request refused"),
+        (None, "no reply within 0.05 s"),
+        ({"ok": True, "request_id": "stale"}, "no reply within 0.05 s"),
+    ],
+    ids=["refused", "refused-without-reason", "no-reply", "other-request"],
+)
+def test_run_start_stops_the_run_when_the_viewer_cannot_show_the_camera(
+    device_viewer, published, reply, reason
+):
+    device_viewer.reply = reply
+    ctx = _RunCtx()
+
+    with pytest.raises(RuntimeError) as raised:
+        FluorescenceChainHandler().on_pre_protocol_start(ctx)
+
+    assert str(raised.value) == (
+        f"Fluorescence: the device viewer could not show the ASI camera "
+        f"({reason}). The protocol was stopped."
+    )
+    assert published == []
+    assert ctx.waits == []
+
+
+def test_run_start_without_an_asi_camera_stops_without_asking(
+    device_viewer, published, monkeypatch
+):
+    monkeypatch.setattr(capture_service, "asi_source_label", lambda: "")
+    ctx = _RunCtx()
+
+    with pytest.raises(RuntimeError, match=r"\(no ASI camera is connected\)"):
+        FluorescenceChainHandler().on_pre_protocol_start(ctx)
+
+    assert device_viewer.requests == []
+    assert published == []
+    assert ctx.scratch == {}
+
+
+def test_stop_while_waiting_for_the_viewer_aborts(device_viewer, published):
+    device_viewer.reply = None
+    ctx = _RunCtx()
+    ctx.stop_event.set()
+
+    with pytest.raises(AbortError):
+        FluorescenceChainHandler().on_pre_protocol_start(ctx)
+
+    assert published == []
+
+
+def test_run_start_preview_mode_asks_the_viewer_nothing(device_viewer, published):
+    ctx = _RunCtx(preview_mode=True)
+
+    FluorescenceChainHandler().on_pre_protocol_start(ctx)
+
+    assert device_viewer.requests == []
+    assert published == []
+
+
+@pytest.mark.parametrize(
+    "pre_run, restored",
+    [
+        (CameraState(selected_camera="Webcam", active=True), ("Webcam", True)),
+        (CameraState(selected_camera=ASI_LABEL, active=False), (ASI_LABEL, False)),
+        (CameraState(selected_camera="", active=False), ("", False)),
+        (None, (ASI_LABEL, False)),
+    ],
+    ids=["other-source", "asi-off", "no-camera", "unknown"],
+)
+def test_run_end_restores_the_pre_run_camera(
+    device_viewer, published, pre_run, restored
+):
+    capture_service.notify_camera_state(pre_run)
+    ctx = _RunCtx()
+    handler = FluorescenceChainHandler()
+    handler.on_pre_protocol_start(ctx)
+    device_viewer.requests.clear()
+
+    handler.on_post_protocol_end(ctx)
+
+    [request] = device_viewer.requests
+    assert (request.label, request.active) == restored
+
+
+def test_run_end_leaves_an_asi_camera_the_operator_had_on(device_viewer, published):
+    capture_service.notify_camera_state(
+        CameraState(selected_camera=ASI_LABEL, active=True)
+    )
+    ctx = _RunCtx()
+    handler = FluorescenceChainHandler()
+    handler.on_pre_protocol_start(ctx)
+    device_viewer.requests.clear()
+
+    handler.on_post_protocol_end(ctx)
+
+    assert device_viewer.requests == []
+
+
+def test_run_end_restores_even_when_the_start_got_no_reply(device_viewer, published):
+    # The viewer may still switch after the start gave up waiting.
+    capture_service.notify_camera_state(
+        CameraState(selected_camera="Webcam", active=False)
+    )
+    device_viewer.reply = None
+    ctx = _RunCtx()
+    handler = FluorescenceChainHandler()
+
+    with pytest.raises(RuntimeError):
+        handler.on_pre_protocol_start(ctx)
+
+    device_viewer.requests.clear()
+
+    handler.on_post_protocol_end(ctx)
+
+    [request] = device_viewer.requests
+    assert (request.label, request.active) == ("Webcam", False)
+
+
+def test_run_end_without_a_camera_request_asks_the_viewer_nothing(
+    device_viewer, published
+):
+    FluorescenceChainHandler().on_post_protocol_end(_RunCtx())
+
+    assert device_viewer.requests == []

@@ -11,15 +11,20 @@
 # Standard library imports.
 import json
 
+# Third-party imports.
+from pydantic import ValidationError
+
 # Enthought library imports.
 from traits.api import Instance
 
 # Microdrop package imports.
+from device_viewer.consts import CameraSourceSelected, CameraState
 from fluorescence_controller.consts import (
     FIRMWARE_UPLOAD_FINISHED,
     FIRMWARE_UPLOAD_LOG,
     FIRMWARE_UPLOAD_STARTED,
 )
+from fluorescence_controller.datamodels import ProtocolFluorescenceSessionData
 from pluggable_protocol_tree.models.cell_sync import (
     ProtocolTreeRowSelectedMessage,
 )
@@ -128,12 +133,15 @@ class FluorescenceMessageHandler(BaseMessageHandler):
     def _on_protocol_fluorescence_session_triggered(self, body):
         """A capture session start/end. Open/close the run's own headless
         camera on the GUI thread (Qt camera objects), and ferry the flag to
-        live_state so the controller drops its live mirror on end."""
+        live_state so the controller turns the Device View Camera Feed on
+        for the run (and back off at its end, if the run turned it on) and
+        drops its live mirror on end."""
         try:
-            active = bool(json.loads(body).get("active"))
-        except Exception:
+            active = ProtocolFluorescenceSessionData.model_validate_json(body).active
+        except ValidationError:
             logger.error(f"Unparseable protocol-session payload: {body!r}")
             return
+
         from pyface.api import GUI
 
         from . import camera_session
@@ -142,6 +150,44 @@ class FluorescenceMessageHandler(BaseMessageHandler):
             camera_session.activate if active else camera_session.deactivate
         )
         fluorescence_live_state.protocol_session_active = active
+
+    def _on_state_triggered(self, body):
+        """The device viewer's camera state (DEVICE_VIEWER_CAMERA_STATE) ->
+        capture_service, whose latest value a protocol run snapshots so it
+        can put the viewer's camera back at its end."""
+        try:
+            state = CameraState.model_validate_json(body)
+        except ValidationError:
+            logger.error(f"Unparseable device-viewer camera state: {body!r}")
+            return
+
+        from . import capture_service
+
+        capture_service.notify_camera_state(state)
+
+    def _on_source_selected_triggered(self, body):
+        """The device viewer's answer to a select-source request: log the
+        outcome (the end-of-run restore does not wait for it) and hand it to
+        a protocol run waiting on its request_id."""
+        try:
+            reply = CameraSourceSelected.model_validate_json(body)
+        except ValidationError:
+            logger.error(f"Unparseable camera source-selected reply: {body!r}")
+            return
+
+        if reply.ok:
+            logger.info(
+                f"Device viewer camera: {reply.label} "
+                f"({'on' if reply.active else 'off'})"
+            )
+        else:
+            logger.warning(
+                f"Device viewer could not select camera {reply.label!r}: {reply.error}"
+            )
+
+        from . import capture_service
+
+        capture_service.notify_source_selected(reply)
 
     def _on_searching_triggered(self, body):
         """Backend scan state (json bool) -> the model, which drives the

@@ -16,10 +16,14 @@ same `apply_camera_settings` / `save_entry_capture` steps itself. Every PNG
 `save_entry_capture` writes carries its capture settings
 (`capture_metadata`) as JSON text under CAPTURE_METADATA_KEY.
 
-Two small synchronization primitives live here too:
+Small synchronization primitives live here too:
   * the applied-ack `Event`, set by `message_handler.py`'s
     FLUORESCENCE_APPLIED listener (worker thread) and waited on here
     (also off the GUI thread) between an LED publish and its capture;
+  * the device viewer's camera state and its replies to select-source
+    requests, fed by the same listener: the protocol column puts the ASI
+    camera in the device viewer for a run, waiting on the reply, and puts
+    the pre-run camera back at the end;
   * `burst_folder`, the per-burst capture directory naming shared by both
     call sites.
 """
@@ -47,6 +51,7 @@ from fluorescence_controller.datamodels import (
 from fluorescence_protocol_controls.capture_chain import sanitize_label, ticked
 from fluorescence_protocol_controls.consts import LED_STABILIZATION_S
 from microdrop_application.helpers import get_current_experiment_directory
+from pluggable_protocol_tree.execution.step_context import wait_first
 
 # Microdrop utils imports.
 from microdrop_utils.dramatiq_pub_sub_helpers import publish_message
@@ -59,7 +64,7 @@ from .cameras.asi_thread import (
     to_display_8bit,
 )
 from .cameras.camera_settings import asi_camera_settings
-from .cameras.provider import current_feed
+from .cameras.provider import AsiCameraSourceProvider, current_feed
 from .consts import (
     CAPTURE_FIELD_DESCRIPTIONS,
     CAPTURE_METADATA_KEY,
@@ -106,6 +111,77 @@ def arm_applied():
 def wait_applied(timeout: float) -> bool:
     """Block (off the GUI thread) for the next applied ack."""
     return _APPLIED.wait(timeout)
+
+
+#: The device viewer's latest CameraState (DEVICE_VIEWER_CAMERA_STATE), set
+#: by message_handler.py's listener: a protocol run snapshots it before
+#: putting the ASI camera on, to restore it at the end. None until the
+#: viewer reports.
+_device_viewer_camera = None
+
+#: Select-source requests a protocol run is waiting on, by request_id:
+#: armed before publishing (so a fast reply is never missed), the reply
+#: filled in and the Event set by the DEVICE_VIEWER_CAMERA_SOURCE_SELECTED
+#: listener (worker thread).
+_SOURCE_REQUESTS_LOCK = threading.Lock()
+_source_request_events = {}
+_source_request_replies = {}
+
+
+def notify_camera_state(state):
+    """Worker-thread listener callback: the device viewer's camera state."""
+    global _device_viewer_camera
+    _device_viewer_camera = state
+
+
+def device_viewer_camera_state():
+    """The device viewer's latest CameraState, or None before it reports."""
+    return _device_viewer_camera
+
+
+def asi_source_label() -> str:
+    """The device-viewer dropdown label of the first connected ASI camera
+    (the source this plugin contributes), or "" when none is connected."""
+    sources = AsiCameraSourceProvider().list_sources()
+
+    return sources[0][0] if sources else ""
+
+
+def arm_source_selected(request_id: str) -> None:
+    """Register ``request_id`` before publishing its select-source request,
+    so `wait_source_selected` can only see the reply to THAT request."""
+    with _SOURCE_REQUESTS_LOCK:
+        _source_request_events[request_id] = threading.Event()
+
+
+def notify_source_selected(reply) -> None:
+    """Worker-thread listener callback: the device viewer answered a
+    select-source request. Replies nobody armed (e.g. the end-of-run
+    restore's) are ignored here."""
+    with _SOURCE_REQUESTS_LOCK:
+        event = _source_request_events.get(reply.request_id)
+
+        if event is not None:
+            _source_request_replies[reply.request_id] = reply
+
+    if event is not None:
+        event.set()
+
+
+def wait_source_selected(request_id: str, timeout: float, stop_event):
+    """Block (off the GUI thread) for the reply to an armed request, until
+    ``stop_event`` fires or ``timeout`` seconds pass. Return the
+    CameraSourceSelected reply, or None without one."""
+    event = _source_request_events[request_id]
+
+    try:
+        wait_first([event, stop_event], timeout)
+    finally:
+        with _SOURCE_REQUESTS_LOCK:
+            _source_request_events.pop(request_id, None)
+            reply = _source_request_replies.pop(request_id, None)
+
+    return reply
 
 
 # TODO: check for existing utc time method.

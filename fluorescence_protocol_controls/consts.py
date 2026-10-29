@@ -29,6 +29,15 @@ LED_STABILIZATION_S = 0.2
 #: producing frames before the first capture fires.
 CAMERA_WARMUP_S = 2.0
 
+#: Seconds a run waits for the device viewer to confirm it is showing the ASI
+#: camera before the protocol is stopped with an error.
+DEVICE_VIEWER_CAMERA_TIMEOUT_S = 10.0
+
+#: Protocol scratch entry: the device viewer's ``(pre-run, run)`` CameraState
+#: pair, stored once the run asks for the ASI camera so the end of the run
+#: can put the viewer back the way it found it.
+DEVICE_VIEWER_CAMERA_SCRATCH_KEY = "fluorescence_protocol_controls.device_viewer_camera"
+
 #: Phase markers appended to a step's burst-folder name so the step-start and
 #: step-end captures land in distinct, self-describing folders — a sub-second
 #: both-phases step would otherwise collide (burst_folder's timestamp is only
