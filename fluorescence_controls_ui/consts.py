@@ -89,6 +89,10 @@ EXPOSURE_DEFAULT, GAIN_DEFAULT = 10, 0
 CAMERA_LEAD_TIME_MS_MIN, CAMERA_LEAD_TIME_MS_MAX = 0, 60_000
 CAMERA_LEAD_TIME_MS_DEFAULT = 0
 
+#: Rows the capture-chain table always keeps visible: the pane layout never
+#: squashes it below this, and longer chains scroll inside the table.
+CHAIN_TABLE_MIN_VISIBLE_ROWS = 6
+
 # Control-pane values persisted across sessions: model trait ->
 # FluorescencePreferences trait. light_on is deliberately absent — the
 # light always starts OFF regardless of how the last session ended.

@@ -300,7 +300,9 @@ chain_group = VGroup(
             ),
         ),
     ),
-    UItem("chain_rows", editor=chain_table_editor),
+    # Springy: the table takes the pane's leftover height; the controller's
+    # init floors it at CHAIN_TABLE_MIN_VISIBLE_ROWS rows.
+    UItem("chain_rows", editor=chain_table_editor, springy=True),
     show_border=True,
 )
 
@@ -316,7 +318,8 @@ UnifiedView = View(
         chain_group,
     ),
     # Resizable so the pane can be dragged larger/smaller; scrollable so the
-    # contents stay reachable when the dock is shorter than the sections.
+    # contents stay reachable when the dock is shorter than the sections
+    # plus the chain table's minimum rows.
     resizable=True,
     scrollable=True,
     # Route-view parity: Delete over the pane removes the selected chain

@@ -26,7 +26,7 @@ from fluorescence_protocol_controls.capture_chain import (
     ticked,
 )
 from fluorescence_protocol_controls.consts import FLUORESCENCE_CHAIN_COLUMN_ID
-from microdrop_application.dialogs.pyface_wrapper import choose
+from microdrop_application.dialogs.pyface_wrapper import YES, choose, confirm
 from pluggable_protocol_tree.consts import (
     protocol_tree_add_step_publisher,
     protocol_tree_set_cell_publisher,
@@ -43,6 +43,7 @@ from .cameras.consts import ASI_GAIN_MAX, ASI_GAIN_MIN
 from .chain_model import FluorescenceChainRow
 from .consts import (
     ALL_LEDS_OFF,
+    CHAIN_TABLE_MIN_VISIBLE_ROWS,
     EXPOSURE_MS_MAX,
     EXPOSURE_MS_MIN,
     LED_PROPORTION_TRAITS,
@@ -51,6 +52,7 @@ from .consts import (
     SET_LED,
     SET_LED_FREQUENCY,
 )
+from .layout_helpers import set_minimum_visible_rows
 from .live_state import fluorescence_live_state
 
 # Logger import.
@@ -148,9 +150,15 @@ class FluorescenceControlsController(BaseStatusController):
     def init(self, info):
         """Stretch the collapsible sections to the full pane width once the
         UI is built (TraitsUI otherwise left-hugs each group to its
-        content), and hook the tree-row-selection live-tracking observer
-        on the shared live-state singleton."""
+        content), floor the capture-chain table at a few visible rows (a
+        short pane otherwise squashes it to one), and hook the
+        tree-row-selection live-tracking observer on the shared
+        live-state singleton."""
         stretch_group_layouts_horizontally(info.ui.control)
+
+        chain_table = info.ui.get_editors("chain_rows")[0].control
+        set_minimum_visible_rows(chain_table, CHAIN_TABLE_MIN_VISIBLE_ROWS)
+
         fluorescence_live_state.observe(
             self._on_tree_row_selected, "tree_row_selected", dispatch="ui"
         )
@@ -723,13 +731,28 @@ class FluorescenceControlsController(BaseStatusController):
         self.model.chain_selection = None
         self.model.chain_rows = list(self.model.free_chain)
 
+    @staticmethod
+    def _confirm_discard_free_chain(n):
+        """Ask once before the attach dialog's Discard drops ``n`` unsaved
+        free-mode captures; True only for an explicit Discard."""
+        answer = confirm(
+            None,
+            f"Discard the {n} free-mode capture{'s' if n != 1 else ''}? "
+            f"They are not saved anywhere.",
+            title="Discard Capture Chain",
+            yes_label="Discard",
+            no_label="Keep",
+        )
+
+        return answer == YES
+
     def _clear_free_chain(self):
-        """After a free-mode chain has been attached (or handed off to a
-        brand-new step) it no longer needs stashing. If the pane is still
-        showing free mode — the "New step" case, where the new step's
-        uuid is not yet known — the visible chain empties too (documented
-        deviation: the pane does not auto-follow the new step; the next
-        click on it loads the chain)."""
+        """After a free-mode chain has been attached, handed off to a
+        brand-new step, or discarded, it no longer needs stashing. If the
+        pane is still showing free mode — the "New step" and "Discard"
+        cases — the visible chain empties too (documented deviation for
+        New step, where the new step's uuid is not yet known: the pane
+        does not auto-follow it; the next click on it loads the chain)."""
         self.model.free_chain = []
         if self.model.attached_step_id == "":
             self.model.chain_rows = []
@@ -741,7 +764,12 @@ class FluorescenceControlsController(BaseStatusController):
         A free-mode chain with unsaved captures blocks a switch to a
         step/group until the operator resolves the attach dialog — safe
         to be modal here since this observer runs on the GUI thread,
-        never inside a table commit."""
+        never inside a table commit.
+
+        A step offers Append / Replace / New step / Discard, a group
+        New step / Discard. Discard drops the free chain (after a confirm)
+        and then follows the selection as if no chain were in play;
+        Cancel, or Keep at that confirm, leaves the chain unattached."""
         # Mid-run, the free chain is treated as empty: no dialog fires and
         # nothing clears it. A run-time click / nav button still delivers
         # this message; Microdrop silently drops the mid-run set_cell/
@@ -764,10 +792,23 @@ class FluorescenceControlsController(BaseStatusController):
                     f"The free-mode chain holds {n} capture"
                     f"{'s' if n != 1 else ''}. Attach to the selected step?",
                     title="Attach Capture Chain",
-                    choices=["Append", "Replace", "New step"],
+                    choices=["Append", "Replace", "New step", "Discard"],
                 )
+
                 if choice is None:
                     return  # chain stays unattached
+
+                if choice == "Discard":
+                    # Keep returns like Cancel; a confirmed discard drops
+                    # the stash and follows the tree like a plain selection.
+                    if not self._confirm_discard_free_chain(n):
+                        return
+
+                    self._clear_free_chain()
+                    self._load_step_chain(msg)
+
+                    return
+
                 if choice == "New step":
                     protocol_tree_add_step_publisher.publish(
                         after_step_id=msg.step_id,
@@ -805,8 +846,14 @@ class FluorescenceControlsController(BaseStatusController):
                     f"{'s' if n != 1 else ''}. Add it as a new step in "
                     f"this group?",
                     title="Attach Capture Chain",
-                    choices=["New step"],
-                )  # group: only New step
+                    choices=["New step", "Discard"],
+                )  # group: no step to Append to / Replace
+
+                # Cancel, or Keep at the discard confirm, enters free mode
+                # with the stash intact; a confirmed discard empties it.
+                if choice == "Discard" and self._confirm_discard_free_chain(n):
+                    self._clear_free_chain()
+
                 if choice == "New step":
                     protocol_tree_add_step_publisher.publish(
                         group_id=msg.group_id,
