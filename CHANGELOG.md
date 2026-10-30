@@ -1,3 +1,9 @@
+## [v3.8.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.8.0) (2026-10-30)
+
+### Feat
+
+- **controls_ui**: room for the capture table, Discard in the attach dialog ([`2674b9c`](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/commit/2674b9c0d1b4634a79e53e637071886cd1ceece4))
+
 ## [v3.7.0](https://github.com/Blue-Ocean-Technologies-Inc/fluorescence-microdrop-plugin-py/releases/tag/v3.7.0) (2026-10-29)
 
 ### Feat
