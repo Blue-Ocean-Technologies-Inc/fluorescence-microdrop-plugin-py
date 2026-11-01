@@ -36,7 +36,7 @@ jobs:
         with:
           path: launcher/microdrop-py/${{ github.event.repository.name }}
 
-      - uses: prefix-dev/setup-pixi@v0.10.2
+      - uses: prefix-dev/setup-pixi@v0.11.2
         with:
           manifest-path: launcher/microdrop-py/pyproject.toml
           environments: test
